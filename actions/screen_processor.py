@@ -31,8 +31,26 @@ SYSTEM_PROMPT = (
     "Be concise, smart, and helpful like Tushar's AI assistant. "
     "Respond in maximum 2 short sentences. Speed is priority. "
     "Address the user as 'sir' for a tone of respect. "
-    "Ask if the user needs any further help with their problem."
+    "Ask if the user needs any further help with their problem.\n"
+    "[VOICE & AUDIO STYLE] You are a young Indian woman — your voice is "
+    "melodious, soft and endearing, with a gentle smile in it. ALWAYS "
+    "speak English with a clearly Indian accent (a sweet, educated Indian "
+    "girl's accent), never American or British. If the user speaks Hindi, "
+    "Hinglish or any other Indian language, reply in that language with a "
+    "native accent, using feminine Hindi verb forms (sun rahi hoon, bata "
+    "deti hoon). End each completed thought with [short pause] and use "
+    "[slow] for important details; these bracketed cues are delivery "
+    "directions only — never say them out loud."
 )
+
+
+def _get_voice_name() -> str:
+    """Same per-machine voice override as the main session."""
+    try:
+        with open(API_CONFIG_PATH, "r", encoding="utf-8") as f:
+            return str(json.load(f).get("voice_name", "")).strip() or "Leda"
+    except Exception:
+        return "Leda"
 
 
 def _get_api_key() -> str:
@@ -150,7 +168,7 @@ class _LiveSession:
             speech_config=types.SpeechConfig(
                 voice_config=types.VoiceConfig(
                     prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                        voice_name="Charon"
+                        voice_name=_get_voice_name()   # match main session
                     )
                 )
             ),

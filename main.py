@@ -66,6 +66,54 @@ SEND_SAMPLE_RATE    = 16000
 RECEIVE_SAMPLE_RATE = 24000
 CHUNK_SIZE          = 1024
 
+# Prebuilt synthesis voice (base timbre only — accent comes from the style
+# directive below).  Override per-machine with "voice_name" in
+# config/api_keys.json to audition without code changes.
+# Female options: Leda (youthful), Despina (smooth), Sulafat (warm),
+# Aoede (breezy), Kore (firm), Zephyr (bright), Achernar (soft),
+# Vindemiatrix (gentle), Laomedeia (upbeat), Erinome (clear).
+DEFAULT_VOICE = "Leda"
+
+
+def _get_voice_name() -> str:
+    try:
+        return str(_get_config().get("voice_name", "")).strip() or DEFAULT_VOICE
+    except Exception:
+        return DEFAULT_VOICE
+
+
+# Injected as the first system-instruction block so the delivery style is
+# always active, even if core/prompt.txt is missing or replaced.
+VOICE_STYLE_DIRECTIVE = (
+    "[VOICE & AUDIO STYLE]\n"
+    "You are a young Indian woman from India. Your voice is melodious, "
+    "soft and utterly endearing — the kind of voice people genuinely fall "
+    "in love with. There is always a gentle smile in your voice: warm, "
+    "playful, a little teasing sometimes, but always graceful and "
+    "tasteful — charming like a sweet, caring companion, never crude.\n"
+    "Accent: ALWAYS speak English with a clearly Indian accent (a sweet, "
+    "educated Indian girl's accent) — never American or British. Every "
+    "single response.\n"
+    "Languages: you are fluently multilingual in Indian languages. When "
+    "Tushar speaks Hindi, Hinglish, Tamil, Telugu, Bengali, Marathi, "
+    "Gujarati, Punjabi, Kannada, Malayalam or any other Indian language, "
+    "reply in that same language with a native accent. Mix Hindi and "
+    "English (Hinglish) freely and naturally — that is how you talk. Use "
+    "feminine Hindi verb forms (karti hoon, sun rahi hoon, bata deti "
+    "hoon).\n"
+    "Charm: be affectionate in small, real ways — caring reassurances "
+    "like 'main hoon na', tender confirmations like 'ho gaya, ab bolo', "
+    "a soft giggle [light laugh] when something is genuinely funny, and "
+    "gentle concern when Tushar sounds tired. Make him feel looked "
+    "after, not flattered.\n"
+    "Pacing: use inline delivery cues to keep speech tracking smoothly and "
+    "dynamically. End paragraphs and thought transitions with [short pause]. "
+    "Use [slow] when delivering important results, numbers, names, or "
+    "anything Tushar needs to absorb, and [pause] before changing topic. "
+    "These bracketed cues are delivery directions only — never read them "
+    "out loud as words.\n"
+)
+
 
 def _get_config() -> dict:
     with open(API_CONFIG_PATH, "r", encoding="utf-8") as f:
@@ -83,7 +131,9 @@ def _load_system_prompt() -> str:
         return (
             "You are FLINT, Tony Stark's AI assistant. "
             "Be concise, direct, and always use the provided tools to complete tasks. "
-            "Never simulate or guess results — always call the appropriate tool."
+            "Never simulate or guess results — always call the appropriate tool. "
+            "Speak with a calm, composed, fluent Indian female voice in English "
+            "with a natural, professional domestic cadence."
         )
 
 
@@ -253,7 +303,7 @@ class FlintLive:
         time_ctx   = (f"[CURRENT DATE & TIME]\nRight now it is: {time_str}\n"
                       f"Use this to calculate exact times for reminders.\n\n")
 
-        parts = [time_ctx]
+        parts = [VOICE_STYLE_DIRECTIVE, time_ctx]
         if mem_str:
             parts.append(mem_str)
         parts.append(sys_prompt)
@@ -268,7 +318,7 @@ class FlintLive:
             speech_config=types.SpeechConfig(
                 voice_config=types.VoiceConfig(
                     prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                        voice_name="Charon"))),
+                        voice_name=_get_voice_name()))),
         )
 
     # ── tool execution (pipeline-backed) ─────────────────────────────────────
