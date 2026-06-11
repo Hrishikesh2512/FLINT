@@ -223,10 +223,13 @@ def _clipboard_paste(text: str) -> str:
 
 
 def _screenshot(save_path: str | None = None) -> str:
-    _require_pyautogui()
     path = _safe_screenshot_path(save_path)
-    img  = pyautogui.screenshot()
-    img.save(str(path))
+    try:
+        from core.capture_engine import get_engine
+        path.write_bytes(get_engine().capture_screen_fullres_png())
+    except Exception:
+        _require_pyautogui()
+        pyautogui.screenshot().save(str(path))
     return f"Screenshot saved: {path}"
 
 
@@ -241,16 +244,28 @@ def _focus_window(title: str) -> str:
     os_name = _get_os()
 
     if os_name == "windows":
-        try:
-            script = f'(New-Object -ComObject WScript.Shell).AppActivate("{title}")'
-            subprocess.run(
-                ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
-                capture_output=True, timeout=5,
-            )
-            time.sleep(0.3)
-            return f"Focused window: {title}"
-        except Exception as e:
-            return f"focus_window (Windows) failed: {e}"
+        # AppActivate returns a boolean — retry until the window actually
+        # exists and takes focus (fresh launches draw their window late).
+        script = f'(New-Object -ComObject WScript.Shell).AppActivate("{title}")'
+        deadline = time.time() + 2.0
+        last_err = ""
+        while True:
+            try:
+                r = subprocess.run(
+                    ["powershell", "-NoProfile", "-NonInteractive",
+                     "-Command", script],
+                    capture_output=True, text=True, timeout=5,
+                )
+                if r.stdout.strip().lower() == "true":
+                    time.sleep(0.5)        # let the window settle before input
+                    return f"Focused window: {title}"
+            except Exception as e:
+                last_err = str(e)
+            if time.time() >= deadline:
+                break
+            time.sleep(0.35)
+        suffix = f" ({last_err})" if last_err else ""
+        return f"Could not find or focus window '{title}' after 2s{suffix}"
 
     if os_name == "mac":
         script = (
@@ -293,22 +308,22 @@ def _focus_window(title: str) -> str:
     return f"focus_window: unknown OS '{os_name}'"
 def _screen_find(description: str) -> tuple[int, int] | None:
     try:
-        import base64
         from or_client import client
+        from core.capture_engine import get_engine
 
         _require_pyautogui()
         w, h  = pyautogui.size()
-        img   = pyautogui.screenshot()
-        buf   = io.BytesIO()
-        img.save(buf, format="PNG")
-        b64 = base64.b64encode(buf.getvalue()).decode()
+        # Frame-diff cached capture: repeated finds on an unchanged screen
+        # reuse the same encoded image token instead of re-encoding a PNG.
+        frame = get_engine().capture_screen()
 
         text = client.vision(
-            f"This is a screenshot of a {w}×{h} pixel screen. "
+            f"This is a downscaled screenshot of a {w}×{h} pixel screen. "
             f"Locate the UI element: '{description}'. "
-            f"Reply ONLY with center coordinates as: x,y — or NOT_FOUND",
-            image_b64=b64,
-            mime="image/png",
+            f"Reply ONLY with its center in FULL-SCREEN coordinates "
+            f"(0,0 top-left, {w},{h} bottom-right) as: x,y — or NOT_FOUND",
+            image_b64=frame.b64,
+            mime=frame.mime,
         )
 
         if "NOT_FOUND" in text.upper():
