@@ -41,3 +41,6 @@ MANIFEST
 *.sln
 *.swp
 config/api_keys.json
+
+# Mobile remote UI — local Supabase keys (copy of config.example.js)
+mobile_ui/js/config.js

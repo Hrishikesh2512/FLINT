@@ -1,24 +1,12 @@
 import asyncio
-import base64
-import io
 import json
 import re
-import os
 import sys
 import time
 import threading
 import cv2
-import mss
-import mss.tools
 import sounddevice as sd
-import numpy as np
 from pathlib import Path
-
-try:
-    import PIL.Image
-    _PIL_OK = True
-except ImportError:
-    _PIL_OK = False
 
 from google import genai
 from google.genai import types
@@ -36,19 +24,33 @@ CHANNELS            = 1
 RECEIVE_SAMPLE_RATE = 21000
 CHUNK_SIZE          = 1024
 
-IMG_MAX_W = 640
-IMG_MAX_H = 360
-JPEG_Q    = 55
-
 SYSTEM_PROMPT = (
     "You are FLINT from Iron Man movies. "
     "Analyze images with technical precision and intelligence. "
     "Help the user in a way they can understand — don't be overly complex. "
-    "Be concise, smart, and helpful like Tushar's AI assistant. "
+    "Be concise, smart, and helpful like a trusted personal AI assistant. "
     "Respond in maximum 2 short sentences. Speed is priority. "
     "Address the user as 'sir' for a tone of respect. "
-    "Ask if the user needs any further help with their problem."
+    "Ask if the user needs any further help with their problem.\n"
+    "[VOICE & AUDIO STYLE] You are a young Indian woman — your voice is "
+    "melodious, soft and endearing, with a gentle smile in it. ALWAYS "
+    "speak English with a clearly Indian accent (a sweet, educated Indian "
+    "girl's accent), never American or British. If the user speaks Hindi, "
+    "Hinglish or any other Indian language, reply in that language with a "
+    "native accent, using feminine Hindi verb forms (sun rahi hoon, bata "
+    "deti hoon). End each completed thought with [short pause] and use "
+    "[slow] for important details; these bracketed cues are delivery "
+    "directions only — never say them out loud."
 )
+
+
+def _get_voice_name() -> str:
+    """Same per-machine voice override as the main session."""
+    try:
+        with open(API_CONFIG_PATH, "r", encoding="utf-8") as f:
+            return str(json.load(f).get("voice_name", "")).strip() or "Leda"
+    except Exception:
+        return "Leda"
 
 
 def _get_api_key() -> str:
@@ -106,43 +108,17 @@ def _get_camera_index() -> int:
     return best_index
 
 
-def _to_jpeg(img_bytes: bytes) -> bytes:
-    if not _PIL_OK:
-        return img_bytes
-    img = PIL.Image.open(io.BytesIO(img_bytes)).convert("RGB")
-    img.thumbnail([IMG_MAX_W, IMG_MAX_H], PIL.Image.BILINEAR)
-    buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=JPEG_Q, optimize=False)
-    return buf.getvalue()
+def _capture(angle: str):
+    """Capture via the core engine: frame-diff aware, token-cached.
 
-
-def _capture_screenshot() -> bytes:
-    with mss.mss() as sct:
-        shot      = sct.grab(sct.monitors[1])
-        png_bytes = mss.tools.to_png(shot.rgb, shot.size)
-    return _to_jpeg(png_bytes)
-
-
-def _capture_camera() -> bytes:
-    camera_index = _get_camera_index()
-    cap = cv2.VideoCapture(camera_index, cv2.CAP_DSHOW)
-    if not cap.isOpened():
-        raise RuntimeError(f"Camera could not be opened: index {camera_index}")
-    for _ in range(10):
-        cap.read()
-    ret, frame = cap.read()
-    cap.release()
-    if not ret or frame is None:
-        raise RuntimeError("Could not capture camera frame.")
-    if _PIL_OK:
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        img = PIL.Image.fromarray(rgb)
-        img.thumbnail([IMG_MAX_W, IMG_MAX_H], PIL.Image.BILINEAR)
-        buf = io.BytesIO()
-        img.save(buf, format="JPEG", quality=JPEG_Q, optimize=False)
-        return buf.getvalue()
-    _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, JPEG_Q])
-    return buf.tobytes()
+    An unchanged screen returns the previously encoded JPEG and base64
+    token — no pixels re-read into JPEG, no re-encode, no new token.
+    """
+    from core.capture_engine import get_engine
+    engine = get_engine()
+    if angle == "camera":
+        return engine.capture_camera(_get_camera_index())
+    return engine.capture_screen()
 
 
 class _LiveSession:
@@ -192,7 +168,7 @@ class _LiveSession:
             speech_config=types.SpeechConfig(
                 voice_config=types.VoiceConfig(
                     prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                        voice_name="Charon"
+                        voice_name=_get_voice_name()   # match main session
                     )
                 )
             ),
@@ -220,9 +196,8 @@ class _LiveSession:
         while True:
             item = await self._out_queue.get()
             if self._session:
-                image_bytes, mime_type, user_text = item
+                b64, mime_type, user_text = item
                 try:
-                    b64 = base64.b64encode(image_bytes).decode("utf-8")
                     await self._session.send_client_content(
                         turns={
                             "parts": [
@@ -280,11 +255,11 @@ class _LiveSession:
             stream.stop()
             stream.close()
 
-    def analyze(self, image_bytes: bytes, mime_type: str, user_text: str):
+    def analyze(self, b64: str, mime_type: str, user_text: str):
         if not self._loop:
             return
         asyncio.run_coroutine_threadsafe(
-            self._out_queue.put((image_bytes, mime_type, user_text)),
+            self._out_queue.put((b64, mime_type, user_text)),
             self._loop
         )
 
@@ -325,21 +300,17 @@ def screen_process(
     _ensure_started(player=player)
 
     try:
-        if angle == "camera":
-            image_bytes = _capture_camera()
-            mime_type   = "image/jpeg"
-            print("[ScreenProcess] 📷 Camera captured")
-        else:
-            image_bytes = _capture_screenshot()
-            mime_type   = "image/jpeg" if _PIL_OK else "image/png"
-            print("[ScreenProcess] 🖥️ Screen captured")
+        frame = _capture(angle)
+        src   = "📷 Camera" if angle == "camera" else "🖥️ Screen"
+        state = "unchanged — cached token reused" if frame.cached else "captured"
+        print(f"[ScreenProcess] {src} {state}")
     except Exception as e:
         import traceback; traceback.print_exc()
         print(f"[ScreenProcess] ❌ Capture error: {e}")
         return False
 
-    print(f"[ScreenProcess] 📦 {len(image_bytes)} bytes → sending")
-    _live.analyze(image_bytes, mime_type, user_text)
+    print(f"[ScreenProcess] 📦 {len(frame.jpeg)} bytes → sending")
+    _live.analyze(frame.b64, frame.mime, user_text)
     return True
 
 
