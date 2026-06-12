@@ -23,6 +23,7 @@ from google import genai
 from google.genai import types
 
 from ui import FlintUI
+from core import i18n as _i18n
 from core.tool_registry import TOOL_DECLARATIONS
 from core.async_pipeline import get_pipeline, Priority
 from core.ws_listener import get_listener
@@ -52,14 +53,22 @@ from actions.game_updater     import game_updater
 
 
 def get_base_dir():
+    """Per-machine writable location (next to the .exe when frozen)."""
     if getattr(sys, "frozen", False):
         return Path(sys.executable).parent
     return Path(__file__).resolve().parent
 
 
+def get_resource_dir():
+    """Read-only bundled data (_MEIPASS in a one-file exe)."""
+    if getattr(sys, "frozen", False):
+        return Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+    return Path(__file__).resolve().parent
+
+
 BASE_DIR        = get_base_dir()
 API_CONFIG_PATH = BASE_DIR / "config" / "api_keys.json"
-PROMPT_PATH     = BASE_DIR / "core" / "prompt.txt"
+PROMPT_PATH     = get_resource_dir() / "core" / "prompt.txt"
 
 LIVE_MODEL          = "models/gemini-2.5-flash-native-audio-preview-12-2025"
 CHANNELS            = 1
@@ -89,6 +98,14 @@ def _get_user_name() -> str:
         return str(_get_config().get("user_name", "")).strip() or "Boss"
     except Exception:
         return "Boss"
+
+
+def _get_language() -> str:
+    """Language code the user picked on first boot (defaults to English)."""
+    try:
+        return _i18n.normalize(_get_config().get("language"))
+    except Exception:
+        return _i18n.DEFAULT_CODE
 
 
 # Injected as the first system-instruction block so the delivery style is
@@ -320,7 +337,7 @@ class FlintLive:
     def speak_error(self, tool_name: str, error: str):
         short = str(error)[:120]
         self.ui.write_log(f"ERR: {tool_name} — {short}")
-        self.speak(f"Sir, {tool_name} encountered an error. {short}")
+        self.speak(f"{_get_user_name()}, {tool_name} encountered an error. {short}")
 
     # ── session config ───────────────────────────────────────────────────────
     def _build_config(self) -> types.LiveConnectConfig:
@@ -333,6 +350,7 @@ class FlintLive:
                       f"Use this to calculate exact times for reminders.\n\n")
 
         parts = [VOICE_STYLE_DIRECTIVE.replace("{user_name}", _get_user_name()),
+                 _i18n.directive(_get_language()),
                  time_ctx]
         if mem_str:
             parts.append(mem_str)
@@ -372,7 +390,7 @@ class FlintLive:
 
         if name == "shutdown_flint":
             self.ui.write_log("SYS: Shutdown requested.")
-            self.speak("Goodbye, sir.")
+            self.speak(f"Goodbye, {_get_user_name()}.")
 
             def _shutdown():
                 import time, os
@@ -564,7 +582,7 @@ class FlintLive:
 
 
 def main():
-    ui = FlintUI("face.png")
+    ui = FlintUI(str(get_resource_dir() / "face.png"))
     ui.attach_pipeline(get_pipeline())
 
     def runner():

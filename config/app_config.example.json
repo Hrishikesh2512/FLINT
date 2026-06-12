@@ -1,0 +1,7 @@
+{
+  "_comment": "TEMPLATE. Copy this file to app_config.json and fill in your values, then build. This is the public config bundled into the shared build — only ever put the PUBLISHABLE (anon) Supabase key here, NEVER a service-role/secret key. app_config.json is gitignored so the live key isn't scraped from a public GitHub repo.",
+  "supabase_url": "https://YOUR-PROJECT-ref.supabase.co",
+  "supabase_anon_key": "YOUR-PUBLISHABLE-ANON-KEY",
+  "bundled_gemini_api_key": "",
+  "bundled_openrouter_api_key": ""
+}

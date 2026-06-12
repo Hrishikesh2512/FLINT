@@ -1,11 +1,36 @@
-import google.generativeai as genai
+"""Quick Gemini connectivity check.
 
-API_KEY = "AQ.Ab8RN6K7i0xeRMb1VehgfdO50uX8HG46P88bzjUNvBju0sOT98-dDw"
+Reads the key from the GEMINI_API_KEY env var or config/api_keys.json — never
+hardcoded — so this file is safe to commit. Run:  python test.py
+"""
 
-genai.configure(api_key=API_KEY)
+import json
+import os
+from pathlib import Path
 
-model = genai.GenerativeModel("gemini-2.0-flash")
 
-response = model.generate_content("hello")
+def _load_key() -> str:
+    env = os.environ.get("GEMINI_API_KEY")
+    if env:
+        return env.strip()
+    cfg = Path(__file__).resolve().parent / "config" / "api_keys.json"
+    try:
+        return str(json.loads(cfg.read_text(encoding="utf-8")).get("gemini_api_key", "")).strip()
+    except Exception:
+        return ""
 
-print(response.text)
+
+def main() -> None:
+    key = _load_key()
+    if not key:
+        raise SystemExit(
+            "No Gemini key found. Set GEMINI_API_KEY or fill config/api_keys.json.")
+    from google import genai
+    client = genai.Client(api_key=key)
+    resp = client.models.generate_content(
+        model="gemini-2.0-flash", contents="hello")
+    print(resp.text)
+
+
+if __name__ == "__main__":
+    main()

@@ -45,10 +45,13 @@ from PyQt6.QtGui import (
     QShortcut, QTextCursor, QTextCharFormat,
 )
 from PyQt6.QtWidgets import (
-    QApplication, QFileDialog, QFrame, QGraphicsOpacityEffect, QHBoxLayout,
-    QLabel, QLineEdit, QMainWindow, QPlainTextEdit, QPushButton, QSizePolicy,
-    QStackedLayout, QTextEdit, QVBoxLayout, QWidget,
+    QApplication, QComboBox, QFileDialog, QFrame, QGraphicsOpacityEffect,
+    QHBoxLayout, QLabel, QLineEdit, QMainWindow, QPlainTextEdit, QPushButton,
+    QSizePolicy, QStackedLayout, QTextEdit, QVBoxLayout, QWidget,
 )
+
+from core import auth as _auth
+from core import i18n as _i18n
 
 
 def _base_dir() -> Path:
@@ -1058,19 +1061,30 @@ class BootOverlay(QWidget):
                        Qt.AlignmentFlag.AlignLeft, line)
 
 
-# ── Setup overlay (API keys) ─────────────────────────────────────────────────
+# ── Setup overlay: language + account (Supabase Auth) ────────────────────────
 class SetupOverlay(QWidget):
-    done = pyqtSignal(str, str, str, str)
+    # Emitted once the user is authenticated; carries the config to persist.
+    done = pyqtSignal(dict)
+    # Internal: (ok, message, data) handed back from the auth worker thread.
+    _auth_result = pyqtSignal(bool, str, dict)
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        # Prefill from any existing config so an upgrade (e.g. a new required
-        # field like user_name) doesn't force re-entering the API keys.
+        # Prefill from any existing config so re-running setup doesn't force
+        # re-typing everything.
         existing = {}
         try:
             existing = json.loads(API_FILE.read_text(encoding="utf-8"))
         except Exception:
             pass
+
+        self._bundled = _auth.bundled_keys()      # owner-supplied keys, if any
+        self._busy    = False
+        self._mode    = "signup"                  # "signin" | "signup"
+        # OS no longer needs a manual choice — detect it silently.
+        self._sel_os  = {"darwin": "mac", "windows": "windows"}.get(
+            _OS.lower(), "linux")
+
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setStyleSheet(f"""
             SetupOverlay {{
@@ -1079,12 +1093,10 @@ class SetupOverlay(QWidget):
                 border-radius: 12px;
             }}
         """)
-        detected = {"darwin": "mac", "windows": "windows"}.get(_OS.lower(), "linux")
-        self._sel_os = detected
 
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(32, 24, 32, 24)
-        lay.setSpacing(9)
+        lay.setContentsMargins(32, 20, 32, 20)
+        lay.setSpacing(7)
 
         def _lbl(txt, size=9, bold=False, color=T.CYAN,
                  align=Qt.AlignmentFlag.AlignCenter):
@@ -1096,7 +1108,7 @@ class SetupOverlay(QWidget):
 
         lay.addWidget(_lbl("INITIALISATION REQUIRED", 13, True,
                            align=Qt.AlignmentFlag.AlignLeft))
-        lay.addWidget(_lbl("Configure F.L.I.N.T. before first boot.", 8,
+        lay.addWidget(_lbl("Create your free account to start FLINT.", 8,
                            color=T.TEXT_DIM, align=Qt.AlignmentFlag.AlignLeft))
 
         def _field(placeholder, focus=T.CYAN, secret=True):
@@ -1105,60 +1117,108 @@ class SetupOverlay(QWidget):
                 e.setEchoMode(QLineEdit.EchoMode.Password)
             e.setPlaceholderText(placeholder)
             e.setFont(F(10))
-            e.setFixedHeight(34)
+            e.setFixedHeight(32)
             e.setStyleSheet(f"""
                 QLineEdit {{
                     background: {T.INSET}; color: {T.TEXT};
                     border: 1px solid {T.BORDER_HI}; border-radius: 6px;
-                    padding: 5px 10px;
+                    padding: 4px 10px;
                 }}
                 QLineEdit:focus {{ border: 1px solid {focus}; }}
             """)
             return e
 
-        lay.addWidget(_lbl("YOUR NAME", 7, color=T.TEXT_DIM,
+        # ── language ──────────────────────────────────────────────────────────
+        lay.addWidget(_lbl("LANGUAGE", 7, color=T.TEXT_DIM,
                            align=Qt.AlignmentFlag.AlignLeft))
+        self._lang = QComboBox()
+        for code, _eng, _native in _i18n.LANGUAGES:
+            self._lang.addItem(_i18n.label(code), code)
+        saved_idx = self._lang.findData(_i18n.normalize(existing.get("language")))
+        if saved_idx >= 0:
+            self._lang.setCurrentIndex(saved_idx)
+        self._lang.setFont(F(10))
+        self._lang.setFixedHeight(32)
+        self._lang.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._lang.setStyleSheet(f"""
+            QComboBox {{
+                background: {T.INSET}; color: {T.TEXT};
+                border: 1px solid {T.BORDER_HI}; border-radius: 6px;
+                padding: 4px 10px;
+            }}
+            QComboBox:focus {{ border: 1px solid {T.CYAN}; }}
+            QComboBox QAbstractItemView {{
+                background: {T.INSET}; color: {T.TEXT};
+                selection-background-color: {T.CYAN_GHO};
+                border: 1px solid {T.BORDER_HI};
+            }}
+        """)
+        lay.addWidget(self._lang)
+
+        # ── sign in / create account toggle ────────────────────────────────────
+        mode_row = QHBoxLayout()
+        mode_row.setSpacing(7)
+        self._signin_btn = QPushButton("SIGN IN")
+        self._signup_btn = QPushButton("CREATE ACCOUNT")
+        for b, m in ((self._signin_btn, "signin"), (self._signup_btn, "signup")):
+            b.setFont(F(9, True))
+            b.setFixedHeight(30)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.clicked.connect(lambda _, mode=m: self._set_mode(mode))
+            mode_row.addWidget(b)
+        lay.addLayout(mode_row)
+
+        # ── name (sign-up only) ────────────────────────────────────────────────
+        self._name_lbl = _lbl("YOUR NAME", 7, color=T.TEXT_DIM,
+                              align=Qt.AlignmentFlag.AlignLeft)
+        lay.addWidget(self._name_lbl)
         self._name_input = _field("How should FLINT address you?", T.VIOLET,
                                   secret=False)
         self._name_input.setText(str(existing.get("user_name", "")).strip())
         lay.addWidget(self._name_input)
 
-        lay.addWidget(_lbl("GEMINI API KEY", 7, color=T.TEXT_DIM,
+        # ── email + password ───────────────────────────────────────────────────
+        lay.addWidget(_lbl("EMAIL", 7, color=T.TEXT_DIM,
                            align=Qt.AlignmentFlag.AlignLeft))
-        self._key_input = _field("AIza…", T.CYAN)
-        self._key_input.setText(str(existing.get("gemini_api_key", "")).strip())
-        lay.addWidget(self._key_input)
+        self._email_input = _field("you@example.com", T.CYAN, secret=False)
+        self._email_input.setText(str(existing.get("user_email", "")).strip())
+        lay.addWidget(self._email_input)
 
-        lay.addWidget(_lbl("OPENROUTER API KEY", 7, color=T.TEXT_DIM,
+        lay.addWidget(_lbl("PASSWORD", 7, color=T.TEXT_DIM,
                            align=Qt.AlignmentFlag.AlignLeft))
-        self._or_input = _field("sk-or-…", T.EMERALD)
-        self._or_input.setText(str(existing.get("openrouter_api_key", "")).strip())
-        lay.addWidget(self._or_input)
+        self._pw_input = _field("At least 6 characters", T.CYAN, secret=True)
+        self._pw_input.returnPressed.connect(self._submit)
+        lay.addWidget(self._pw_input)
 
-        lay.addSpacing(4)
-        lay.addWidget(_lbl("OPERATING SYSTEM", 7, color=T.TEXT_DIM,
-                           align=Qt.AlignmentFlag.AlignLeft))
-        os_row = QHBoxLayout()
-        os_row.setSpacing(7)
-        self._os_btns: dict[str, QPushButton] = {}
-        for key, label in [("windows", "⊞  Windows"), ("mac", "  macOS"),
-                           ("linux", "🐧  Linux")]:
-            btn = QPushButton(label)
-            btn.setFont(F(9, True))
-            btn.setFixedHeight(32)
-            btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.clicked.connect(lambda _, k=key: self._sel(k))
-            os_row.addWidget(btn)
-            self._os_btns[key] = btn
-        lay.addLayout(os_row)
-        self._sel(detected)
+        # ── API keys (hidden when the owner bundled them) ──────────────────────
+        if "gemini_api_key" not in self._bundled:
+            lay.addWidget(_lbl("GEMINI API KEY", 7, color=T.TEXT_DIM,
+                               align=Qt.AlignmentFlag.AlignLeft))
+            self._key_input = _field("AIza…", T.CYAN)
+            self._key_input.setText(str(existing.get("gemini_api_key", "")).strip())
+            lay.addWidget(self._key_input)
+        else:
+            self._key_input = None
 
-        lay.addSpacing(6)
-        init_btn = QPushButton("▸  INITIALISE SYSTEMS")
-        init_btn.setFont(F(10, True))
-        init_btn.setFixedHeight(38)
-        init_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        init_btn.setStyleSheet(f"""
+        if "openrouter_api_key" not in self._bundled:
+            lay.addWidget(_lbl("OPENROUTER API KEY  (optional)", 7,
+                               color=T.TEXT_DIM, align=Qt.AlignmentFlag.AlignLeft))
+            self._or_input = _field("sk-or-…", T.EMERALD)
+            self._or_input.setText(str(existing.get("openrouter_api_key", "")).strip())
+            lay.addWidget(self._or_input)
+        else:
+            self._or_input = None
+
+        # ── status + submit ────────────────────────────────────────────────────
+        self._status = _lbl("", 8, color=T.RED, align=Qt.AlignmentFlag.AlignLeft)
+        self._status.setWordWrap(True)
+        lay.addWidget(self._status)
+
+        self._init_btn = QPushButton()
+        self._init_btn.setFont(F(10, True))
+        self._init_btn.setFixedHeight(38)
+        self._init_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._init_btn.setStyleSheet(f"""
             QPushButton {{
                 background: {T.CYAN_GHO}; color: {T.CYAN};
                 border: 1px solid {T.CYAN_DIM}; border-radius: 6px;
@@ -1168,43 +1228,106 @@ class SetupOverlay(QWidget):
                 background: #0a3340; border: 1px solid {T.CYAN};
                 color: {T.WHITE};
             }}
+            QPushButton:disabled {{ color: {T.TEXT_DIM}; border: 1px solid {T.BORDER}; }}
         """)
-        init_btn.clicked.connect(self._submit)
-        lay.addWidget(init_btn)
+        self._init_btn.clicked.connect(self._submit)
+        lay.addWidget(self._init_btn)
 
-    def _sel(self, key: str):
-        self._sel_os = key
-        pal = {"windows": (T.CYAN, "#06222e"),
-               "mac": (T.EMERALD, "#03241a"),
-               "linux": (T.AMBER, "#241a03")}
-        for k, btn in self._os_btns.items():
-            if k == key:
-                fg, bg = pal[k]
-                btn.setStyleSheet(
-                    f"QPushButton {{ background: {bg}; color: {fg};"
-                    f" border: 1px solid {fg}; border-radius: 6px; }}")
-            else:
-                btn.setStyleSheet(f"""
-                    QPushButton {{
-                        background: {T.PANEL}; color: {T.TEXT_DIM};
-                        border: 1px solid {T.BORDER}; border-radius: 6px;
-                    }}
-                    QPushButton:hover {{
-                        color: {T.TEXT}; border: 1px solid {T.BORDER_HI};
-                    }}
-                """)
+        self._auth_result.connect(self._on_auth_result)
+        # Default to sign-in if this machine already knows an email.
+        self._set_mode("signin" if existing.get("user_email") else "signup")
 
+    # ── mode handling ──────────────────────────────────────────────────────────
+    def _set_mode(self, mode: str):
+        if self._busy:
+            return
+        self._mode = mode
+        is_signup = (mode == "signup")
+        self._name_lbl.setVisible(is_signup)
+        self._name_input.setVisible(is_signup)
+        self._init_btn.setText("▸  CREATE ACCOUNT & LAUNCH" if is_signup
+                               else "▸  SIGN IN & LAUNCH")
+        self._set_status("")
+        active = (T.CYAN, "#06222e")
+        idle = (T.TEXT_DIM, T.PANEL)
+        for b, m in ((self._signin_btn, "signin"), (self._signup_btn, "signup")):
+            fg, bg = active if m == mode else idle
+            border = T.CYAN if m == mode else T.BORDER
+            b.setStyleSheet(
+                f"QPushButton {{ background: {bg}; color: {fg};"
+                f" border: 1px solid {border}; border-radius: 6px; }}")
+
+    def _set_status(self, msg: str, color: str = T.RED):
+        self._status.setStyleSheet(
+            f"color: {color}; background: transparent; border: none;")
+        self._status.setText(msg)
+
+    def _set_busy(self, busy: bool):
+        self._busy = busy
+        self._init_btn.setEnabled(not busy)
+        if busy:
+            self._set_status("Authenticating…", T.CYAN)
+
+    # ── submit / auth ──────────────────────────────────────────────────────────
     def _submit(self):
-        name = self._name_input.text().strip()
-        key = self._key_input.text().strip()
-        or_key = self._or_input.text().strip()
-        for val, field in [(name, self._name_input), (key, self._key_input),
-                           (or_key, self._or_input)]:
-            if not val:
-                field.setStyleSheet(field.styleSheet()
-                                    + f" QLineEdit {{ border: 1px solid {T.RED}; }}")
-                return
-        self.done.emit(key, or_key, name, self._sel_os)
+        if self._busy:
+            return
+        email = self._email_input.text().strip()
+        pw    = self._pw_input.text()
+        name  = self._name_input.text().strip()
+        is_signup = (self._mode == "signup")
+
+        if "@" not in email or "." not in email:
+            self._set_status("Enter a valid email address.")
+            return
+        if len(pw) < 6:
+            self._set_status("Password must be at least 6 characters.")
+            return
+        if is_signup and not name:
+            self._set_status("Please enter your name.")
+            return
+
+        gemini = self._bundled.get("gemini_api_key") or (
+            self._key_input.text().strip() if self._key_input else "")
+        if not gemini:
+            self._set_status("Enter your Gemini API key.")
+            return
+        or_key = self._bundled.get("openrouter_api_key") or (
+            self._or_input.text().strip() if self._or_input else "")
+
+        base = {
+            "language": self._lang.currentData(),
+            "os_system": self._sel_os,
+            "gemini_api_key": gemini,
+            "openrouter_api_key": or_key,
+        }
+        self._set_busy(True)
+        threading.Thread(
+            target=self._do_auth,
+            args=(self._mode, email, pw, name, base),
+            daemon=True, name="FlintAuth").start()
+
+    def _do_auth(self, mode, email, pw, name, base):
+        if mode == "signup":
+            profile, err = _auth.sign_up(email, pw, name)
+        else:
+            profile, err = _auth.sign_in(email, pw)
+        if err:
+            self._auth_result.emit(False, err, {})
+            return
+        data = dict(base)
+        data["user_email"] = profile.get("email", email)
+        data["user_id"]    = profile.get("user_id", "")
+        data["user_name"]  = (name or profile.get("name") or
+                              email.split("@")[0])
+        self._auth_result.emit(True, "", data)
+
+    def _on_auth_result(self, ok: bool, msg: str, data: dict):
+        self._set_busy(False)
+        if ok:
+            self.done.emit(data)
+        else:
+            self._set_status(msg or "Authentication failed.")
 
 
 # ── small helpers ────────────────────────────────────────────────────────────
@@ -1722,48 +1845,55 @@ class MainWindow(QMainWindow):
 
     # ── config gate ───────────────────────────────────────────────────────────
     def _check_config(self) -> bool:
-        if not API_FILE.exists():
-            return False
+        """Ready when this machine has a language, a signed-in user, and a
+        usable Gemini key. A returning user is kept logged in via the saved
+        Supabase session (refreshed in the background), so they skip setup."""
         try:
-            d = json.loads(API_FILE.read_text(encoding="utf-8"))
-            return (bool(d.get("gemini_api_key"))
-                    and bool(d.get("openrouter_api_key"))
-                    and bool(d.get("os_system"))
-                    and bool(str(d.get("user_name", "")).strip()))
+            d = json.loads(API_FILE.read_text(encoding="utf-8")) if API_FILE.exists() else {}
         except Exception:
-            return False
+            d = {}
+        has_gemini = bool(d.get("gemini_api_key")) or bool(
+            _auth.bundled_keys().get("gemini_api_key"))
+        ok = (has_gemini
+              and _i18n.is_valid(str(d.get("language", "")))
+              and bool(str(d.get("user_email", "")).strip())
+              and bool(str(d.get("user_name", "")).strip()))
+        if ok:
+            # Refresh tokens in the background; never block the boot frame.
+            threading.Thread(target=_auth.restore_session,
+                             daemon=True, name="FlintSessionRestore").start()
+        return ok
 
     def _show_setup(self):
         ov = SetupOverlay(self.centralWidget())
         cw = self.centralWidget()
-        ow, oh = 480, 420
-        ov.setGeometry((cw.width() - ow) // 2, (cw.height() - oh) // 2, ow, oh)
+        ow, oh = 480, 620
+        ov.setGeometry((cw.width() - ow) // 2, max(8, (cw.height() - oh) // 2),
+                       ow, oh)
         ov.done.connect(self._on_setup_done)
         ov.show()
         ov.raise_()
         self._overlay = ov
 
-    def _on_setup_done(self, key: str, or_key: str, name: str, os_name: str):
+    def _on_setup_done(self, data: dict):
         os.makedirs(CONFIG_DIR, exist_ok=True)
         existing = {}
         try:
             existing = json.loads(API_FILE.read_text(encoding="utf-8"))
         except Exception:
             pass
-        existing.update({
-            "gemini_api_key": key,
-            "openrouter_api_key": or_key,
-            "user_name": name,
-            "os_system": os_name,
-        })
+        # Skip empty values so an optional blank field never wipes an existing one.
+        existing.update({k: v for k, v in data.items() if v != ""})
         API_FILE.write_text(json.dumps(existing, indent=4), encoding="utf-8")
         self._ready = True
         if self._overlay:
             self._overlay.hide()
             self._overlay = None
         self._apply_state("LISTENING")
-        self._log.append_log(f"SYS: Initialised. OS={os_name.upper()}. "
-                             f"FLINT online for {name}.")
+        name = existing.get("user_name", "Boss")
+        lang = _i18n.english_name(str(existing.get("language", "en")))
+        self._log.append_log(
+            f"SYS: Initialised. Language={lang}. FLINT online for {name}.")
 
 
 # ── tkinter-style mainloop shim (main.py compatibility) ──────────────────────
