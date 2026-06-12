@@ -26,6 +26,7 @@ from ui import FlintUI
 from core.tool_registry import TOOL_DECLARATIONS
 from core.async_pipeline import get_pipeline, Priority
 from core.ws_listener import get_listener
+from core.cloud_bridge import get_bridge
 from memory.memory_manager import (
     load_memory, update_memory, format_memory_for_prompt,
     should_extract_memory, extract_memory,
@@ -82,8 +83,17 @@ def _get_voice_name() -> str:
         return DEFAULT_VOICE
 
 
+def _get_user_name() -> str:
+    """The name the user gave on first boot (asked by the setup overlay)."""
+    try:
+        return str(_get_config().get("user_name", "")).strip() or "Boss"
+    except Exception:
+        return "Boss"
+
+
 # Injected as the first system-instruction block so the delivery style is
 # always active, even if core/prompt.txt is missing or replaced.
+# {user_name} placeholders are substituted at session-config time.
 VOICE_STYLE_DIRECTIVE = (
     "[VOICE & AUDIO STYLE]\n"
     "You are a young Indian woman from India. Your voice is melodious, "
@@ -95,7 +105,7 @@ VOICE_STYLE_DIRECTIVE = (
     "educated Indian girl's accent) — never American or British. Every "
     "single response.\n"
     "Languages: you are fluently multilingual in Indian languages. When "
-    "Tushar speaks Hindi, Hinglish, Tamil, Telugu, Bengali, Marathi, "
+    "{user_name} speaks Hindi, Hinglish, Tamil, Telugu, Bengali, Marathi, "
     "Gujarati, Punjabi, Kannada, Malayalam or any other Indian language, "
     "reply in that same language with a native accent. Mix Hindi and "
     "English (Hinglish) freely and naturally — that is how you talk. Use "
@@ -104,12 +114,12 @@ VOICE_STYLE_DIRECTIVE = (
     "Charm: be affectionate in small, real ways — caring reassurances "
     "like 'main hoon na', tender confirmations like 'ho gaya, ab bolo', "
     "a soft giggle [light laugh] when something is genuinely funny, and "
-    "gentle concern when Tushar sounds tired. Make him feel looked "
+    "gentle concern when {user_name} sounds tired. Make him feel looked "
     "after, not flattered.\n"
     "Pacing: use inline delivery cues to keep speech tracking smoothly and "
     "dynamically. End paragraphs and thought transitions with [short pause]. "
     "Use [slow] when delivering important results, numbers, names, or "
-    "anything Tushar needs to absorb, and [pause] before changing topic. "
+    "anything {user_name} needs to absorb, and [pause] before changing topic. "
     "These bracketed cues are delivery directions only — never read them "
     "out loud as words.\n"
 )
@@ -125,11 +135,13 @@ def _get_api_key() -> str:
 
 
 def _load_system_prompt() -> str:
+    name = _get_user_name()
     try:
-        return PROMPT_PATH.read_text(encoding="utf-8")
+        # plain .replace (not str.format) — the prompt may contain other braces
+        return PROMPT_PATH.read_text(encoding="utf-8").replace("{user_name}", name)
     except Exception:
         return (
-            "You are FLINT, Tony Stark's AI assistant. "
+            f"You are FLINT, {name}'s personal AI assistant. "
             "Be concise, direct, and always use the provided tools to complete tasks. "
             "Never simulate or guess results — always call the appropriate tool. "
             "Speak with a calm, composed, fluent Indian female voice in English "
@@ -168,6 +180,7 @@ class FlintLive:
         self.ui             = ui
         self.pipeline       = get_pipeline()
         self.listener       = None
+        self.cloud          = None
         self.session        = None
         self.audio_in_queue = None
         self.out_queue      = None
@@ -207,15 +220,18 @@ class FlintLive:
             return f"Task started (ID: {task_id})."
 
         return {
+            # NB: the actions below return their own accurate status strings;
+            # the fallbacks must never assert success the action didn't claim
             "open_app":          lambda a: open_app(parameters=a, response=None, player=ui)
-                                           or f"Opened {a.get('app_name')}.",
+                                           or f"No status returned for opening {a.get('app_name')}.",
             "weather_report":    lambda a: weather_action(parameters=a, player=ui)
                                            or "Weather delivered.",
             "browser_control":   lambda a: browser_control(parameters=a, player=ui) or "Done.",
             "file_controller":   lambda a: file_controller(parameters=a, player=ui) or "Done.",
             "send_message":      lambda a: send_message(parameters=a, response=None, player=ui,
                                                         session_memory=None)
-                                           or f"Message sent to {a.get('receiver')}.",
+                                           or ("Message status unknown — could not confirm "
+                                               "it was sent."),
             "reminder":          lambda a: reminder(parameters=a, response=None, player=ui)
                                            or "Reminder set.",
             "youtube_video":     lambda a: youtube_video(parameters=a, response=None, player=ui)
@@ -252,6 +268,19 @@ class FlintLive:
             # mirror the system terminal to connected phones
             _LOG_HUB.subscribe(lambda line, lvl, _st: self.listener.broadcast(
                 {"type": "log", "line": line, "level": lvl}))
+
+    # ── cloud bridge (Supabase command_queue) ────────────────────────────────
+    def start_cloud_bridge(self):
+        """Phase 2: listen to a Supabase table and run actions remotely.
+
+        Runs on its own daemon thread inside CloudBridge, so the Qt frame and
+        the Live session stay fully responsive. Actions get the live UI + a
+        speak() hook so remote commands behave like local ones.
+        """
+        self.cloud = get_bridge()
+        self.cloud.player = self.ui
+        self.cloud.speak = self.speak
+        self.cloud.start()
 
     def _on_remote_command(self, text: str, reply):
         print(f"[Remote] 📱 Command: {text}")
@@ -303,7 +332,8 @@ class FlintLive:
         time_ctx   = (f"[CURRENT DATE & TIME]\nRight now it is: {time_str}\n"
                       f"Use this to calculate exact times for reminders.\n\n")
 
-        parts = [VOICE_STYLE_DIRECTIVE, time_ctx]
+        parts = [VOICE_STYLE_DIRECTIVE.replace("{user_name}", _get_user_name()),
+                 time_ctx]
         if mem_str:
             parts.append(mem_str)
         parts.append(sys_prompt)
@@ -541,6 +571,7 @@ def main():
         ui.wait_for_api_key()
         flint = FlintLive(ui)
         flint.start_remote_listener()
+        flint.start_cloud_bridge()
         try:
             asyncio.run(flint.run())
         except KeyboardInterrupt:

@@ -1060,10 +1060,17 @@ class BootOverlay(QWidget):
 
 # ── Setup overlay (API keys) ─────────────────────────────────────────────────
 class SetupOverlay(QWidget):
-    done = pyqtSignal(str, str, str)
+    done = pyqtSignal(str, str, str, str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        # Prefill from any existing config so an upgrade (e.g. a new required
+        # field like user_name) doesn't force re-entering the API keys.
+        existing = {}
+        try:
+            existing = json.loads(API_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            pass
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setStyleSheet(f"""
             SetupOverlay {{
@@ -1092,9 +1099,10 @@ class SetupOverlay(QWidget):
         lay.addWidget(_lbl("Configure F.L.I.N.T. before first boot.", 8,
                            color=T.TEXT_DIM, align=Qt.AlignmentFlag.AlignLeft))
 
-        def _field(placeholder, focus=T.CYAN):
+        def _field(placeholder, focus=T.CYAN, secret=True):
             e = QLineEdit()
-            e.setEchoMode(QLineEdit.EchoMode.Password)
+            if secret:
+                e.setEchoMode(QLineEdit.EchoMode.Password)
             e.setPlaceholderText(placeholder)
             e.setFont(F(10))
             e.setFixedHeight(34)
@@ -1108,14 +1116,23 @@ class SetupOverlay(QWidget):
             """)
             return e
 
+        lay.addWidget(_lbl("YOUR NAME", 7, color=T.TEXT_DIM,
+                           align=Qt.AlignmentFlag.AlignLeft))
+        self._name_input = _field("How should FLINT address you?", T.VIOLET,
+                                  secret=False)
+        self._name_input.setText(str(existing.get("user_name", "")).strip())
+        lay.addWidget(self._name_input)
+
         lay.addWidget(_lbl("GEMINI API KEY", 7, color=T.TEXT_DIM,
                            align=Qt.AlignmentFlag.AlignLeft))
         self._key_input = _field("AIza…", T.CYAN)
+        self._key_input.setText(str(existing.get("gemini_api_key", "")).strip())
         lay.addWidget(self._key_input)
 
         lay.addWidget(_lbl("OPENROUTER API KEY", 7, color=T.TEXT_DIM,
                            align=Qt.AlignmentFlag.AlignLeft))
         self._or_input = _field("sk-or-…", T.EMERALD)
+        self._or_input.setText(str(existing.get("openrouter_api_key", "")).strip())
         lay.addWidget(self._or_input)
 
         lay.addSpacing(4)
@@ -1178,14 +1195,16 @@ class SetupOverlay(QWidget):
                 """)
 
     def _submit(self):
+        name = self._name_input.text().strip()
         key = self._key_input.text().strip()
         or_key = self._or_input.text().strip()
-        for val, field in [(key, self._key_input), (or_key, self._or_input)]:
+        for val, field in [(name, self._name_input), (key, self._key_input),
+                           (or_key, self._or_input)]:
             if not val:
                 field.setStyleSheet(field.styleSheet()
                                     + f" QLineEdit {{ border: 1px solid {T.RED}; }}")
                 return
-        self.done.emit(key, or_key, self._sel_os)
+        self.done.emit(key, or_key, name, self._sel_os)
 
 
 # ── small helpers ────────────────────────────────────────────────────────────
@@ -1709,7 +1728,8 @@ class MainWindow(QMainWindow):
             d = json.loads(API_FILE.read_text(encoding="utf-8"))
             return (bool(d.get("gemini_api_key"))
                     and bool(d.get("openrouter_api_key"))
-                    and bool(d.get("os_system")))
+                    and bool(d.get("os_system"))
+                    and bool(str(d.get("user_name", "")).strip()))
         except Exception:
             return False
 
@@ -1723,7 +1743,7 @@ class MainWindow(QMainWindow):
         ov.raise_()
         self._overlay = ov
 
-    def _on_setup_done(self, key: str, or_key: str, os_name: str):
+    def _on_setup_done(self, key: str, or_key: str, name: str, os_name: str):
         os.makedirs(CONFIG_DIR, exist_ok=True)
         existing = {}
         try:
@@ -1733,6 +1753,7 @@ class MainWindow(QMainWindow):
         existing.update({
             "gemini_api_key": key,
             "openrouter_api_key": or_key,
+            "user_name": name,
             "os_system": os_name,
         })
         API_FILE.write_text(json.dumps(existing, indent=4), encoding="utf-8")
@@ -1741,7 +1762,8 @@ class MainWindow(QMainWindow):
             self._overlay.hide()
             self._overlay = None
         self._apply_state("LISTENING")
-        self._log.append_log(f"SYS: Initialised. OS={os_name.upper()}. FLINT online.")
+        self._log.append_log(f"SYS: Initialised. OS={os_name.upper()}. "
+                             f"FLINT online for {name}.")
 
 
 # ── tkinter-style mainloop shim (main.py compatibility) ──────────────────────

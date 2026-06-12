@@ -80,11 +80,17 @@ def _is_running(app_name: str) -> bool:
     if not _PSUTIL:
         return False          # can't check → assume not running, allow launch
     app_lower = app_name.lower().replace(" ", "").replace(".exe", "")
+    if len(app_lower) < 3:
+        return False          # too short to match reliably
     try:
         for proc in psutil.process_iter(["name"]):
             try:
                 proc_name = proc.info["name"].lower().replace(" ", "").replace(".exe", "")
-                if app_lower in proc_name or proc_name in app_lower or (app_lower == "whatsapp" and "whatsapp.root" in proc_name):
+                # substring match both ways, but never against a degenerate
+                # short process name ("py", "sh", …) — those false-positive
+                # against half the apps that could be requested
+                if app_lower in proc_name or (len(proc_name) >= 4
+                                              and proc_name in app_lower):
                     return True
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
@@ -138,6 +144,14 @@ def _is_real_window(hwnd, win32gui) -> bool:
     return True
 
 
+# Browsers (and the WebView host) render arbitrary page titles — a Chrome tab
+# titled "WhatsApp - Google Chrome" must never be mistaken for the WhatsApp
+# app.  Title-based matching is disabled for windows owned by these processes;
+# they can still be matched by process name (e.g. when opening "chrome").
+_BROWSER_PROCS = {"chrome", "msedge", "firefox", "brave", "opera",
+                  "opera_gx", "vivaldi", "msedgewebview2"}
+
+
 def _find_hwnd_windows(app_name: str):
     """Locate a focusable top-level window for app_name.  Returns hwnd or None."""
     app_lower = app_name.lower().replace(".exe", "").strip()
@@ -146,11 +160,15 @@ def _find_hwnd_windows(app_name: str):
         import win32process
         import psutil as _ps
 
-        found_hwnd = None
+        # process-name matches are authoritative; title matches are a
+        # fallback (UWP apps hosted by ApplicationFrameHost only expose
+        # the app name in the title)
+        proc_hwnd  = None
+        title_hwnd = None
 
         def _cb(hwnd, _):
-            nonlocal found_hwnd
-            if found_hwnd:
+            nonlocal proc_hwnd, title_hwnd
+            if proc_hwnd:
                 return
             if not _is_real_window(hwnd, win32gui):
                 return
@@ -160,14 +178,17 @@ def _find_hwnd_windows(app_name: str):
             try:
                 _, pid   = win32process.GetWindowThreadProcessId(hwnd)
                 pname    = _ps.Process(pid).name().lower().replace(".exe", "")
-                # Match by process name OR window title containing the app name
-                if app_lower in pname or pname in app_lower or app_lower in title:
-                    found_hwnd = hwnd
+                if app_lower in pname or (len(pname) >= 4
+                                          and pname in app_lower):
+                    proc_hwnd = hwnd
+                elif (app_lower in title and title_hwnd is None
+                      and pname not in _BROWSER_PROCS):
+                    title_hwnd = hwnd
             except Exception:
                 pass
 
         win32gui.EnumWindows(_cb, None)
-        return found_hwnd
+        return proc_hwnd or title_hwnd
     except ImportError:
         return None
 
@@ -248,6 +269,9 @@ def _focus_window_windows(app_name: str, timeout: float = 2.0) -> bool:
 
     # ── Strategy 2: pygetwindow fallback (with retry) ──
     app_lower = app_name.lower().replace(".exe", "").strip()
+    # don't let a browser tab titled "<app> - Google Chrome" pass for the app
+    _browser_tab_marks = ("google chrome", "microsoft edge", "mozilla firefox",
+                          "- brave", "- opera", "- vivaldi")
     deadline = time.time() + timeout
     while True:
         try:
@@ -256,6 +280,8 @@ def _focus_window_windows(app_name: str, timeout: float = 2.0) -> bool:
                 w for w in gw.getAllWindows()
                 if app_lower in w.title.lower() and w.title.strip()
                 and _hwnd_visible(w._hWnd) and not _is_cloaked(w._hWnd)
+                and not any(m in w.title.lower() and app_lower not in m
+                            for m in _browser_tab_marks)
             ]
             if wins:
                 w = wins[0]
@@ -430,8 +456,11 @@ def open_app(
             # Validate the launch: wait for an actual window before reporting
             # success, so chained actions (focus, keystrokes) land safely.
             if system == "Windows":
-                hwnd = (wait_for_window_windows(normalized, timeout=2.0)
-                        or wait_for_window_windows(app_name, timeout=2.0))
+                # Store/UWP apps (WhatsApp, …) can take 5s+ to draw their
+                # first window — a short wait here produced false "couldn't
+                # confirm it launched" reports for apps that opened fine.
+                hwnd = (wait_for_window_windows(normalized, timeout=6.0)
+                        or wait_for_window_windows(app_name, timeout=3.0))
                 if hwnd:
                     _say(f"[open_app] ✅ Window confirmed: HWND={hwnd}")
                     return f"Opened {app_name} successfully, sir."

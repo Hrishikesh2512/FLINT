@@ -24,6 +24,9 @@ pygetwindow
 pywinauto
 playwright
 
+# Cloud bridge
+supabase
+
 # Web / data
 beautifulsoup4
 duckduckgo-search

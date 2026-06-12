@@ -15,11 +15,50 @@ except ImportError:
 
 
 # ---------------------------------------------------------------------------
+# Unicode-safe typing
+# ---------------------------------------------------------------------------
+
+def _type_text(text: str) -> None:
+    """Type text into the focused control, unicode-safe.
+
+    pyautogui.write silently drops emoji / Hindi / any non-ASCII characters,
+    which mangles messages and contact names. Paste via the clipboard
+    instead; fall back to write only if the clipboard is unavailable.
+    """
+    try:
+        import pyperclip
+        old = None
+        try:
+            old = pyperclip.paste()
+        except Exception:
+            pass
+        pyperclip.copy(text)
+        time.sleep(0.1)
+        pyautogui.hotkey("ctrl", "v")
+        # let the target consume the paste before restoring the clipboard
+        time.sleep(0.3)
+        if old is not None:
+            try:
+                pyperclip.copy(old)
+            except Exception:
+                pass
+        return
+    except Exception:
+        pass
+    pyautogui.write(text, interval=0.03)
+
+
+# ---------------------------------------------------------------------------
 # WhatsApp — keyed exactly on what the debug showed
 # ---------------------------------------------------------------------------
 
-_WA_PROCESS = "whatsapp.root.exe"   # exact name psutil sees
-_WA_HWND_PID = None                 # cached after first focus
+# WhatsApp Desktop's process name differs by version/install channel:
+# "WhatsApp.Root.exe" (current store build), "WhatsApp.exe" (older builds).
+# Matching on the exact old name made FLINT think WhatsApp wasn't running
+# when it was (and vice versa after an update), so match any process whose
+# name contains "whatsapp" instead.
+def _is_whatsapp_proc(name: str) -> bool:
+    return "whatsapp" in (name or "").lower()
 
 
 def _is_whatsapp_running() -> bool:
@@ -27,7 +66,7 @@ def _is_whatsapp_running() -> bool:
         import psutil
         for p in psutil.process_iter(["name"]):
             try:
-                if p.info["name"].lower() == _WA_PROCESS:
+                if _is_whatsapp_proc(p.info["name"]):
                     return True
             except Exception:
                 pass
@@ -40,9 +79,10 @@ def _get_whatsapp_hwnd():
     """
     Returns (hwnd, title) for the real WhatsApp Desktop window.
     Matches by:
-      - process name == WhatsApp.Root.exe   (exact, from debug output)
-      - window is visible and has a non-empty title
-    Excludes msedgewebview2 / chrome / anything not WhatsApp.Root.exe.
+      - process name contains "whatsapp" (WhatsApp.Root.exe / WhatsApp.exe)
+      - window is visible, not cloaked, and has a non-empty title
+    Excludes msedgewebview2 / chrome / browser tabs (process match only —
+    a browser tab titled "WhatsApp" never qualifies).
     """
     try:
         import win32gui
@@ -64,7 +104,7 @@ def _get_whatsapp_hwnd():
             try:
                 _, pid  = win32process.GetWindowThreadProcessId(hwnd)
                 pname   = psutil.Process(pid).name().lower()
-                if pname == _WA_PROCESS:          # exact match only
+                if _is_whatsapp_proc(pname):
                     result[0] = hwnd
                     result[1] = title
             except Exception:
@@ -167,20 +207,34 @@ def _send_whatsapp(receiver: str, message: str) -> str:
 
         # Fresh UWP launches draw the window late — give them a longer
         # validation window before declaring failure.
-        hwnd, title = _focus_whatsapp(timeout=8.0 if fresh_launch else 2.0)
+        hwnd, title = _focus_whatsapp(timeout=8.0 if fresh_launch else 3.0)
+
+        if not hwnd and not fresh_launch:
+            # Process alive but no focusable window: WhatsApp is minimized
+            # to tray / suspended with only a cloaked ghost frame. It IS
+            # "running" to psutil but unusable — relaunch to surface a
+            # real window instead of giving up.
+            _say("[SendMessage] WhatsApp running but no usable window — relaunching")
+            if _HAS_OPEN_APP:
+                _open_app_module({"app_name": "whatsapp"})
+            hwnd, title = _focus_whatsapp(timeout=8.0)
+
         _say(f"[SendMessage] HWND={hwnd} title='{title}'")
 
         if not hwnd:
-            return "Could not find or focus WhatsApp window."
+            return ("Could not bring up the WhatsApp window — "
+                    "the message was NOT sent.")
 
         # Determine if already in the right chat
         # Title is either "WhatsApp" (home) or "<Name> - WhatsApp" (in chat)
         if " - WhatsApp" in title:
-            open_contact = title.replace(" - WhatsApp", "").strip().lower()
+            open_contact = title.replace(" - WhatsApp", "").strip()
         else:
             open_contact = ""
 
-        already_in_chat = open_contact == receiver.strip().lower()
+        # exact match only here — lenient matching could skip the search and
+        # message a similarly-named contact whose chat happens to be open
+        already_in_chat = open_contact.lower() == receiver.strip().lower()
 
         if already_in_chat:
             _say(f"[SendMessage] Already in {receiver}'s chat — skipping search")
@@ -189,26 +243,30 @@ def _send_whatsapp(receiver: str, message: str) -> str:
             pyautogui.hotkey("ctrl", "f")
             time.sleep(0.5)
             pyautogui.hotkey("ctrl", "a")
-            pyautogui.write(receiver, interval=0.04)
-            time.sleep(1.0)
-            pyautogui.press("enter")
-            time.sleep(0.8)
+            _type_text(receiver)
+            time.sleep(1.2)            # let search results populate
+            pyautogui.press("enter")   # open the top result
+            time.sleep(1.0)            # let the chat load before typing
 
         # final guard: never type the message into the wrong window
         if not _whatsapp_still_focused(hwnd):
             hwnd, _ = _focus_whatsapp(timeout=2.0)
             if not hwnd:
                 return ("Lost focus on the WhatsApp window before typing — "
-                        "message not sent.")
+                        "the message was NOT sent.")
 
-        pyautogui.write(message, interval=0.03)
+        _type_text(message)
         time.sleep(0.2)
+        if not _whatsapp_still_focused(hwnd):
+            return ("WhatsApp lost focus while the message was being typed — "
+                    "it was NOT sent. Please check the chat box.")
         pyautogui.press("enter")
+        time.sleep(0.3)
 
         return f"Message sent to {receiver} via WhatsApp."
 
     except Exception as e:
-        return f"WhatsApp error: {e}"
+        return f"WhatsApp error: {e} — the message may NOT have been sent."
 
 
 # ---------------------------------------------------------------------------
@@ -246,12 +304,38 @@ def _open_and_focus(app_name: str, timeout: float = 2.0) -> bool:
         return True
 
 
+def _foreground_is(app_name: str) -> bool:
+    """True if the current foreground window belongs to app_name (by process
+    name or title). Used as a guard so keystrokes never spray into whatever
+    stole focus mid-send."""
+    try:
+        import win32gui
+        import win32process
+        import psutil
+
+        hwnd = win32gui.GetForegroundWindow()
+        if not hwnd:
+            return False
+        app = app_name.lower().replace(".exe", "").strip()
+        title = win32gui.GetWindowText(hwnd).strip().lower()
+        try:
+            _, pid = win32process.GetWindowThreadProcessId(hwnd)
+            pname  = psutil.Process(pid).name().lower().replace(".exe", "")
+        except Exception:
+            pname = ""
+        return app in pname or pname in app or app in title
+    except ImportError:
+        return True            # can't verify — don't block the send
+    except Exception:
+        return True
+
+
 def _send_instagram(receiver: str, message: str) -> str:
     try:
         import webbrowser
         webbrowser.open("https://www.instagram.com/direct/new/")
         time.sleep(3.5)
-        pyautogui.write(receiver, interval=0.05)
+        _type_text(receiver)
         time.sleep(1.5)
         pyautogui.press("down")
         time.sleep(0.3)
@@ -262,48 +346,42 @@ def _send_instagram(receiver: str, message: str) -> str:
             time.sleep(0.1)
         pyautogui.press("enter")
         time.sleep(1.5)
-        pyautogui.write(message, interval=0.04)
+        _type_text(message)
         time.sleep(0.2)
         pyautogui.press("enter")
-        return f"Message sent to {receiver} via Instagram."
+        return (f"Message to {receiver} sent via Instagram in the browser — "
+                f"worth a quick glance to confirm it went through.")
     except Exception as e:
-        return f"Instagram error: {e}"
+        return f"Instagram error: {e} — the message may NOT have been sent."
 
 
 def _send_telegram(receiver: str, message: str) -> str:
-    try:
-        if not _open_and_focus("telegram", timeout=4.0):
-            return "Could not find or focus the Telegram window."
-        pyautogui.hotkey("ctrl", "f")
-        time.sleep(0.4)
-        pyautogui.write(receiver, interval=0.04)
-        time.sleep(1.0)
-        pyautogui.press("enter")
-        time.sleep(0.8)
-        pyautogui.write(message, interval=0.03)
-        time.sleep(0.2)
-        pyautogui.press("enter")
-        return f"Message sent to {receiver} via Telegram."
-    except Exception as e:
-        return f"Telegram error: {e}"
+    return _send_generic("telegram", receiver, message)
 
 
 def _send_generic(platform: str, receiver: str, message: str) -> str:
     try:
         if not _open_and_focus(platform, timeout=4.0):
-            return f"Could not find or focus the {platform} window."
+            return (f"Could not find or focus the {platform} window — "
+                    f"the message was NOT sent.")
         pyautogui.hotkey("ctrl", "f")
         time.sleep(0.4)
-        pyautogui.write(receiver, interval=0.04)
+        _type_text(receiver)
         time.sleep(1.0)
         pyautogui.press("enter")
         time.sleep(0.8)
-        pyautogui.write(message, interval=0.03)
+        if not _foreground_is(platform):
+            return (f"{platform} lost focus before the message could be "
+                    f"typed — it was NOT sent.")
+        _type_text(message)
         time.sleep(0.2)
+        if not _foreground_is(platform):
+            return (f"{platform} lost focus while typing — the message was "
+                    f"NOT sent. Please check the chat box.")
         pyautogui.press("enter")
         return f"Message sent to {receiver} via {platform}."
     except Exception as e:
-        return f"{platform} error: {e}"
+        return f"{platform} error: {e} — the message may NOT have been sent."
 
 
 # ---------------------------------------------------------------------------
