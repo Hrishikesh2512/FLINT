@@ -49,6 +49,7 @@ from actions.dev_agent        import dev_agent
 from actions.web_search       import web_search as web_search_action
 from actions.computer_control import computer_control
 from actions.game_updater     import game_updater
+from actions.example_tool    import example_tool
 
 
 def get_base_dir():
@@ -251,6 +252,7 @@ class FlintLive:
             "file_processor":    _file_processor,
             "screen_process":    _screen,
             "agent_task":        _agent_task,
+            "example_tool":      lambda a: example_tool(parameters=a),
         }
 
     # ── remote (smartphone) bridge ───────────────────────────────────────────

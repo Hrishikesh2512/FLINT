@@ -362,6 +362,24 @@ TOOL_DECLARATIONS = [
     }
 },
     {
+    "name": "example_tool",
+    "description": (
+        "Returns the current date and time. "
+        "A minimal example tool for contributors — "
+        "copy actions/example_tool.py to build your own."
+    ),
+    "parameters": {
+        "type": "OBJECT",
+        "properties": {
+            "format": {
+                "type": "STRING",
+                "description": "friendly (default) | iso | time | date"
+            }
+        },
+        "required": []
+    }
+},
+    {
     "name": "shutdown_flint",
     "description": (
         "Shuts down the assistant completely. "
