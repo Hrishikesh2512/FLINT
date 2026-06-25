@@ -1,0 +1,24 @@
+name: Feature request
+description: Suggest a new tool, capability, or improvement
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What would you like FLINT to do?
+      description: Describe the use case, not just the solution.
+      placeholder: I want to ask FLINT to ... so that ...
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How might it work?
+      description: Optional. If you have an idea for the implementation, share it.
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Contribution
+      options:
+        - label: I would be willing to help build this

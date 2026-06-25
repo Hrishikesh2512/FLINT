@@ -44,3 +44,6 @@ config/api_keys.json
 
 # Mobile remote UI — local Supabase keys (copy of config.example.js)
 mobile_ui/js/config.js
+
+# Runtime state (regenerated at run time)
+pet_memory.json
