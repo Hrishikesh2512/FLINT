@@ -110,6 +110,31 @@ TOOL_DECLARATIONS = [
         }
     },
     {
+        "name": "vision_assist",
+        "description": (
+            "Deeper screen vision skills (distinct from screen_process, which only "
+            "does a quick spoken 'what's on my screen'). Use vision_assist when the "
+            "user wants to: READ on-screen text verbatim / copy text from the screen "
+            "('read this', 'copy that text', 'what does this say'); EXPLAIN the active "
+            "window, chart, or diagram in detail ('what am I looking at', 'explain this "
+            "screen'); diagnose an ERROR or exception on screen ('what's this error', "
+            "'how do I fix this'); FIND where a UI element is ('where is the submit "
+            "button'); DIFF what changed since you last looked ('what changed'); or "
+            "WATCH the screen and be told out loud when it changes ('watch my screen', "
+            "'tell me when the download finishes'), and STOP_WATCH to end watching. "
+            "Unlike screen_process, you SHOULD speak the returned result to the user."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action":   {"type": "STRING", "description": "read | explain | error | find | diff | watch | stop_watch"},
+                "target":   {"type": "STRING", "description": "Element to find (find) or what to focus on (explain)"},
+                "interval": {"type": "NUMBER", "description": "Seconds between checks for watch (default: 4)"},
+            },
+            "required": ["action"]
+        }
+    },
+    {
         "name": "computer_settings",
         "description": (
             "Controls the computer: volume, brightness, window management, keyboard shortcuts, "

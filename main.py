@@ -40,6 +40,7 @@ from actions.send_message     import send_message
 from actions.reminder         import reminder
 from actions.computer_settings import computer_settings
 from actions.screen_processor import screen_process
+from actions.vision_assist   import vision_assist
 from actions.youtube_video    import youtube_video
 from actions.desktop          import desktop_control
 from actions.browser_control  import browser_control
@@ -250,6 +251,9 @@ class FlintLive:
             "flight_finder":     lambda a: flight_finder(parameters=a, player=ui) or "Done.",
             "file_processor":    _file_processor,
             "screen_process":    _screen,
+            "vision_assist":     lambda a: vision_assist(parameters=a, player=ui,
+                                                         speak=self.speak)
+                                           or "Done.",
             "agent_task":        _agent_task,
         }
 
