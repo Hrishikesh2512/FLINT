@@ -1,6 +1,6 @@
 <div align="center">
 
-# F.L.I.N.T. — Quantum Console
+# F.L.I.N.T. - Quantum Console
 
 **A voice-driven desktop AI assistant for Windows.**
 Talk to it, and it sees your screen, controls your apps, searches the web, sets reminders, and answers back out loud. Powered by the Gemini Live API, with an optional phone remote.
