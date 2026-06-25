@@ -29,6 +29,35 @@ Talk to it, and it sees your screen, controls your apps, searches the web, sets 
 
 ---
 
+## Built-in tools
+
+Each tool lives in `actions/` and is registered in `core/tool_registry.py`.
+
+| Tool | What it does | Example voice command |
+| --- | --- | --- |
+| `open_app` | Launches any application on the computer | "Open Spotify" |
+| `web_search` | Searches the web via Gemini with optional comparison mode | "Search the web for best Python frameworks" |
+| `weather_report` | Opens a Google weather search for a city | "What's the weather in Istanbul?" |
+| `send_message` | Sends a text via WhatsApp, Telegram, or other platform | "Send a message to Mom on WhatsApp" |
+| `reminder` | Sets a timed reminder using Windows Task Scheduler | "Remind me tomorrow at 3 PM to call the dentist" |
+| `youtube_video` | Plays, summarizes, or gets info from YouTube videos | "Play lofi hip hop on YouTube" |
+| `screen_process` | Captures and analyzes the screen or webcam with vision | "What's on my screen right now?" |
+| `computer_settings` | Controls volume, brightness, windows, dark mode, WiFi, and more | "Turn the volume up to 80" |
+| `browser_control` | Drives the browser: navigate, click, fill forms, scroll | "Go to github.com and search for FLINT" |
+| `file_controller` | Manages files and folders: list, create, delete, move, find | "Find all PDF files on my desktop" |
+| `desktop_control` | Desktop wallpaper, organize icons, clean up, stats | "Organize my desktop by file type" |
+| `code_helper` | Writes, edits, explains, runs, or builds code files | "Write a Python script that renames all .jpeg to .jpg" |
+| `dev_agent` | Plans and builds multi-file projects from scratch | "Build me a to-do app in Python with a GUI" |
+| `agent_task` | Executes complex multi-step tasks that need several tools | "Research the top 5 Python web frameworks and save a summary" |
+| `computer_control` | Direct input control: type, click, hotkeys, scroll, screenshots | "Press Ctrl+Shift+T" |
+| `game_updater` | Manages Steam and Epic Games: install, update, list games | "Update all my Steam games" |
+| `flight_finder` | Searches Google Flights and speaks the best options | "Find flights from New York to London on June 15" |
+| `file_processor` | Processes uploaded files: images, PDFs, docs, code, audio, video | "Summarize this PDF" |
+| `shutdown_flint` | Shuts down the assistant | "Goodbye FLINT" |
+| `save_memory` | Saves a personal fact about the user to long-term memory | (called silently when you mention preferences) |
+
+---
+
 ## Requirements
 
 - **Windows 10 or 11.** The automation, audio, and notification integrations target Windows.
