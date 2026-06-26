@@ -33,6 +33,7 @@ duckduckgo-search==8.1.1
 youtube-transcript-api==1.2.4
 
 # Windows integration
+pywin32==312
 comtypes==1.4.16
 pycaw==20251023
 win10toast==0.9
