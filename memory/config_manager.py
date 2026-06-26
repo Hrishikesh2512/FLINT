@@ -40,6 +40,25 @@ def save_api_keys(gemini_api_key: str) -> None:
     )
 
 
+def set_config_value(key: str, value) -> None:
+    """Set a single key in api_keys.json, preserving everything else."""
+    ensure_config_dir()
+
+    data: dict = {}
+    if CONFIG_FILE.exists():
+        try:
+            data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            data = {}
+
+    data[key] = value
+
+    CONFIG_FILE.write_text(
+        json.dumps(data, indent=2),
+        encoding="utf-8"
+    )
+
+
 def load_api_keys() -> dict:
     if not CONFIG_FILE.exists():
         return {}

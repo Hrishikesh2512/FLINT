@@ -32,7 +32,7 @@ from memory.memory_manager import (
     should_extract_memory, extract_memory,
 )
 from memory.proactive import ProactiveMemoryEngine
-from memory.config_manager import load_api_keys
+from memory.config_manager import load_api_keys, set_config_value
 
 from actions.file_processor   import file_processor
 from actions.flight_finder    import flight_finder
@@ -387,6 +387,19 @@ class FlintLive:
                 self._set_state("LISTENING")
             return types.FunctionResponse(
                 id=fc.id, name=name, response={"result": "ok", "silent": True})
+
+        # proactive toggle — flip the flag live and persist it
+        if name == "set_proactive_memory":
+            enabled = bool(args.get("enabled", True))
+            self.proactive.enabled = enabled
+            set_config_value("proactive_memory", enabled)
+            print(f"[Proactive] {'enabled' if enabled else 'disabled'} by voice")
+            if not self.ui.muted:
+                self._set_state("LISTENING")
+            state = "on" if enabled else "off"
+            return types.FunctionResponse(
+                id=fc.id, name=name,
+                response={"result": f"Proactive check-ins are now {state}."})
 
         if name == "shutdown_flint":
             self.ui.write_log("SYS: Shutdown requested.")

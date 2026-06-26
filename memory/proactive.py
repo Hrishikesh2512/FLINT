@@ -19,12 +19,11 @@ from __future__ import annotations
 
 import asyncio
 import json
-import re
 import time
 from datetime import date, datetime
 from pathlib import Path
 
-from memory.memory_manager import load_memory, get_base_dir
+from memory.memory_manager import load_memory, get_base_dir, parse_birthday
 
 # ── cadence knobs ────────────────────────────────────────────────────────────
 CHECK_INTERVAL_S   = 60          # how often to consider surfacing something
@@ -36,37 +35,6 @@ PROJECT_STALE_DAYS = 7           # a project gets a check-in after this long
 BIRTHDAY_LOOKAHEAD = 3           # surface birthdays up to N days ahead
 
 STATE_PATH = get_base_dir() / "memory" / "proactive_state.json"
-
-_MONTHS = {
-    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
-    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
-}
-
-
-def _parse_month_day(text: str) -> tuple[int, int] | None:
-    """Best-effort (month, day) from a free-text date. Returns None if unsure."""
-    if not isinstance(text, str):
-        return None
-    t = text.strip().lower()
-
-    # ISO-ish: 1999-05-04 / 2001/12/31
-    m = re.search(r"\b\d{2,4}[-/](\d{1,2})[-/](\d{1,2})\b", t)
-    if m:
-        mo, da = int(m.group(1)), int(m.group(2))
-        if 1 <= mo <= 12 and 1 <= da <= 31:
-            return mo, da
-
-    # bare MM-DD or DD/MM is ambiguous; skip to avoid wrong guesses.
-
-    # "may 4", "4th may", "4 may"
-    name = re.search(r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b", t)
-    num  = re.search(r"\b(\d{1,2})(?:st|nd|rd|th)?\b", t)
-    if name and num:
-        mo = _MONTHS[name.group(1)]
-        da = int(num.group(1))
-        if 1 <= da <= 31:
-            return mo, da
-    return None
 
 
 def _days_until(month: int, day: int, today: date) -> int | None:
@@ -148,7 +116,7 @@ class ProactiveMemoryEngine:
             for key, entry in (memory.get(cat) or {}).items():
                 if "birthday" not in key.lower() and "birthday" not in _entry_value(entry).lower():
                     continue
-                md = _parse_month_day(_entry_value(entry))
+                md = parse_birthday(_entry_value(entry))
                 if not md:
                     continue
                 delta = _days_until(md[0], md[1], today)
@@ -203,10 +171,8 @@ class ProactiveMemoryEngine:
 
     # ── main loop ────────────────────────────────────────────────────────────
     async def loop(self) -> None:
-        if not self.enabled:
-            print("[Proactive] disabled")
-            return
-        print("[Proactive] 🧠 engine online")
+        # Always run; `enabled` is checked per-tick so it can be toggled live.
+        print(f"[Proactive] 🧠 engine online (enabled={self.enabled})")
         while True:
             await asyncio.sleep(CHECK_INTERVAL_S)
             try:
@@ -215,6 +181,8 @@ class ProactiveMemoryEngine:
                 print(f"[Proactive] ⚠️ tick error: {e}")
 
     def _tick(self) -> None:
+        if not self.enabled:
+            return
         now = time.monotonic()
         if self._fired >= MAX_PER_RUN:
             return

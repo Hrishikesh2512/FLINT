@@ -429,4 +429,25 @@ TOOL_DECLARATIONS = [
             "required": ["category", "key", "value"]
         }
     },
+    {
+        "name": "set_proactive_memory",
+        "description": (
+            "Turns FLINT's proactive check-ins on or off. Proactive check-ins are "
+            "when FLINT brings something up unprompted (an upcoming birthday, a "
+            "project, a past wish). Call this when the user asks to stop or resume "
+            "being reminded or checked in on without asking — e.g. 'stop reminding "
+            "me', 'stop bringing things up', 'quit checking in on me', or 'you can "
+            "remind me again', 'be proactive again'. The user may say this in any language."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "enabled": {
+                    "type": "BOOLEAN",
+                    "description": "true to turn proactive check-ins on, false to turn them off"
+                }
+            },
+            "required": ["enabled"]
+        }
+    },
 ]

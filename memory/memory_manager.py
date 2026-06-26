@@ -19,6 +19,53 @@ MAX_VALUE_LENGTH = 380
 MEMORY_MAX_CHARS = 2200
 
 
+_MONTHS = {
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+}
+
+
+def parse_birthday(text) -> tuple[int, int] | None:
+    """Best-effort (month, day) from a birthday value. Month-first for bare numerics.
+
+    Handles 'YYYY-MM-DD', 'May 4th', '4 may', and the canonical 'MM-DD' we store.
+    Returns None when nothing usable is found.
+    """
+    if not isinstance(text, str):
+        return None
+    t = text.strip().lower()
+
+    # ISO year-first: 1999-05-04 / 2001/12/31
+    m = re.search(r"\b\d{4}[-/](\d{1,2})[-/](\d{1,2})\b", t)
+    if m:
+        mo, da = int(m.group(1)), int(m.group(2))
+        if 1 <= mo <= 12 and 1 <= da <= 31:
+            return mo, da
+
+    # Month name + day: 'may 4', '4th may'
+    name = re.search(r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b", t)
+    num  = re.search(r"\b(\d{1,2})(?:st|nd|rd|th)?\b", t)
+    if name and num:
+        mo, da = _MONTHS[name.group(1)], int(num.group(1))
+        if 1 <= da <= 31:
+            return mo, da
+
+    # Bare numeric, treated month-first (matches the canonical form we save).
+    m = re.search(r"\b(\d{1,2})[-/](\d{1,2})\b", t)
+    if m:
+        mo, da = int(m.group(1)), int(m.group(2))
+        if 1 <= mo <= 12 and 1 <= da <= 31:
+            return mo, da
+
+    return None
+
+
+def normalize_birthday(value: str) -> str:
+    """Canonicalize an unambiguous birthday to 'MM-DD'; otherwise leave it as-is."""
+    md = parse_birthday(value)
+    return f"{md[0]:02d}-{md[1]:02d}" if md else value
+
+
 def _empty_memory() -> dict:
     return {
         "identity":      {},
@@ -116,6 +163,9 @@ def _recursive_update(target: dict, updates: dict) -> bool:
                 new_val = _truncate_value(str(value["value"]))
             else:
                 new_val = _truncate_value(str(value))
+
+            if "birthday" in key.lower():
+                new_val = normalize_birthday(new_val)
 
             entry    = {"value": new_val, "updated": datetime.now().strftime("%Y-%m-%d")}
             existing = target.get(key, {})
