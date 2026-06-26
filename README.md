@@ -22,7 +22,7 @@ Talk to it, and it sees your screen, controls your apps, searches the web, sets 
 - **Voice first.** Real time speech in and out through the Gemini Live API. Just talk.
 - **Sees your screen.** Screen capture and vision so you can ask about what is in front of you. Read text off the screen, explain a chart, diagnose an error, find a button, or have FLINT watch and tell you when something changes. See [Screen and vision](#screen-and-vision).
 - **Controls your machine.** Opens apps, drives the desktop, changes settings, manages files and the clipboard.
-- **Tools built in.** Web search, fetch a URL, weather, YouTube transcripts, a flight finder, a code helper, and a multi step dev agent.
+- **Tools built in.** Web search, weather, YouTube transcripts, a flight finder, a code helper, and a multi step dev agent.
 - **Reminders.** Set them by voice and get notified.
 - **Phone remote.** A no build web console in `mobile_ui/` drives FLINT from your phone through a Supabase command queue.
 - **Heads up display.** A PyQt6 HUD that stays out of your way and never blocks the main thread.
