@@ -288,3 +288,17 @@ if __name__ == "__main__":
     act = sys.argv[1] if len(sys.argv) > 1 else "explain"
     tgt = sys.argv[2] if len(sys.argv) > 2 else ""
     print(vision_assist({"action": act, "target": tgt}))
+
+
+# Self-registering tool interface (see core/tools.py, issue #8).
+from core.tools import tool  # noqa: E402
+
+
+@tool(
+    name='vision_assist',
+    description="Deeper screen vision skills (distinct from screen_process, which only does a quick spoken 'what's on my screen'). Use vision_assist when the user wants to: READ on-screen text verbatim / copy text from the screen ('read this', 'copy that text', 'what does this say'); EXPLAIN the active window, chart, or diagram in detail ('what am I looking at', 'explain this screen'); diagnose an ERROR or exception on screen ('what's this error', 'how do I fix this'); FIND where a UI element is ('where is the submit button'); DIFF what changed since you last looked ('what changed'); or WATCH the screen and be told out loud when it changes ('watch my screen', 'tell me when the download finishes'), and STOP_WATCH to end watching. Unlike screen_process, you SHOULD speak the returned result to the user.",
+    parameters={'action': {'type': 'STRING', 'description': 'read | explain | error | find | diff | watch | stop_watch'}, 'target': {'type': 'STRING', 'description': 'Element to find (find) or what to focus on (explain)'}, 'interval': {'type': 'NUMBER', 'description': 'Seconds between checks for watch (default: 4)'}},
+    required=['action'],
+)
+def _tool_vision_assist(args, ctx):
+    return vision_assist(parameters=args, player=ctx.player, speak=ctx.speak) or "Done."

@@ -26,12 +26,16 @@ already in `.gitignore`.
 
 ## Adding a new tool
 
-This is the most common and most welcome contribution:
+This is the most common and most welcome contribution, and it is now a single
+file:
 
-1. Copy `actions/example_tool.py` to `actions/<your_tool>.py` — it is the
-   canonical template.  Read the docstring for the full walkthrough.
-2. Register it in `core/tool_registry.py` so the model can call it.
-3. Wire it up in `main.py` next to the other action imports.
+1. Copy `actions/example_tool.py` to `actions/<your_tool>.py`. It is the
+   canonical template; read the docstring for the full walkthrough.
+2. Give your tool a unique `name` in the `@tool` decorator, fill in the schema
+   (description and parameters), and write the `(args, ctx)` handler.
+3. That is all the wiring. The tool is auto-discovered into the registry and
+   dispatched by `main.py`; you do not edit `core/tool_registry.py` or
+   `main.py`.
 4. Test it by voice or text and describe how you tested it in the PR.
 
 ## Pull request checklist

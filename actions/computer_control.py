@@ -491,3 +491,17 @@ def computer_control(
     except Exception as e:
         print(f"[ComputerControl] ❌ {action}: {e}")
         return f"computer_control '{action}' failed: {e}"
+
+
+# Self-registering tool interface (see core/tools.py, issue #8).
+from core.tools import tool  # noqa: E402
+
+
+@tool(
+    name='computer_control',
+    description='Direct computer control: type, click, hotkeys, scroll, move mouse, screenshots, find elements on screen.',
+    parameters={'action': {'type': 'STRING', 'description': 'type | smart_type | click | double_click | right_click | hotkey | press | scroll | move | copy | paste | screenshot | wait | clear_field | focus_window | screen_find | screen_click | random_data | user_data'}, 'text': {'type': 'STRING', 'description': 'Text to type or paste'}, 'x': {'type': 'INTEGER', 'description': 'X coordinate'}, 'y': {'type': 'INTEGER', 'description': 'Y coordinate'}, 'keys': {'type': 'STRING', 'description': "Key combination e.g. 'ctrl+c'"}, 'key': {'type': 'STRING', 'description': "Single key e.g. 'enter'"}, 'direction': {'type': 'STRING', 'description': 'up | down | left | right'}, 'amount': {'type': 'INTEGER', 'description': 'Scroll amount (default: 3)'}, 'seconds': {'type': 'NUMBER', 'description': 'Seconds to wait'}, 'title': {'type': 'STRING', 'description': 'Window title for focus_window'}, 'description': {'type': 'STRING', 'description': 'Element description for screen_find/screen_click'}, 'type': {'type': 'STRING', 'description': 'Data type for random_data'}, 'field': {'type': 'STRING', 'description': 'Field for user_data: name|email|city'}, 'clear_first': {'type': 'BOOLEAN', 'description': 'Clear field before typing (default: true)'}, 'path': {'type': 'STRING', 'description': 'Save path for screenshot'}},
+    required=['action'],
+)
+def _tool_computer_control(args, ctx):
+    return computer_control(parameters=args, player=ctx.player) or "Done."

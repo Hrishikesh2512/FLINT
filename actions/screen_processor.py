@@ -336,3 +336,19 @@ if __name__ == "__main__":
     print(f"Sent — {time.perf_counter()-t1:.3f}s | audio incoming...")
     time.sleep(8)
     print(f"\n{'✅' if result else '❌'}")
+
+
+# Self-registering tool interface (see core/tools.py, issue #8).
+from core.tools import tool  # noqa: E402
+
+
+@tool(
+    name='screen_process',
+    description='Captures and analyzes the screen or webcam image. MUST be called when user asks what is on screen, what you see, analyze my screen, look at camera, etc. You have NO visual ability without this tool. After calling this tool, stay SILENT — the vision module speaks directly.',
+    parameters={'angle': {'type': 'STRING', 'description': "'screen' to capture display, 'camera' for webcam. Default: 'screen'"}, 'text': {'type': 'STRING', 'description': 'The question or instruction about the captured image'}},
+    required=['text'],
+)
+def _tool_screen_process(args, ctx):
+    screen_process(parameters=args, response=None, player=ctx.player, session_memory=None)
+    return ("Vision module activated. Stay completely silent — "
+            "vision module will speak directly.")

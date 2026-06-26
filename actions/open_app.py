@@ -479,3 +479,18 @@ def open_app(
     except Exception as e:
         _say(f"[open_app] ❌ {e}")
         return f"Failed to open {app_name}, sir: {e}"
+
+
+# Self-registering tool interface (see core/tools.py, issue #8).
+from core.tools import tool  # noqa: E402
+
+
+@tool(
+    name='open_app',
+    description='Opens any application on the Windows computer. Use this whenever the user asks to open, launch, or start any app, website, or program. Always call this tool — never just say you opened it.',
+    parameters={'app_name': {'type': 'STRING', 'description': "Exact name of the application (e.g. 'WhatsApp', 'Chrome', 'Spotify')"}},
+    required=['app_name'],
+)
+def _tool_open_app(args, ctx):
+    return open_app(parameters=args, response=None, player=ctx.player) \
+        or f"No status returned for opening {args.get('app_name')}."

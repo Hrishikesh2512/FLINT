@@ -670,3 +670,17 @@ def computer_settings(
     except Exception as e:
         print(f"[Settings] Action failed ({action}): {e}")
         return f"Action failed ({action}): {e}"
+
+
+# Self-registering tool interface (see core/tools.py, issue #8).
+from core.tools import tool  # noqa: E402
+
+
+@tool(
+    name='computer_settings',
+    description='Controls the computer: volume, brightness, window management, keyboard shortcuts, typing text on screen, closing apps, fullscreen, dark mode, WiFi, restart, shutdown, scrolling, tab management, zoom, screenshots, lock screen, refresh/reload page. Use for ANY single computer control command. NEVER route to agent_task.',
+    parameters={'action': {'type': 'STRING', 'description': 'The action to perform'}, 'description': {'type': 'STRING', 'description': 'Natural language description of what to do'}, 'value': {'type': 'STRING', 'description': 'Optional value: volume level, text to type, etc.'}},
+    required=[],
+)
+def _tool_computer_settings(args, ctx):
+    return computer_settings(parameters=args, response=None, player=ctx.player) or "Done."

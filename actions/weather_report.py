@@ -60,3 +60,17 @@ def _speak_and_log(message: str, player=None):
             player.write_log(f"FLINT: {message}")
         except Exception:
             pass
+
+
+# Self-registering tool interface (see core/tools.py, issue #8).
+from core.tools import tool  # noqa: E402
+
+
+@tool(
+    name='weather_report',
+    description='Gives the weather report to user',
+    parameters={'city': {'type': 'STRING', 'description': 'City name'}},
+    required=['city'],
+)
+def _tool_weather_report(args, ctx):
+    return weather_action(parameters=args, player=ctx.player) or "Weather delivered."

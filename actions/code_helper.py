@@ -581,3 +581,17 @@ def code_helper(
 
     else:
         return f"Unknown action: '{action}'. Use write, edit, explain, run, build, optimize, or screen_debug."
+
+
+# Self-registering tool interface (see core/tools.py, issue #8).
+from core.tools import tool  # noqa: E402
+
+
+@tool(
+    name='code_helper',
+    description='Writes, edits, explains, runs, or builds code files.',
+    parameters={'action': {'type': 'STRING', 'description': 'write | edit | explain | run | build | auto (default: auto)'}, 'description': {'type': 'STRING', 'description': 'What the code should do or what change to make'}, 'language': {'type': 'STRING', 'description': 'Programming language (default: python)'}, 'output_path': {'type': 'STRING', 'description': 'Where to save the file'}, 'file_path': {'type': 'STRING', 'description': 'Path to existing file for edit/explain/run/build'}, 'code': {'type': 'STRING', 'description': 'Raw code string for explain'}, 'args': {'type': 'STRING', 'description': 'CLI arguments for run/build'}, 'timeout': {'type': 'INTEGER', 'description': 'Execution timeout in seconds (default: 30)'}},
+    required=['action'],
+)
+def _tool_code_helper(args, ctx):
+    return code_helper(parameters=args, player=ctx.player, speak=ctx.speak) or "Done."

@@ -135,3 +135,17 @@ def web_search(
     except Exception as e:
         print(f"[WebSearch] ❌ All backends failed: {e}")
         return f"Search failed, sir: {e}"
+
+
+# Self-registering tool interface (see core/tools.py, issue #8).
+from core.tools import tool  # noqa: E402
+
+
+@tool(
+    name='web_search',
+    description='Searches the web for any information.',
+    parameters={'query': {'type': 'STRING', 'description': 'Search query'}, 'mode': {'type': 'STRING', 'description': 'search (default) or compare'}, 'items': {'type': 'ARRAY', 'items': {'type': 'STRING'}, 'description': 'Items to compare'}, 'aspect': {'type': 'STRING', 'description': 'price | specs | reviews'}},
+    required=['query'],
+)
+def _tool_web_search(args, ctx):
+    return web_search(parameters=args, player=ctx.player) or "Done."
