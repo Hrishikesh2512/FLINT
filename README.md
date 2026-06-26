@@ -55,6 +55,37 @@ python -m actions.vision_assist find "submit button"
 
 ---
 
+## Built-in tools
+
+Each tool is a module in `actions/` and is registered in `core/tool_registry.py`. The model picks the right one from what you say, so the example commands below are just natural phrasings, not fixed syntax.
+
+| Tool | What it does | Say something like |
+| --- | --- | --- |
+| `open_app` | Launches any app, website, or program | "Open Spotify" |
+| `web_search` | Searches the web, with an optional compare mode | "Search the web for the best Python web frameworks" |
+| `weather_report` | Reports the weather for a city | "What's the weather in Istanbul?" |
+| `send_message` | Sends a text via WhatsApp, Telegram, or other platforms | "Send a message to Mom on WhatsApp" |
+| `reminder` | Sets a timed reminder via Windows Task Scheduler | "Remind me at 3 PM to call the dentist" |
+| `youtube_video` | Plays, summarizes, gets info on, or shows trending YouTube videos | "Play lofi hip hop on YouTube" |
+| `screen_process` | Quick spoken look at your screen or webcam | "What's on my screen?" |
+| `vision_assist` | Deeper screen vision: read, explain, errors, find, diff, watch (see [Screen and vision](#screen-and-vision)) | "Read this", "where is the submit button?" |
+| `computer_settings` | Controls volume, brightness, windows, dark mode, WiFi, and more | "Turn the volume up to 80" |
+| `browser_control` | Drives the browser: navigate, search, click, fill forms, scroll | "Go to github.com and search for FLINT" |
+| `file_controller` | Manages files and folders: list, create, delete, move, copy, find | "Find all PDF files on my desktop" |
+| `desktop_control` | Desktop wallpaper, organize, clean up, and stats | "Organize my desktop by file type" |
+| `code_helper` | Writes, edits, explains, runs, or builds code files | "Write a Python script that renames .jpeg to .jpg" |
+| `dev_agent` | Plans and builds complete multi-file projects from scratch | "Build me a to-do app in Python with a GUI" |
+| `agent_task` | Runs complex multi-step tasks that need several tools | "Research the top 5 Python web frameworks and save a summary" |
+| `computer_control` | Direct input control: type, click, hotkeys, scroll, screenshots | "Press Ctrl+Shift+T" |
+| `game_updater` | Manages Steam and Epic Games: install, update, list, status | "Update all my Steam games" |
+| `flight_finder` | Searches Google Flights and speaks the best options | "Find flights from New York to London on June 15" |
+| `file_processor` | Acts on an uploaded file: images, PDFs, docs, data, code, audio, video | "Summarize this PDF" |
+| `example_tool` | Minimal template tool that returns the current date and time | "What's the date and time?" |
+| `shutdown_flint` | Shuts the assistant down | "Goodbye FLINT" |
+| `save_memory` | Saves a personal fact about you to long-term memory | (called silently when you mention a preference) |
+
+---
+
 ## Requirements
 
 - **Windows 10 or 11.** The automation, audio, and notification integrations target Windows.
