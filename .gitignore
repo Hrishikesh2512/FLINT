@@ -47,3 +47,5 @@ mobile_ui/js/config.js
 
 # Runtime state (regenerated at run time)
 pet_memory.json
+memory/long_term.json
+memory/proactive_state.json
