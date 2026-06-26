@@ -31,6 +31,8 @@ from memory.memory_manager import (
     load_memory, update_memory, format_memory_for_prompt,
     should_extract_memory, extract_memory,
 )
+from memory.proactive import ProactiveMemoryEngine
+from memory.config_manager import load_api_keys
 
 from actions.file_processor   import file_processor
 from actions.flight_finder    import flight_finder
@@ -193,6 +195,11 @@ class FlintLive:
         self._pending_replies: list = []     # remote clients awaiting a reply
         self._handlers      = self._build_handlers()
         self.ui.on_text_command = self._on_text_command
+        self.proactive      = ProactiveMemoryEngine(
+            speak=self.speak,
+            is_idle=self._is_idle,
+            enabled=load_api_keys().get("proactive_memory", True),
+        )
 
     # ── tool dispatch table ───────────────────────────────────────────────────
     def _build_handlers(self) -> dict:
@@ -309,6 +316,13 @@ class FlintLive:
             self.session.send_client_content(
                 turns={"parts": [{"text": text}]}, turn_complete=True),
             self._loop)
+
+    def _is_idle(self) -> bool:
+        """True when it is polite to speak unprompted: not muted, not talking."""
+        if self.ui.muted:
+            return False
+        with self._speaking_lock:
+            return not self._is_speaking
 
     def set_speaking(self, value: bool):
         with self._speaking_lock:
@@ -556,6 +570,7 @@ class FlintLive:
                     tg.create_task(self._listen_audio())
                     tg.create_task(self._receive_audio())
                     tg.create_task(self._play_audio())
+                    tg.create_task(self.proactive.loop())
 
             except Exception as e:
                 print(f"[FLINT] ⚠️ {e}")
