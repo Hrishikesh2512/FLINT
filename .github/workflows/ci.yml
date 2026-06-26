@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      # Syntax check: compiles every module without importing it, so it works
+      # on Linux even though the app's runtime deps are Windows-only.
+      - name: Syntax check (compileall)
+        run: python -m compileall -q actions agent core memory main.py ui.py or_client.py pet.py setup.py
+
+      # Hard gate on real errors only: syntax, undefined names, broken f-strings.
+      - name: Lint (critical errors)
+        run: ruff check --select E9,F63,F7,F82 .
+
+      # Full style lint is informational for now so it does not block PRs.
+      - name: Lint (full, non-blocking)
+        continue-on-error: true
+        run: ruff check .
