@@ -28,8 +28,8 @@ already in `.gitignore`.
 
 This is the most common and most welcome contribution:
 
-1. Create a module in `actions/`, for example `actions/my_tool.py`, exporting a
-   single function.
+1. Copy `actions/example_tool.py` to `actions/<your_tool>.py` — it is the
+   canonical template.  Read the docstring for the full walkthrough.
 2. Register it in `core/tool_registry.py` so the model can call it.
 3. Wire it up in `main.py` next to the other action imports.
 4. Test it by voice or text and describe how you tested it in the PR.
