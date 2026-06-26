@@ -154,3 +154,17 @@ except Exception:
 
     except Exception as e:
         return f"Something went wrong while scheduling the reminder: {str(e)[:80]}"
+
+
+# Self-registering tool interface (see core/tools.py, issue #8).
+from core.tools import tool  # noqa: E402
+
+
+@tool(
+    name='reminder',
+    description='Sets a timed reminder using Windows Task Scheduler.',
+    parameters={'date': {'type': 'STRING', 'description': 'Date in YYYY-MM-DD format'}, 'time': {'type': 'STRING', 'description': 'Time in HH:MM format (24h)'}, 'message': {'type': 'STRING', 'description': 'Reminder message text'}},
+    required=['date', 'time', 'message'],
+)
+def _tool_reminder(args, ctx):
+    return reminder(parameters=args, response=None, player=ctx.player) or "Reminder set."

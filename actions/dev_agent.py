@@ -595,3 +595,17 @@ def dev_agent(
         speak        = speak,
         player       = player,
     )
+
+
+# Self-registering tool interface (see core/tools.py, issue #8).
+from core.tools import tool  # noqa: E402
+
+
+@tool(
+    name='dev_agent',
+    description='Builds complete multi-file projects from scratch: plans, writes files, installs deps, opens VSCode, runs and fixes errors.',
+    parameters={'description': {'type': 'STRING', 'description': 'What the project should do'}, 'language': {'type': 'STRING', 'description': 'Programming language (default: python)'}, 'project_name': {'type': 'STRING', 'description': 'Optional project folder name'}, 'timeout': {'type': 'INTEGER', 'description': 'Run timeout in seconds (default: 30)'}},
+    required=['description'],
+)
+def _tool_dev_agent(args, ctx):
+    return dev_agent(parameters=args, player=ctx.player, speak=ctx.speak) or "Done."

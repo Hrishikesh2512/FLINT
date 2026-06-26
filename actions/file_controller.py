@@ -480,3 +480,17 @@ def file_controller(
         player.write_log(f"[file] {result[:60]}")
 
     return result
+
+
+# Self-registering tool interface (see core/tools.py, issue #8).
+from core.tools import tool  # noqa: E402
+
+
+@tool(
+    name='file_controller',
+    description='Manages files and folders: list, create, delete, move, copy, rename, read, write, find, disk usage.',
+    parameters={'action': {'type': 'STRING', 'description': 'list | create_file | create_folder | delete | move | copy | rename | read | write | find | largest | disk_usage | organize_desktop | info'}, 'path': {'type': 'STRING', 'description': 'File/folder path or shortcut: desktop, downloads, documents, home'}, 'destination': {'type': 'STRING', 'description': 'Destination path for move/copy'}, 'new_name': {'type': 'STRING', 'description': 'New name for rename'}, 'content': {'type': 'STRING', 'description': 'Content for create_file/write'}, 'name': {'type': 'STRING', 'description': 'File name to search for'}, 'extension': {'type': 'STRING', 'description': 'File extension to search (e.g. .pdf)'}, 'count': {'type': 'INTEGER', 'description': 'Number of results for largest'}},
+    required=['action'],
+)
+def _tool_file_controller(args, ctx):
+    return file_controller(parameters=args, player=ctx.player) or "Done."

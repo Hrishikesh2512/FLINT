@@ -422,3 +422,18 @@ def send_message(
         player.write_log(f"[msg] {result}")
 
     return result
+
+
+# Self-registering tool interface (see core/tools.py, issue #8).
+from core.tools import tool  # noqa: E402
+
+
+@tool(
+    name='send_message',
+    description='Sends a text message via WhatsApp, Telegram, or other messaging platform.',
+    parameters={'receiver': {'type': 'STRING', 'description': 'Recipient contact name'}, 'message_text': {'type': 'STRING', 'description': 'The message to send'}, 'platform': {'type': 'STRING', 'description': 'Platform: WhatsApp, Telegram, etc.'}},
+    required=['receiver', 'message_text', 'platform'],
+)
+def _tool_send_message(args, ctx):
+    return send_message(parameters=args, response=None, player=ctx.player, session_memory=None) \
+        or "Message status unknown — could not confirm it was sent."

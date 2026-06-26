@@ -416,3 +416,17 @@ def youtube_video(
     except Exception as e:
         print(f"[YouTube] ❌ Error in {action}: {e}")
         return f"YouTube {action} failed, sir: {e}"
+
+
+# Self-registering tool interface (see core/tools.py, issue #8).
+from core.tools import tool  # noqa: E402
+
+
+@tool(
+    name='youtube_video',
+    description="Controls YouTube. Use for: playing videos, summarizing a video's content, getting video info, or showing trending videos.",
+    parameters={'action': {'type': 'STRING', 'description': 'play | summarize | get_info | trending (default: play)'}, 'query': {'type': 'STRING', 'description': 'Search query for play action'}, 'save': {'type': 'BOOLEAN', 'description': 'Save summary to Notepad (summarize only)'}, 'region': {'type': 'STRING', 'description': 'Country code for trending e.g. TR, US'}, 'url': {'type': 'STRING', 'description': 'Video URL for get_info action'}},
+    required=[],
+)
+def _tool_youtube_video(args, ctx):
+    return youtube_video(parameters=args, response=None, player=ctx.player) or "Done."
