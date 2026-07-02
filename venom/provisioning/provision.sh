@@ -47,6 +47,14 @@ fi
 # ── 4. python environment + venom package (with the voice stack) ─────────────
 [ -d "$VENV_DIR" ] || python3 -m venv "$VENV_DIR"
 "$VENV_DIR/bin/pip" install --quiet --upgrade "$APP_DIR/packages/flint-core"
+
+# openwakeword declares tflite-runtime on Linux, which has no wheels for
+# modern Python (3.13 on current RPi OS). Venom uses its ONNX path, so
+# install it without dependency resolution and supply the real ones.
+"$VENV_DIR/bin/pip" install --quiet --no-deps "openwakeword>=0.6"
+"$VENV_DIR/bin/pip" install --quiet "onnxruntime>=1.17" "numpy>=1.26" \
+    "tqdm>=4.64" "scipy>=1.11" "scikit-learn>=1.3" "requests>=2.31"
+
 "$VENV_DIR/bin/pip" install --quiet --upgrade "$APP_DIR/venom[voice]"
 
 # Pre-download the wake word model so the first boot needs no extra network.
