@@ -44,6 +44,16 @@ else
     git clone --depth 1 --branch "$REPO_BRANCH" "$REPO_URL" "$APP_DIR"
 fi
 
+# Self-update: if the repo carries a newer provisioning script, adopt it and
+# re-exec so every fix pushed upstream reaches the device with zero hands.
+if [ -f "$APP_DIR/venom/provisioning/provision.sh" ] \
+        && ! cmp -s "$APP_DIR/venom/provisioning/provision.sh" "$0"; then
+    log "provisioning script changed upstream — updating and re-executing"
+    cp "$APP_DIR/venom/provisioning/provision.sh" "$0"
+    chmod +x "$0"
+    exec "$0"
+fi
+
 # ── 4. python environment + venom package (with the voice stack) ─────────────
 [ -d "$VENV_DIR" ] || python3 -m venv "$VENV_DIR"
 "$VENV_DIR/bin/pip" install --quiet --upgrade "$APP_DIR/packages/flint-core"
@@ -56,6 +66,18 @@ fi
     "tqdm>=4.64" "scipy>=1.11" "scikit-learn>=1.3" "requests>=2.31"
 
 "$VENV_DIR/bin/pip" install --quiet --upgrade "$APP_DIR/venom[voice]"
+
+# Self-heal: a power cut mid-install can leave corrupted native wheels
+# (observed on real hardware: numpy Bus error after an unclean reboot).
+# If the core imports crash, force-reinstall them fresh and re-verify.
+if ! "$VENV_DIR/bin/python" -c "import numpy, scipy, onnxruntime, openwakeword" 2>/dev/null; then
+    log "native libraries broken — force-reinstalling"
+    "$VENV_DIR/bin/pip" install --quiet --force-reinstall --no-cache-dir \
+        "numpy>=1.26" "scipy>=1.11" "onnxruntime>=1.17"
+    "$VENV_DIR/bin/python" -c "import numpy, scipy, onnxruntime, openwakeword" \
+        || { log "libraries still broken after reinstall — will retry next boot"; exit 1; }
+    log "native libraries repaired"
+fi
 
 # Pre-download the wake word model so the first boot needs no extra network.
 "$VENV_DIR/bin/python" - <<'PYEOF'
