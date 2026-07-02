@@ -29,7 +29,11 @@ apt-get update -qq
 apt-get install -y -qq --no-install-recommends \
     git python3-venv python3-pip \
     libportaudio2 alsa-utils \
-    bluez pipewire pipewire-alsa wireplumber libspa-0.2-bluez5
+    bluez pipewire pipewire-alsa wireplumber
+# Bluetooth SPA plugin: named libspa-0.2-bluetooth on Debian 12+/RPi OS;
+# older releases used libspa-0.2-bluez5. Take whichever exists.
+apt-get install -y -qq --no-install-recommends libspa-0.2-bluetooth \
+    || apt-get install -y -qq --no-install-recommends libspa-0.2-bluez5
 
 # ── 3. fetch / update the repo ────────────────────────────────────────────────
 if [ -d "$APP_DIR/.git" ]; then
