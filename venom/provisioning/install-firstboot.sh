@@ -29,7 +29,20 @@ if [ -f "$SRC"/forget-wifi.txt ]; then
                 echo "[venom] forgot Wi-Fi profile: $conn (matched '$ssid')"
             done
     done < "$SRC"/forget-wifi.txt
-    command -v nmcli >/dev/null 2>&1 && nmcli connection reload 2>/dev/null || true
+    if command -v nmcli >/dev/null 2>&1; then
+        nmcli connection reload 2>/dev/null || true
+        # Deleting a profile does not drop an already-active session — bounce
+        # the Wi-Fi device so it re-picks from the surviving profiles.
+        while IFS= read -r ssid; do
+            [ -z "$ssid" ] && continue
+            if nmcli -t -f active,ssid dev wifi 2>/dev/null | grep -q "^yes:$ssid$"; then
+                nmcli device disconnect wlan0 2>/dev/null || true
+                sleep 2
+                nmcli device connect wlan0 2>/dev/null || true
+                break
+            fi
+        done < "$SRC"/forget-wifi.txt
+    fi
 fi
 
 # Extra Wi-Fi networks (phone hotspot etc.) — NetworkManager keyfiles so the
