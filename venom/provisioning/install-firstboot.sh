@@ -94,3 +94,22 @@ if systemctl daemon-reload 2>/dev/null && systemctl start --no-block venom-provi
 else
     echo "[venom] firstboot hook done — provisioning will run on next boot"
 fi
+
+# Black box: write a boot report onto the FAT partition so the appliance can
+# be diagnosed from any laptop just by plugging the drive in — no network,
+# no SSH, no screen needed.
+{
+    echo "==== venom boot report: $(date -Is) ===="
+    echo "-- wifi --"
+    nmcli -t -f DEVICE,STATE,CONNECTION device 2>/dev/null || echo "nmcli unavailable"
+    nmcli -t -f ACTIVE,SSID,SIGNAL dev wifi 2>/dev/null | head -8
+    echo "-- profiles --"
+    ls /etc/NetworkManager/system-connections/ 2>/dev/null
+    echo "-- addresses --"
+    ip -brief addr 2>/dev/null
+    echo "-- provision --"
+    systemctl is-active venom-provision venom 2>/dev/null
+    journalctl -u venom-provision -n 8 --no-pager 2>/dev/null | tail -8
+    echo "-- firstboot log tail --"
+    tail -12 /var/log/venom-firstboot.log 2>/dev/null
+} >> "$SRC"/boot-report.txt 2>&1 || true
