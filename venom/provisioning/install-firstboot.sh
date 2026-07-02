@@ -57,4 +57,11 @@ mkdir -p /etc/systemd/system/multi-user.target.wants
 ln -sf /etc/systemd/system/venom-provision.service \
        /etc/systemd/system/multi-user.target.wants/venom-provision.service
 
-echo "[venom] firstboot hook done — provisioning will run on next boot"
+# Under cloud-init runcmd systemd is fully up and the network is already
+# connected — kick provisioning off right now instead of waiting a reboot.
+# Under legacy firstrun this fails harmlessly and the next boot handles it.
+if systemctl daemon-reload 2>/dev/null && systemctl start --no-block venom-provision.service 2>/dev/null; then
+    echo "[venom] firstboot hook done — provisioning started"
+else
+    echo "[venom] firstboot hook done — provisioning will run on next boot"
+fi

@@ -91,14 +91,18 @@ if (-not (Test-Path "$BootDrive\cmdline.txt")) {
     throw "$BootDrive does not look like a Raspberry Pi boot partition (no cmdline.txt)."
 }
 
+# Imager <= 1.x writes firstrun.sh; Imager 2.x writes cloud-init user-data.
 $firstrun = "$BootDrive\firstrun.sh"
-if (-not (Test-Path $firstrun)) {
-    throw ("$firstrun not found. Re-flash with Raspberry Pi Imager and fill in the OS " +
-           "customisation screen (hostname, user, Wi-Fi, SSH) - that is what generates " +
-           "firstrun.sh, which Venom chains onto.")
+$userData = "$BootDrive\user-data"
+if (Test-Path $firstrun)      { $bootMode = "firstrun" }
+elseif (Test-Path $userData)  { $bootMode = "cloud-init" }
+else {
+    throw ("Neither firstrun.sh nor user-data found on $BootDrive. Re-flash with " +
+           "Raspberry Pi Imager and fill in the OS customisation screen " +
+           "(hostname, user, Wi-Fi, SSH) - that generates the first-boot hook Venom rides on.")
 }
 
-Write-Host "Boot partition : $BootDrive"
+Write-Host "Boot partition : $BootDrive  (first-boot mechanism: $bootMode)"
 
 # -- 1. copy the payload -------------------------------------------------------
 $dest = "$BootDrive\venom"
@@ -148,17 +152,35 @@ if ($BluetoothMac -or $BluetoothName) {
 
 # -- 2b. extra Wi-Fi networks (phone hotspot etc.) ------------------------------
 if ($ExtraWifi.Count -gt 0) {
-    $lines = @()
+    $parsed = New-Object System.Collections.ArrayList
     foreach ($entry in $ExtraWifi) {
         $split = $entry.Split("=", 2)
         if ($split.Count -ne 2 -or -not $split[0] -or -not $split[1]) {
             throw "ExtraWifi entries must be SSID=password, got: $entry"
         }
-        $lines += ($split[0] + "`t" + $split[1])
+        [void]$parsed.Add(@($split[0], $split[1]))
     }
-    [IO.File]::WriteAllText((Join-Path $dest "extra-wifi.tsv"),
-                            (($lines -join "`n") + "`n"))
-    Write-Host ("Extra Wi-Fi    : " + (($ExtraWifi | ForEach-Object { $_.Split('=')[0] }) -join ", "))
+    $netConfig = "$BootDrive\network-config"
+    if ($bootMode -eq "cloud-init" -and (Test-Path $netConfig)) {
+        # Native path: add access points to Imager's netplan-style file.
+        $net = [IO.File]::ReadAllText($netConfig)
+        foreach ($pair in $parsed) {
+            $ssid = $pair[0]; $pass = $pair[1]
+            if ($net -notmatch [regex]::Escape("`"$ssid`":")) {
+                $ap = "        `"$ssid`":`n          password: `"$pass`"`n"
+                $net = $net -replace "(?m)^(      access-points:\r?\n)", ("`$1" + $ap)
+            }
+        }
+        [IO.File]::WriteAllText($netConfig, ($net -replace "`r`n", "`n"))
+        Write-Host ("Extra Wi-Fi    : " + (($parsed | ForEach-Object { $_[0] }) -join ", ") +
+                    "  (added to cloud-init network-config)")
+    } else {
+        # Legacy path: NM keyfiles written by install-firstboot.sh.
+        $lines = $parsed | ForEach-Object { $_[0] + "`t" + $_[1] }
+        [IO.File]::WriteAllText((Join-Path $dest "extra-wifi.tsv"),
+                                (($lines -join "`n") + "`n"))
+        Write-Host ("Extra Wi-Fi    : " + (($parsed | ForEach-Object { $_[0] }) -join ", "))
+    }
 }
 
 # -- 3. normalise payload line endings (FAT copy from Windows may carry CRLF) -
@@ -167,28 +189,46 @@ foreach ($f in Get-ChildItem $dest -File) {
     [IO.File]::WriteAllText($f.FullName, $text)
 }
 
-# -- 4. chain onto Imager's firstrun.sh ---------------------------------------
+# -- 4. install the first-boot hook --------------------------------------------
 $marker = "# --- venom firstboot hook ---"
-$firstrunText = [IO.File]::ReadAllText($firstrun)
-if ($firstrunText.Contains($marker)) {
-    Write-Host "Hook installed : already present, skipped"
-} else {
-    $hookLines = @(
-        $marker,
-        "export VENOM_REPO_BRANCH='$Branch'",
-        'BOOTMNT=$(dirname "$(realpath "$0")")',
-        'bash "$BOOTMNT/venom/install-firstboot.sh" || echo ''[venom] firstboot hook failed'''
-    )
-    $lines = [System.Collections.Generic.List[string]]($firstrunText -split "`r?`n")
-    # Imager's firstrun.sh ends with an 'exit 0' after its cleanup; insert the
-    # hook before the LAST one so it always executes.
-    $insertAt = $lines.Count
-    for ($i = $lines.Count - 1; $i -ge 0; $i--) {
-        if ($lines[$i].Trim() -eq "exit 0") { $insertAt = $i; break }
+if ($bootMode -eq "cloud-init") {
+    # cloud-init runcmd runs once, as root, late in first boot (network up),
+    # so provisioning can start immediately - no extra reboot needed.
+    $ud = [IO.File]::ReadAllText($userData)
+    if ($ud.Contains($marker)) {
+        Write-Host "Hook installed : already present in user-data, skipped"
+    } else {
+        if ($ud -match "(?m)^runcmd:") {
+            throw "user-data already has a runcmd section - merge manually."
+        }
+        $hook = "`n$marker`n" +
+                "runcmd:`n" +
+                "- [bash, -c, `"VENOM_REPO_BRANCH='$Branch' bash /boot/firmware/venom/install-firstboot.sh >> /var/log/venom-firstboot.log 2>&1 || true`"]`n"
+        [IO.File]::WriteAllText($userData, (($ud.TrimEnd() + $hook) -replace "`r`n", "`n"))
+        Write-Host "Hook installed : cloud-init runcmd -> venom/install-firstboot.sh"
     }
-    $lines.InsertRange($insertAt, [string[]]$hookLines)
-    [IO.File]::WriteAllText($firstrun, (($lines -join "`n")))
-    Write-Host "Hook installed : firstrun.sh chained to venom/install-firstboot.sh"
+} else {
+    $firstrunText = [IO.File]::ReadAllText($firstrun)
+    if ($firstrunText.Contains($marker)) {
+        Write-Host "Hook installed : already present, skipped"
+    } else {
+        $hookLines = @(
+            $marker,
+            "export VENOM_REPO_BRANCH='$Branch'",
+            'BOOTMNT=$(dirname "$(realpath "$0")")',
+            'bash "$BOOTMNT/venom/install-firstboot.sh" || echo ''[venom] firstboot hook failed'''
+        )
+        $lines = [System.Collections.Generic.List[string]]($firstrunText -split "`r?`n")
+        # Imager's firstrun.sh ends with an 'exit 0' after its cleanup; insert
+        # the hook before the LAST one so it always executes.
+        $insertAt = $lines.Count
+        for ($i = $lines.Count - 1; $i -ge 0; $i--) {
+            if ($lines[$i].Trim() -eq "exit 0") { $insertAt = $i; break }
+        }
+        $lines.InsertRange($insertAt, [string[]]$hookLines)
+        [IO.File]::WriteAllText($firstrun, (($lines -join "`n")))
+        Write-Host "Hook installed : firstrun.sh chained to venom/install-firstboot.sh"
+    }
 }
 
 Write-Host ""
