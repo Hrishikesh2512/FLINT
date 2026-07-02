@@ -26,9 +26,7 @@ datas, binaries, hiddenimports = [], [], []
 for src, dst in [
     ("core/prompt.txt",         "core"),
     ("config/app_config.json",  "config"),
-    ("mobile_ui",               "mobile_ui"),
     ("face.png",                "."),
-    ("pet_memory.json",         "."),
 ]:
     if os.path.exists(src):
         datas.append((src, dst))

@@ -14,15 +14,15 @@ BASE_DIR        = get_base_dir()
 API_CONFIG_PATH = BASE_DIR / "config" / "api_keys.json"
 
 
-PLANNER_PROMPT = """You are the planning module of MARK XXV, a personal AI assistant.
+PLANNER_PROMPT = """You are the planning module of FLINT, a personal AI assistant.
 Your job: break any user goal into a sequence of steps using ONLY the tools listed below.
 
 ABSOLUTE RULES:
-- NEVER use generated_code or write Python scripts. It does not exist.
+- ONLY use tools from the list below. Never invent tools or write Python scripts.
 - NEVER reference previous step results in parameters. Every step is independent.
 - Use web_search for ANY information retrieval, research, or current data.
 - Use file_controller to save content to disk.
-- Use cmd_control to open files or run system commands.
+- Use open_app or computer_control to open files and drive the system.
 - Max 5 steps. Use the minimum steps needed.
 
 AVAILABLE TOOLS AND THEIR PARAMETERS:
@@ -36,13 +36,6 @@ web_search
   items: list of strings (optional, for compare mode)
   aspect: string (optional, for compare mode)
 
-game_updater
-  action: "update" | "install" | "list" | "download_status" | "schedule" (required)
-  platform: "steam" | "epic" | "both" (optional, default: both)
-  game_name: string (optional)
-  app_id: string (optional)
-  shutdown_when_done: boolean (optional)
-
 browser_control
   action: "go_to" | "search" | "click" | "type" | "scroll" | "get_text" | "press" | "close" (required)
   url: string (for go_to)
@@ -55,10 +48,6 @@ file_controller
   path: string — use "desktop" for Desktop folder
   name: string — filename
   content: string — file content (for write/create_file)
-
-cmd_control
-  task: string (required) — natural language description of what to do
-  visible: boolean (optional)
 
 computer_settings
   action: string (required)
@@ -100,11 +89,6 @@ youtube_video
 weather_report
   city: string (required)
 
-flight_finder
-  origin: string (required)
-  destination: string (required)
-  date: string (required)
-
 code_helper
   action: "write" | "edit" | "run" | "explain" (required)
   description: string (required)
@@ -123,7 +107,7 @@ Steps:
 web_search | query: "mechanical engineering overview definition history"
 web_search | query: "mechanical engineering applications and future trends"
 file_controller | action: write, path: desktop, name: mechanical_engineering.txt, content: "MECHANICAL ENGINEERING RESEARCH\n\nThis file will be filled with web research results."
-cmd_control | task: "open mechanical_engineering.txt on desktop with notepad"
+open_app | app_name: "Notepad"
 
 Goal: "What is the price of Bitcoin"
 Steps:
@@ -135,16 +119,6 @@ Steps:
 
 file_controller | action: list, path: desktop
 file_controller | action: largest, path: desktop, count: 5
-
-Goal: "Install PUBG from Steam"
-Steps:
-
-game_updater | action: install, platform: steam, game_name: "PUBG"
-
-Goal: "Update all my Steam games"
-Steps:
-
-game_updater | action: update, platform: steam
 
 Goal: "Send John a message on WhatsApp saying there is a meeting tomorrow"
 Steps:
@@ -199,13 +173,6 @@ def create_plan(goal: str, context: str = "") -> dict:
 
         if "steps" not in plan or not isinstance(plan["steps"], list):
             raise ValueError("Invalid plan structure")
-
-        for step in plan["steps"]:
-            if step.get("tool") in ("generated_code",):
-                print(f"[Planner] ⚠️ generated_code detected in step {step.get('step')} — replacing with web_search")
-                desc = step.get("description", goal)
-                step["tool"] = "web_search"
-                step["parameters"] = {"query": desc[:200]}
 
         print(f"[Planner] ✅ Plan: {len(plan['steps'])} steps")
         for s in plan["steps"]:
@@ -265,11 +232,6 @@ Create a REVISED plan for the remaining work only. Do not repeat completed steps
         text     = response.text.strip()
         text     = re.sub(r"```(?:json)?", "", text).strip().rstrip("`").strip()
         plan     = json.loads(text)
-
-        for step in plan.get("steps", []):
-            if step.get("tool") == "generated_code":
-                step["tool"] = "web_search"
-                step["parameters"] = {"query": step.get("description", goal)[:200]}
 
         print(f"[Planner] 🔄 Revised plan: {len(plan['steps'])} steps")
         return plan

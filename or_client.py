@@ -335,7 +335,7 @@ if __name__ == "__main__":
     try:
         reply = client.chat("Introduce yourself in one sentence.")
         print(f"  Response : {reply}")
-        print(f"  Status   : PASS ✓")
+        print("  Status   : PASS ✓")
     except Exception as e:
         print(f"  Status   : FAIL ✗ — {e}")
 
@@ -346,7 +346,7 @@ if __name__ == "__main__":
             system="Return only valid JSON. No extra text."
         )
         print(f"  Response : {data}")
-        print(f"  Status   : PASS ✓")
+        print("  Status   : PASS ✓")
     except Exception as e:
         print(f"  Status   : FAIL ✗ — {e}")
 
@@ -360,7 +360,7 @@ if __name__ == "__main__":
         ]
         reply = client.multi_turn(history)
         print(f"  Response : {reply}")
-        print(f"  Status   : PASS ✓")
+        print("  Status   : PASS ✓")
     except Exception as e:
         print(f"  Status   : FAIL ✗ — {e}")
 
@@ -369,7 +369,7 @@ if __name__ == "__main__":
     print(f"  Text models   : {info['total_text']}")
     print(f"  Vision models : {info['total_vision']}")
     print(f"  Rate limited  : {info['rate_limited'] or 'none'}")
-    print(f"  Status        : PASS ✓")
+    print("  Status        : PASS ✓")
 
     print("\n" + "=" * 55)
     print("  All tests complete.")

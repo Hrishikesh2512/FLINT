@@ -104,7 +104,6 @@ def web_search(
     query  = params.get("query", "").strip()
     mode   = params.get("mode",  "search").lower().strip()
     items  = params.get("items", [])
-    aspect = params.get("aspect", "general").strip() or "general"
 
     if not query and not items:
         return "Please provide a search query, sir."

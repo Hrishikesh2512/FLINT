@@ -1,0 +1,73 @@
+[project]
+name = "flint"
+version = "2.0.0a0"
+description = "FLINT — voice-first AI engineering companion (Windows app + Venom Raspberry Pi wearable runtime)"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+dependencies = [
+    # LLM / voice
+    "google-genai==2.8.0",
+    "google-generativeai==0.8.6",   # legacy SDK — removed in Phase 1 (LLM gateway)
+    # UI
+    "PyQt6==6.11.0",
+    # Core runtime
+    "websockets==15.0.1",
+    "numpy==2.4.6",
+    "psutil==7.2.2",
+    "requests==2.34.2",
+    "pillow==12.2.0",
+    # Audio
+    "sounddevice==0.5.5",
+    "PyAudio==0.2.14",
+    # Vision / capture
+    "mss==10.2.0",
+    "opencv-python==4.13.0.92",
+    # Automation (Windows)
+    "PyAutoGUI==0.9.54",
+    "pyperclip==1.11.0",
+    "PyGetWindow==0.0.9",
+    "pywinauto==0.6.9",
+    "playwright==1.60.0",
+    # Cloud bridge (legacy — being phased out for the direct device link)
+    "supabase==2.31.0",
+    # Web / data
+    "beautifulsoup4==4.14.3",
+    "duckduckgo_search==8.1.1",
+    "youtube-transcript-api==1.2.4",
+    # Windows integration
+    "comtypes==1.4.16",
+    "pycaw==20251023",
+    "win10toast==0.9",
+    "Send2Trash==2.1.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.8",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+exclude = ["build", "dist", ".venv"]
+
+[tool.ruff.lint]
+# Start with correctness rules only (E4/E7/E9 pycodestyle errors + pyflakes).
+# Style/import-sorting/typing rules come on module-by-module as code moves
+# into the v2 packages.
+select = ["E4", "E7", "E9", "F"]
+
+[tool.ruff.lint.per-file-ignores]
+# Legacy v1 code keeps its existing style until it is ported to the v2
+# packages; correctness (E9/F) still applies everywhere.
+"main.py"    = ["E701", "E702", "E402", "E741"]
+"ui.py"      = ["E701", "E702", "E402", "E741"]
+"actions/*"  = ["E701", "E702", "E402", "E741"]
+"agent/*"    = ["E701", "E702", "E402", "E741"]
+"core/*"     = ["E701", "E702", "E402", "E741"]
+"memory/*"   = ["E701", "E702", "E402", "E741"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

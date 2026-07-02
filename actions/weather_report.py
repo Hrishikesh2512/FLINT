@@ -35,7 +35,7 @@ def weather_action(
     try:
         webbrowser.open(url)
     except Exception:
-        msg = f"Sir, I couldn't open the browser for the weather report."
+        msg = "Sir, I couldn't open the browser for the weather report."
         _speak_and_log(msg, player)
         return msg
 

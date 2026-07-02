@@ -2,7 +2,6 @@
 import pyautogui
 
 from actions.open_app import _say, _is_cloaked
-from pathlib import Path
 
 pyautogui.FAILSAFE = True
 pyautogui.PAUSE = 0.08

@@ -1,6 +1,4 @@
 #computer_settings.py
-import json
-import re
 import sys
 import time
 import subprocess

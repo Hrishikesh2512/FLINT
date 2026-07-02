@@ -34,7 +34,6 @@ from memory.memory_manager import (
 )
 
 from actions.file_processor   import file_processor
-from actions.flight_finder    import flight_finder
 from actions.open_app         import open_app
 from actions.weather_report   import weather_action
 from actions.send_message     import send_message
@@ -49,7 +48,6 @@ from actions.code_helper      import code_helper
 from actions.dev_agent        import dev_agent
 from actions.web_search       import web_search as web_search_action
 from actions.computer_control import computer_control
-from actions.game_updater     import game_updater
 
 
 def get_base_dir():
@@ -262,9 +260,6 @@ class FlintLive:
                                                      speak=self.speak) or "Done.",
             "web_search":        lambda a: web_search_action(parameters=a, player=ui) or "Done.",
             "computer_control":  lambda a: computer_control(parameters=a, player=ui) or "Done.",
-            "game_updater":      lambda a: game_updater(parameters=a, player=ui,
-                                                        speak=self.speak) or "Done.",
-            "flight_finder":     lambda a: flight_finder(parameters=a, player=ui) or "Done.",
             "file_processor":    _file_processor,
             "screen_process":    _screen,
             "agent_task":        _agent_task,
@@ -393,7 +388,8 @@ class FlintLive:
             self.speak(f"Goodbye, {_get_user_name()}.")
 
             def _shutdown():
-                import time, os
+                import time
+                import os
                 time.sleep(1)
                 os._exit(0)
 

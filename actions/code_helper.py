@@ -460,8 +460,7 @@ def _screen_debug_action(description, file_path, player, speak=None) -> str:
 
         client = genai.Client(api_key=_get_api_key())
 
-        image_bytes  = screenshot_path.read_bytes()
-        image_base64 = _image_to_base64(screenshot_path)
+        image_bytes = screenshot_path.read_bytes()
 
         user_question = description or "What error or problem do you see on the screen? How can it be fixed?"
 
@@ -492,7 +491,7 @@ Be specific and actionable. If you see an error message, quote it exactly."""
         )
 
         analysis = response.text.strip()
-        print(f"[Code] ✅ Screen analysis complete")
+        print("[Code] ✅ Screen analysis complete")
 
         try:
             screenshot_path.unlink()

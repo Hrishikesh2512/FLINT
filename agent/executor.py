@@ -1,15 +1,11 @@
 import json
-import re
 import sys
 import threading
-import subprocess
-import tempfile
-import os
 from pathlib import Path
 from typing import Callable
 
 from agent.planner       import create_plan, replan
-from agent.error_handler import analyze_error, generate_fix, ErrorDecision
+from agent.error_handler import analyze_error, ErrorDecision
 
 
 def get_base_dir() -> Path:
@@ -25,87 +21,6 @@ API_CONFIG_PATH = BASE_DIR / "config" / "api_keys.json"
 def _get_api_key() -> str:
     with open(API_CONFIG_PATH, "r", encoding="utf-8") as f:
         return json.load(f)["gemini_api_key"]
-
-def _run_generated_code(description: str, speak: Callable | None = None) -> str:
-    import google.generativeai as genai
-
-    if speak:
-        speak("Writing custom code for this task, sir.")
-
-    home      = Path.home()
-    desktop   = home / "Desktop"
-    downloads = home / "Downloads"
-    documents = home / "Documents"
-
-    if not desktop.exists():
-        try:
-            import winreg
-            key     = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
-                r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders")
-            desktop = Path(winreg.QueryValueEx(key, "Desktop")[0])
-        except Exception:
-            pass
-
-    genai.configure(api_key=_get_api_key())
-    model = genai.GenerativeModel(
-        model_name="gemini-2.5-flash",
-        system_instruction=(
-            "You are an expert Python developer. "
-            "Write clean, complete, working Python code. "
-            "Use standard library + common packages. "
-            "Install missing packages with subprocess + pip if needed. "
-            "Return ONLY the Python code. No explanation, no markdown, no backticks.\n\n"
-            f"SYSTEM PATHS:\n"
-            f"  Desktop   = r'{desktop}'\n"
-            f"  Downloads = r'{downloads}'\n"
-            f"  Documents = r'{documents}'\n"
-            f"  Home      = r'{home}'\n"
-        )
-    )
-
-    try:
-        response = model.generate_content(
-            f"Write Python code to accomplish this task:\n\n{description}"
-        )
-        code = response.text.strip()
-        code = re.sub(r"```(?:python)?", "", code).strip().rstrip("`").strip()
-
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".py", delete=False, encoding="utf-8"
-        ) as f:
-            f.write(code)
-            tmp_path = f.name
-
-        print(f"[Executor] 🐍 Running generated code: {tmp_path}")
-
-        result = subprocess.run(
-            [sys.executable, tmp_path],
-            capture_output=True, text=True,
-            timeout=120, cwd=str(Path.home())
-        )
-
-        try:
-            os.unlink(tmp_path)
-        except Exception:
-            pass
-
-        output = result.stdout.strip()
-        error  = result.stderr.strip()
-
-        if result.returncode == 0 and output:
-            return output
-        elif result.returncode == 0:
-            return "Task completed successfully."
-        elif error:
-            raise RuntimeError(f"Code error: {error[:400]}")
-        return "Completed."
-
-    except subprocess.TimeoutExpired:
-        raise RuntimeError("Generated code timed out after 120 seconds.")
-    except RuntimeError:
-        raise
-    except Exception as e:
-        raise RuntimeError(f"Generated code failed: {e}")
 
 def _inject_context(params: dict, tool: str, step_results: dict, goal: str = "") -> dict:
     if not step_results:
@@ -124,7 +39,7 @@ def _inject_context(params: dict, tool: str, step_results: dict, goal: str = "")
                 combined = "\n\n---\n\n".join(all_results)
                 translated = _translate_to_goal_language(combined, goal)
                 params["content"] = translated
-                print(f"[Executor] 💉 Injected + translated content")
+                print("[Executor] 💉 Injected + translated content")
 
     return params
 def _detect_language(text: str) -> str:
@@ -180,9 +95,6 @@ def _call_tool(tool: str, parameters: dict, speak: Callable | None) -> str:
     elif tool == "web_search":
         from actions.web_search import web_search
         return web_search(parameters=parameters, player=None) or "Done."
-    elif tool == "game_updater":
-        from actions.game_updater import game_updater
-        return game_updater(parameters=parameters, player=None, speak=speak) or "Done."
     elif tool == "browser_control":
         from actions.browser_control import browser_control
         return browser_control(parameters=parameters, player=None) or "Done."
@@ -190,10 +102,6 @@ def _call_tool(tool: str, parameters: dict, speak: Callable | None) -> str:
     elif tool == "file_controller":
         from actions.file_controller import file_controller
         return file_controller(parameters=parameters, player=None) or "Done."
-
-    elif tool == "cmd_control":
-        from actions.cmd_control import cmd_control
-        return cmd_control(parameters=parameters, player=None) or "Done."
 
     elif tool == "code_helper":
         from actions.code_helper import code_helper
@@ -236,19 +144,8 @@ def _call_tool(tool: str, parameters: dict, speak: Callable | None) -> str:
         from actions.computer_control import computer_control
         return computer_control(parameters=parameters, player=None) or "Done."
 
-    elif tool == "generated_code":
-        description = parameters.get("description", "")
-        if not description:
-            raise ValueError("generated_code requires a 'description' parameter.")
-        return _run_generated_code(description, speak=speak)
-
-    elif tool == "flight_finder":
-        from actions.flight_finder import flight_finder
-        return flight_finder(parameters=parameters, player=None, speak=speak) or "Done."
-
     else:
-        print(f"[Executor] ⚠️ Unknown tool '{tool}' — falling back to generated_code")
-        return _run_generated_code(f"Accomplish this task: {parameters}", speak=speak)
+        raise ValueError(f"Unknown tool '{tool}' — not in the action registry.")
 
 class AgentExecutor:
 
@@ -271,7 +168,7 @@ class AgentExecutor:
             steps = plan.get("steps", [])
 
             if not steps:
-                msg = "I couldn't create a valid plan for this task, sir."
+                msg = "I couldn't create a valid plan for this task."
                 if speak: speak(msg)
                 return msg
 
@@ -281,11 +178,11 @@ class AgentExecutor:
 
             for step in steps:
                 if cancel_flag and cancel_flag.is_set():
-                    if speak: speak("Task cancelled, sir.")
+                    if speak: speak("Task cancelled.")
                     return "Task cancelled."
 
                 step_num = step.get("step", "?")
-                tool     = step.get("tool", "generated_code")
+                tool     = step.get("tool", "")
                 desc     = step.get("description", "")
                 params   = step.get("parameters", {})
 
@@ -330,28 +227,13 @@ class AgentExecutor:
                             break
 
                         elif decision == ErrorDecision.ABORT:
-                            msg = f"Task aborted, sir. {recovery.get('reason', '')}"
+                            msg = f"Task aborted. {recovery.get('reason', '')}"
                             if speak: speak(msg)
                             return msg
 
-                        else: 
-                            fix_suggestion = recovery.get("fix_suggestion", "")
-                            if fix_suggestion and tool != "generated_code":
-                                try:
-                                    fixed_step = generate_fix(step, error_msg, fix_suggestion)
-                                    if speak: speak("Trying an alternative approach, sir.")
-                                    res = _call_tool(
-                                        fixed_step["tool"],
-                                        fixed_step["parameters"],
-                                        speak
-                                    )
-                                    step_results[step_num] = res
-                                    completed_steps.append(step)
-                                    step_ok = True
-                                    break
-                                except Exception as fix_err:
-                                    print(f"[Executor] ⚠️ Fix failed: {fix_err}")
-
+                        else:
+                            # REPLAN — hand the failure to the planner, which
+                            # builds a revised plan from real registry tools.
                             failed_step  = step
                             failed_error = error_msg
                             success      = False
@@ -369,17 +251,17 @@ class AgentExecutor:
                 return self._summarize(goal, completed_steps, speak)
 
             if replan_attempts >= self.MAX_REPLAN_ATTEMPTS:
-                msg = f"Task failed after {replan_attempts} replan attempts, sir."
+                msg = f"Task failed after {replan_attempts} replan attempts."
                 if speak: speak(msg)
                 return msg
 
-            if speak: speak("Adjusting my approach, sir.")
+            if speak: speak("Adjusting my approach.")
 
             replan_attempts += 1
             plan = replan(goal, completed_steps, failed_step, failed_error)
 
     def _summarize(self, goal: str, completed_steps: list, speak: Callable | None) -> str:
-        fallback = f"All done, sir. Completed {len(completed_steps)} steps for: {goal[:60]}."
+        fallback = f"All done. Completed {len(completed_steps)} steps for: {goal[:60]}."
         try:
             import google.generativeai as genai
             genai.configure(api_key=_get_api_key())
@@ -389,7 +271,7 @@ class AgentExecutor:
                 f'User goal: "{goal}"\n'
                 f"Completed steps:\n{steps_str}\n\n"
                 "Write a single natural sentence summarizing what was accomplished. "
-                "Address the user as 'sir'. Be direct and positive."
+                "Be direct and positive."
             )
             response = model.generate_content(prompt)
             summary  = response.text.strip()

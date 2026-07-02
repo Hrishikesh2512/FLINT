@@ -464,7 +464,7 @@ def open_app(
                 if hwnd:
                     _say(f"[open_app] ✅ Window confirmed: HWND={hwnd}")
                     return f"Opened {app_name} successfully, sir."
-                _say(f"[open_app] ⚠️ Launched but no window after wait")
+                _say("[open_app] ⚠️ Launched but no window after wait")
                 return (
                     f"Opened {app_name}, sir — it's still drawing its window, "
                     f"give it a moment before the next step."
