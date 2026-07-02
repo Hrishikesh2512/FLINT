@@ -151,6 +151,12 @@ install -m 0644 "$APP_DIR/venom/provisioning/venom-dbus-bluetooth.conf" \
     /etc/dbus-1/system.d/venom-dbus-bluetooth.conf
 systemctl reload dbus 2>/dev/null || true
 
+# Per-user PipeWire instances (spawned by any SSH login) fight the system
+# ones for the Bluetooth headset — mask them everywhere.
+systemctl --global mask pipewire.socket pipewire.service wireplumber.service \
+    pipewire-pulse.socket pipewire-pulse.service 2>/dev/null || true
+pkill -u "$(id -nu 1000 2>/dev/null || echo nobody)" -f 'pipewire|wireplumber' 2>/dev/null || true
+
 # ── 6. install + start the services ───────────────────────────────────────────
 # System-wide PipeWire/WirePlumber: Bluetooth audio with no user session.
 install -m 0644 "$APP_DIR/venom/provisioning/pipewire-system.service" \
