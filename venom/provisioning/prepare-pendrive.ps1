@@ -25,9 +25,15 @@
 param(
     # Drive letter of the pendrive's boot partition (auto-detected when omitted).
     [string]$BootDrive,
-    # Your laptop's LAN or Tailscale IP - written into venom.toml as the preferred brain.
+    # Gemini API key baked into the appliance - required for the voice assistant.
+    [string]$GeminiApiKey,
+    # How Venom addresses you.
+    [string]$UserName = "Boss",
+    # Extra Wi-Fi networks beyond the one Imager configured, e.g. your phone
+    # hotspot: -ExtraWifi "MyPhone=hotspotpass","Office=officepass"
+    [string[]]$ExtraWifi = @(),
+    # Optional laptop brain (additive, never required).
     [string]$LaptopHost,
-    # Port of the FLINT brain service on the laptop.
     [int]$LaptopPort = 8765,
     # Git branch the Pi will install Venom from.
     [string]$Branch = "v2/rebuild"
@@ -75,15 +81,39 @@ foreach ($f in "install-firstboot.sh", "provision.sh", "venom.service", "venom-p
 Write-Host "Payload copied : $dest"
 
 # -- 2. personalise venom.toml ------------------------------------------------
+$toml = Get-Content (Join-Path $dest "venom.toml") -Raw
+if ($GeminiApiKey) {
+    $toml = $toml -replace 'api_key = ""', ('api_key = "' + $GeminiApiKey + '"')
+    Write-Host "Gemini key     : baked in (voice assistant enabled)"
+} else {
+    Write-Host "Gemini key     : NOT set - Venom will boot but stay silent." -ForegroundColor Yellow
+    Write-Host "                 Re-run with -GeminiApiKey <key> for the voice assistant."
+}
+if ($UserName -and $UserName -ne "Boss") {
+    $toml = $toml -replace 'user_name = "Boss"', ('user_name = "' + $UserName + '"')
+    Write-Host "User name      : $UserName"
+}
 if ($LaptopHost) {
-    $toml = Get-Content (Join-Path $dest "venom.toml") -Raw
     $toml = $toml -replace 'host = "192\.168\.1\.50"', ('host = "' + $LaptopHost + '"')
     $toml = $toml -replace 'port = 8765', ('port = ' + $LaptopPort)
-    # Shell scripts on the Pi read this file - write it with Unix endings, no BOM.
-    [IO.File]::WriteAllText((Join-Path $dest "venom.toml"), ($toml -replace "`r`n", "`n"))
-    Write-Host "Laptop brain   : ${LaptopHost}:${LaptopPort}"
-} else {
-    Write-Host "Laptop brain   : not set (edit /etc/venom/venom.toml on the Pi later)"
+    Write-Host "Laptop brain   : ${LaptopHost}:${LaptopPort} (optional additive)"
+}
+# Shell scripts on the Pi read this file - write it with Unix endings, no BOM.
+[IO.File]::WriteAllText((Join-Path $dest "venom.toml"), ($toml -replace "`r`n", "`n"))
+
+# -- 2b. extra Wi-Fi networks (phone hotspot etc.) ------------------------------
+if ($ExtraWifi.Count -gt 0) {
+    $lines = @()
+    foreach ($entry in $ExtraWifi) {
+        $split = $entry.Split("=", 2)
+        if ($split.Count -ne 2 -or -not $split[0] -or -not $split[1]) {
+            throw "ExtraWifi entries must be SSID=password, got: $entry"
+        }
+        $lines += ($split[0] + "`t" + $split[1])
+    }
+    [IO.File]::WriteAllText((Join-Path $dest "extra-wifi.tsv"),
+                            (($lines -join "`n") + "`n"))
+    Write-Host ("Extra Wi-Fi    : " + (($ExtraWifi | ForEach-Object { $_.Split('=')[0] }) -join ", "))
 }
 
 # -- 3. normalise payload line endings (FAT copy from Windows may carry CRLF) -

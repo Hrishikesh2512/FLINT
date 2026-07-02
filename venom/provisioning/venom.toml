@@ -5,6 +5,21 @@
 poll_interval = 10.0     # seconds between health cycles
 probe_timeout = 3.0      # seconds per reachability probe
 status_path = "/run/venom/status.json"
+memory_path = "/var/lib/venom/memory.json"
+
+[gemini]
+# Baked in by prepare-pendrive.ps1 -GeminiApiKey. Required for voice.
+api_key = ""
+
+[voice]
+enabled = true
+wake_word = "hey_jarvis"       # say "Hey Jarvis" to wake Venom
+wake_threshold = 0.6
+inactivity_timeout = 45.0      # seconds of silence before going back to sleep
+live_model = "models/gemini-2.5-flash-native-audio-preview-12-2025"
+voice_name = "Leda"
+user_name = "Boss"
+language = "en"
 
 [internet]
 host = "1.1.1.1"

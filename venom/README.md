@@ -1,121 +1,119 @@
-# Venom — the Raspberry Pi wearable runtime of FLINT
+# Venom — a self-hosted voice assistant that lives on a Raspberry Pi
 
-Venom turns a **completely blank Raspberry Pi 4** into a dedicated FLINT wearable
-appliance that boots entirely from a USB pendrive. No SD card, no keyboard, no
-monitor, no pre-installed OS — you flash one pendrive on your laptop, plug it
-in, and power on.
+Venom is a **standalone wearable voice assistant**. It runs entirely on a
+Raspberry Pi 4 booted from a USB pendrive — no SD card, no monitor, no
+keyboard, no laptop, no phone app. It needs exactly three things: power,
+Wi-Fi it already knows, and the Gemini API key baked in at flash time.
 
-The Pi never runs large AI models. It is the *orchestrator*: it watches its own
-health (network, USB headset, battery-friendly services) and resolves where its
-brain lives right now — **your laptop when reachable, cloud APIs otherwise**.
+Say **"Hey Jarvis"** into the USB headset and talk. LLM compute happens in
+the cloud (Gemini Live streams speech both ways); the Pi orchestrates —
+wake word, audio, tools, memory, self-healing. Venom shares its
+architecture with FLINT through `flint-core`, but it is its own product.
+
+## What Venom can do (standalone)
+
+- **Voice conversation** — natural spoken dialogue, interruptions handled,
+  multilingual (replies in whatever language you speak).
+- **Web search** — Google-grounded answers about anything current: news,
+  prices, facts, people, places.
+- **Weather** — any city, no extra API key (open-meteo).
+- **Timers** — "set a timer for 10 minutes for chai"; a chime plays in your
+  headset when it fires, even if Venom was asleep.
+- **Time & date**, **headset volume control** by voice.
+- **Long-term memory** — it quietly remembers who you are, what you like,
+  what you're working on, and uses it naturally next time.
+- **Goes back to sleep** on "goodbye" or ~45 s of silence; wake it again
+  anytime. Boot/wake/error states are signalled with distinct chimes since
+  there is no screen.
+
+Everything is a tool on the shared registry, so new skills are one
+`@registry.tool` away.
 
 ```
-venom/
-├── src/venom/            # the appliance daemon (stdlib-only, ~10 MB RSS)
-│   ├── supervisor.py     #   asyncio loop: probe → resolve brain → publish status
-│   ├── monitors/         #   network probe, USB-headset detection, brain resolver
-│   ├── status.py         #   atomic /run/venom/status.json snapshots
-│   └── sdnotify.py       #   systemd readiness + watchdog heartbeat
-├── tests/                # unit tests (run anywhere: Windows, CI, the Pi)
-└── provisioning/         # blank-pendrive → running-appliance kit
-    ├── prepare-pendrive.ps1      # run on Windows after flashing
-    ├── install-firstboot.sh      # stage 1: runs on the Pi's first boot
-    ├── provision.sh              # stage 2: installs everything over Wi-Fi
-    ├── venom.service             # the daemon unit (watchdog, memory caps)
-    ├── venom-provision.service   # one-shot installer unit
-    └── venom.toml                # appliance config (brain priority list)
+venom/src/venom/
+├── voice.py        # wake ⇄ conversation state machine
+├── live.py         # one Gemini Live session: audio duplex + tool dispatch
+├── wake.py         # openWakeWord ("hey jarvis") + silence endpointing
+├── tools_pi.py     # search, weather, timers, volume, memory, goodbye
+├── audio/          # USB headset auto-selection, mic/speaker streams, chimes
+├── supervisor.py   # health monitors + voice loop, systemd watchdog
+└── monitors/       # internet probe, headset detection, brain resolver
 ```
 
 ## Requirements
 
-- Raspberry Pi 4 (2 GB is enough — the daemon is capped at 300 MB and idles far below)
-- A USB pendrive (16 GB+; your 32 GB stick is ideal) — this becomes the entire disk
-- USB headset with microphone
-- Wi-Fi credentials, and (recommended) your laptop's LAN or Tailscale IP
-- **One-time check:** Pi 4 boards ship with USB boot enabled in bootloader
-  EEPROMs from **2020-09 onward**. If your Pi was bought after that, skip this.
-  If it refuses to boot from USB, you need a one-time EEPROM update using any
-  SD card (Raspberry Pi Imager → *Misc utility images → Bootloader → USB Boot*).
+- Raspberry Pi 4 (2 GB is plenty) with a USB pendrive (16 GB+) and a USB
+  headset with mic
+- A [Gemini API key](https://aistudio.google.com/apikey)
+- One-time check: Pi 4 boards ship USB-boot-ready from **2020-09** onward.
+  Older boards need a one-time EEPROM update via any SD card
+  (Raspberry Pi Imager → Misc utility images → Bootloader → USB Boot).
 
-## From blank pendrive to talking appliance
+## Blank pendrive → talking assistant
 
-**1. Flash the pendrive** with [Raspberry Pi Imager](https://www.raspberrypi.com/software/):
+**1. Flash** with [Raspberry Pi Imager](https://www.raspberrypi.com/software/):
+*Raspberry Pi OS Lite (64-bit)*, storage = pendrive, and in the
+customisation screen set hostname `venom`, a username/password, **your
+Wi-Fi**, and enable SSH.
 
-- OS: *Raspberry Pi OS Lite (64-bit)* (under "Raspberry Pi OS (other)")
-- Storage: your pendrive
-- When asked "Would you like to apply OS customisation settings?" → **Edit settings**:
-  - Hostname: `venom`
-  - Username/password: pick yours (this is your SSH login)
-  - **Configure wireless LAN**: your Wi-Fi SSID + password, country `IN`
-  - Services tab: **Enable SSH** (password authentication)
-- Write. Keep the pendrive plugged in afterwards (re-insert if Windows ejected it).
-
-**2. Add Venom** — from this repo on your laptop:
+**2. Bake in Venom** (pendrive still plugged in):
 
 ```powershell
 cd venom\provisioning
-.\prepare-pendrive.ps1 -LaptopHost <your laptop's LAN/Tailscale IP>
+.\prepare-pendrive.ps1 -GeminiApiKey "AIza..." -UserName "Tushar" `
+                       -ExtraWifi "MyPhoneHotspot=hotspotpass"
 ```
 
-The script finds the pendrive's boot partition automatically, copies the
-provisioning payload, and chains Venom onto the Imager first-boot script.
+`-ExtraWifi` takes any number of `SSID=password` networks — add your phone
+hotspot so Venom follows you out of the house. The Pi hops between known
+networks automatically (home Wi-Fi preferred, hotspot on the go).
 
-**3. Boot the Pi** — pendrive in a **USB 3 (blue) port**, headset in the other,
-power on. Leave it alone for ~10 minutes on first boot:
+**3. Plug into the Pi and power on.** First boot takes ~10 minutes with
+Wi-Fi in range (filesystem expands → Venom installs itself → the service
+starts). You'll hear a **single chime** in the headset when Venom is up.
 
-- *boot 1*: filesystem expands; Imager applies hostname/user/Wi-Fi/SSH; the
-  Venom hook installs the provisioning service
-- *boot 2*: `venom-provision` waits for Wi-Fi, installs system packages, clones
-  this repo (branch `v2/rebuild`), installs the daemon, and starts it. If Wi-Fi
-  isn't reachable it simply retries on every boot until it succeeds.
+**4. Talk:** say **"Hey Jarvis"** → two rising chimes → speak. That's it.
 
-**4. Verify from your laptop:**
+## Daily behavior
 
-```bash
-ssh <username>@venom.local
-systemctl status venom               # active (running), Type=notify, watchdog armed
-cat /run/venom/status.json           # {"internet": true, "headset": "...", "brain": "laptop", ...}
-journalctl -u venom -f               # live transitions (brain switches, headset events)
-```
+| Sound | Meaning |
+|---|---|
+| 1 chime after power-on | Venom is up and listening for the wake word |
+| 2 rising chimes | Wake word heard — conversation is live |
+| 2 chimes anytime | A timer finished |
+| 1 low long tone | The conversation hit an error; wake it again |
 
-If anything went wrong during install: `journalctl -u venom-provision`.
+Status without a screen (optional, from any device on the network):
+`ssh <user>@venom.local` then `cat /run/venom/status.json` — internet,
+headset, active brain, and voice state in one JSON snapshot.
+`journalctl -u venom -f` streams transcripts and state changes.
 
-## How the brain resolver works
+## Configuration
 
-`/etc/venom/venom.toml` lists brain candidates with priorities (lower wins):
-laptop first (priority 0), then Gemini/Groq/OpenAI/Anthropic/OpenRouter
-endpoints. Every cycle the daemon:
+`/etc/venom/venom.toml` (mode 640, holds the API key): wake word
+(`hey_jarvis`, `alexa`, `hey_mycroft`), sensitivity, silence timeout,
+voice, user name, model. Edit and `sudo systemctl restart venom`.
 
-1. keeps the current brain if it's still healthy (no flapping mid-conversation),
-2. but lets a **higher-priority** candidate take over — so when your laptop
-   comes back in range, Venom switches back to it automatically,
-3. falls to the next reachable candidate when the current one dies,
-4. reports `brain: null` (offline mode) when nothing answers.
+## Design constraints honored
 
-Edit the file on the Pi and `sudo systemctl restart venom` to apply.
-
-## Reliability & battery design
-
-- `Type=notify` + `WatchdogSec=90`: if the daemon ever hangs, systemd restarts it.
-- `Restart=always`: crashes self-heal; provisioning is idempotent and re-runs
-  until it succeeds.
-- Journald runs in volatile (RAM) mode, capped at 32 MB — no log wear on the
-  pendrive, no unbounded growth.
-- Status lives in `/run` (tmpfs): zero flash writes per cycle.
-- Display blanking is enabled; the daemon is stdlib-only and idles at a few MB.
+- **2 GB RAM:** no local LLMs, ever. openWakeWord (~few % of one core) is
+  the only local inference. Service is capped at 600 MB and idles far below.
+- **Battery:** RAM-only logging, tmpfs status, HDMI blanked, wake-word
+  gating keeps the radio and CPU idle between conversations.
+- **Reliability:** systemd watchdog + auto-restart, crash-backoff in the
+  voice loop, provisioning retries every boot until it succeeds.
+- **Additives, not mandates:** a laptop brain (`[[brain]]` in the config)
+  and Bluetooth audio are optional extensions; the assistant is complete
+  without them. Bluetooth stack (bluez) is preinstalled for later pairing.
 
 ## Development (any OS)
 
 ```bash
-pip install -e ./venom
-python -m pytest venom/tests     # 23 tests, no hardware needed
-python -m venom --once           # one real health cycle, prints JSON
-python -m venom -v               # run the daemon in the foreground
+pip install -e packages/flint-core -e "venom[voice]"
+python -m pytest venom/tests        # 41 tests, no hardware needed
+python -m venom --once              # one health cycle, prints JSON
 ```
 
-## What lands here next
-
-This daemon is the appliance skeleton (Phase 3 of the FLINT v2 plan). The next
-increments plug into the supervisor: wake word (openWakeWord) → voice activity
-detection (Silero VAD) → audio streaming over the Flint Link to the resolved
-brain — laptop GPU first, cloud otherwise, never on the Pi itself.
+The full conversation loop (session config, tool dispatch, audio downlink)
+is verified end-to-end against the real Gemini Live API in development by
+driving it with text turns instead of a microphone.

@@ -3,7 +3,19 @@ name = "venom"
 version = "0.1.0"
 description = "Venom — the Raspberry Pi wearable runtime of FLINT (appliance daemon)"
 requires-python = ">=3.11"
-dependencies = []            # stdlib only, by design: 2 GB Pi, minimal footprint
+# The monitoring core is stdlib-only; the voice assistant needs the extras.
+dependencies = []
+
+[project.optional-dependencies]
+voice = [
+    "flint-core",          # shared memory store, tool registry, LLM providers
+    "google-genai>=1.0",   # Gemini Live audio sessions
+    "requests>=2.31",
+    "sounddevice>=0.5",
+    "numpy>=1.26",
+    "openwakeword>=0.6",
+    "onnxruntime>=1.17",
+]
 
 [project.scripts]
 venom = "venom.__main__:main"
@@ -25,3 +37,6 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["venom", "flint_core"]

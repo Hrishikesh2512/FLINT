@@ -30,6 +30,7 @@ class Supervisor:
         self.status = StatusWriter(config.status_path)
         self._stop = asyncio.Event()
         self._last: dict[str, Any] = {}
+        self.voice_state = "disabled"
 
     # ── one monitoring cycle ─────────────────────────────────────────────────
     async def cycle(self) -> dict[str, Any]:
@@ -47,6 +48,7 @@ class Supervisor:
             "headset": headset.description if headset else None,
             "brain": resolution.brain.name if resolution.brain else None,
             "online": resolution.online,
+            "voice": self.voice_state,
         }
         self._log_transitions(snapshot, resolution.switched)
         self.status.write(snapshot)
@@ -81,11 +83,40 @@ class Supervisor:
                 # Windows dev box — Ctrl+C raises KeyboardInterrupt instead.
                 pass
 
+    def _start_voice(self) -> asyncio.Task | None:
+        """Launch the voice loop if configured and the audio stack imports.
+
+        Voice is an additive: a Pi without a key or without the audio deps
+        still runs as a healthy monitored appliance.
+        """
+        if not self.config.voice_ready:
+            self.voice_state = (
+                "disabled (no gemini api key)" if not self.config.gemini_api_key
+                else "disabled (config)"
+            )
+            log.info("voice %s", self.voice_state)
+            return None
+        try:
+            import openwakeword  # noqa: F401 — fail here, not mid-loop
+            import sounddevice  # noqa: F401
+
+            from venom.voice import run_voice_forever
+        except ImportError as exc:
+            self.voice_state = f"disabled (missing dependency: {exc.name})"
+            log.warning("voice %s", self.voice_state)
+            return None
+
+        def set_state(state: str) -> None:
+            self.voice_state = state
+
+        return asyncio.create_task(run_voice_forever(self.config, set_state))
+
     async def run(self) -> None:
         self._install_signal_handlers()
         log.info("venom %s starting (poll %.1fs, %d brain candidates)",
                  __version__, self.config.poll_interval, len(self.config.brains))
         sdnotify.notify_ready()
+        voice_task = self._start_voice()
         try:
             while not self._stop.is_set():
                 try:
@@ -100,5 +131,11 @@ class Supervisor:
                 except TimeoutError:
                     pass
         finally:
+            if voice_task is not None:
+                voice_task.cancel()
+                try:
+                    await voice_task
+                except (asyncio.CancelledError, Exception):
+                    pass
             sdnotify.notify_stopping()
             log.info("venom stopped")

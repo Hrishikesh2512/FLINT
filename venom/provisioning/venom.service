@@ -14,10 +14,12 @@ User=venomd
 SupplementaryGroups=audio
 RuntimeDirectory=venom
 ConfigurationDirectory=venom
+StateDirectory=venom
 
-# 2 GB Pi: never let the daemon (or a future leak) take the machine down.
-MemoryHigh=200M
-MemoryMax=300M
+# 2 GB Pi: the voice stack (onnxruntime + live session) fits comfortably here,
+# and a leak can never take the machine down.
+MemoryHigh=450M
+MemoryMax=600M
 
 # Hardening — the daemon only reads /proc/asound, probes TCP, and writes /run/venom.
 NoNewPrivileges=true

@@ -101,6 +101,32 @@ class GeminiProvider:
     def vision_models(self) -> tuple[str, ...]:
         return self.models  # Gemini flash models are natively multimodal
 
+    def grounded_search(self, query: str, model: str | None = None,
+                        max_tokens: int = 2048) -> str:
+        """Answer with Google Search grounding — a real web search, not recall."""
+        model = model or self.models[0]
+        payload: dict[str, Any] = {
+            "contents": [{"role": "user", "parts": [{"text": query}]}],
+            "tools": [{"google_search": {}}],
+            "generationConfig": {"maxOutputTokens": max_tokens},
+        }
+        result = self._transport(
+            f"{self.BASE_URL}/models/{model}:generateContent",
+            {"x-goog-api-key": self._key, "Content-Type": "application/json"},
+            payload,
+            self._timeout,
+        )
+        if result.status == 429:
+            raise RateLimitedError(f"gemini/{model}: rate limited")
+        if result.status != 200:
+            raise ProviderError(f"gemini/{model}: HTTP {result.status}: {result.body}")
+        candidates = result.body.get("candidates") or []
+        _require(bool(candidates), f"gemini/{model}: no candidates in response")
+        parts = candidates[0].get("content", {}).get("parts") or []
+        text = "".join(p.get("text", "") for p in parts).strip()
+        _require(bool(text), f"gemini/{model}: empty response text")
+        return text
+
     def complete_vision(
         self,
         prompt: str,

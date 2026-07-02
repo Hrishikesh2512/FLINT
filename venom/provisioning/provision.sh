@@ -28,7 +28,8 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq --no-install-recommends \
     git python3-venv python3-pip \
-    libportaudio2 alsa-utils
+    libportaudio2 alsa-utils \
+    bluez
 
 # ── 3. fetch / update the repo ────────────────────────────────────────────────
 if [ -d "$APP_DIR/.git" ]; then
@@ -39,9 +40,17 @@ else
     git clone --depth 1 --branch "$REPO_BRANCH" "$REPO_URL" "$APP_DIR"
 fi
 
-# ── 4. python environment + venom package ─────────────────────────────────────
+# ── 4. python environment + venom package (with the voice stack) ─────────────
 [ -d "$VENV_DIR" ] || python3 -m venv "$VENV_DIR"
-"$VENV_DIR/bin/pip" install --quiet --upgrade "$APP_DIR/venom"
+"$VENV_DIR/bin/pip" install --quiet --upgrade "$APP_DIR/packages/flint-core"
+"$VENV_DIR/bin/pip" install --quiet --upgrade "$APP_DIR/venom[voice]"
+
+# Pre-download the wake word model so the first boot needs no extra network.
+"$VENV_DIR/bin/python" - <<'PYEOF'
+import openwakeword.utils
+openwakeword.utils.download_models(["hey_jarvis"])
+print("[venom-provision] wake word model cached")
+PYEOF
 
 # ── 5. service account + config ───────────────────────────────────────────────
 id venomd >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin venomd
@@ -50,10 +59,13 @@ usermod -aG audio venomd
 mkdir -p /etc/venom
 if [ ! -f /etc/venom/venom.toml ]; then
     if [ -f "$PROVISION_DIR/venom.toml" ]; then
-        install -m 0644 "$PROVISION_DIR/venom.toml" /etc/venom/venom.toml
+        install -m 0640 -g venomd "$PROVISION_DIR/venom.toml" /etc/venom/venom.toml
     else
-        install -m 0644 "$APP_DIR/venom/provisioning/venom.toml" /etc/venom/venom.toml
+        install -m 0640 -g venomd "$APP_DIR/venom/provisioning/venom.toml" /etc/venom/venom.toml
     fi
+else
+    # keep existing config but tighten perms (it holds the API key)
+    chgrp venomd /etc/venom/venom.toml && chmod 0640 /etc/venom/venom.toml
 fi
 
 # ── 6. install + start the daemon ─────────────────────────────────────────────

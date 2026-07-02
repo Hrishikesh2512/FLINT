@@ -129,3 +129,12 @@ def test_empty_response_raises():
 def test_empty_api_key_rejected():
     with pytest.raises(ProviderError, match="empty"):
         GeminiProvider("")
+
+
+def test_grounded_search_sends_google_search_tool():
+    transport = FakeTransport(gemini_ok("grounded answer"))
+    provider = GeminiProvider("k", transport=transport)
+    assert provider.grounded_search("bitcoin price") == "grounded answer"
+    payload = transport.requests[0]["payload"]
+    assert payload["tools"] == [{"google_search": {}}]
+    assert payload["contents"][0]["parts"][0]["text"] == "bitcoin price"

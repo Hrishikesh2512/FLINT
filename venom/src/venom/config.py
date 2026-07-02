@@ -68,13 +68,34 @@ DEFAULT_CLOUD_CANDIDATES: tuple[BrainCandidate, ...] = (
 
 
 @dataclass(frozen=True)
+class VoiceConfig:
+    enabled: bool = True
+    wake_word: str = "hey_jarvis"      # openWakeWord pretrained model name
+    wake_threshold: float = 0.6        # detection score 0..1
+    inactivity_timeout: float = 45.0   # seconds of silence before session closes
+    live_model: str = "models/gemini-2.5-flash-native-audio-preview-12-2025"
+    voice_name: str = "Leda"
+    user_name: str = "Boss"
+    language: str = "en"
+
+    def __post_init__(self) -> None:
+        if not (0.0 < self.wake_threshold <= 1.0):
+            raise ValueError("wake_threshold must be in (0, 1]")
+        if self.inactivity_timeout <= 0:
+            raise ValueError("inactivity_timeout must be positive")
+
+
+@dataclass(frozen=True)
 class VenomConfig:
     poll_interval: float = 10.0
     probe_timeout: float = 3.0
     status_path: Path = Path("/run/venom/status.json")
+    memory_path: Path = Path("/var/lib/venom/memory.json")
     internet_host: str = "1.1.1.1"
     internet_port: int = 53
+    gemini_api_key: str = ""
     brains: tuple[BrainCandidate, ...] = field(default=DEFAULT_CLOUD_CANDIDATES)
+    voice: VoiceConfig = field(default_factory=VoiceConfig)
 
     def __post_init__(self) -> None:
         if self.poll_interval <= 0:
@@ -83,6 +104,10 @@ class VenomConfig:
             raise ValueError("probe_timeout must be positive")
         if not self.brains:
             raise ValueError("at least one brain candidate is required")
+
+    @property
+    def voice_ready(self) -> bool:
+        return self.voice.enabled and bool(self.gemini_api_key)
 
 
 def _parse_brains(raw: list[dict]) -> tuple[BrainCandidate, ...]:
@@ -111,15 +136,34 @@ def load_config(path: Path | None = None) -> VenomConfig:
 
     venom = data.get("venom", {})
     internet = data.get("internet", {})
+    gemini = data.get("gemini", {})
+    voice = data.get("voice", {})
     raw_brains = data.get("brain", [])
 
     brains = _parse_brains(raw_brains) if raw_brains else DEFAULT_CLOUD_CANDIDATES
 
+    voice_defaults = VoiceConfig()
     return VenomConfig(
         poll_interval=float(venom.get("poll_interval", 10.0)),
         probe_timeout=float(venom.get("probe_timeout", 3.0)),
         status_path=Path(venom.get("status_path", "/run/venom/status.json")),
+        memory_path=Path(venom.get("memory_path", "/var/lib/venom/memory.json")),
         internet_host=str(internet.get("host", "1.1.1.1")),
         internet_port=int(internet.get("port", 53)),
+        gemini_api_key=(
+            os.environ.get("GEMINI_API_KEY", "").strip()
+            or str(gemini.get("api_key", "")).strip()
+        ),
         brains=brains,
+        voice=VoiceConfig(
+            enabled=bool(voice.get("enabled", voice_defaults.enabled)),
+            wake_word=str(voice.get("wake_word", voice_defaults.wake_word)),
+            wake_threshold=float(voice.get("wake_threshold", voice_defaults.wake_threshold)),
+            inactivity_timeout=float(
+                voice.get("inactivity_timeout", voice_defaults.inactivity_timeout)),
+            live_model=str(voice.get("live_model", voice_defaults.live_model)),
+            voice_name=str(voice.get("voice_name", voice_defaults.voice_name)),
+            user_name=str(voice.get("user_name", voice_defaults.user_name)),
+            language=str(voice.get("language", voice_defaults.language)),
+        ),
     )
