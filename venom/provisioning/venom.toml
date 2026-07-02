@@ -1,0 +1,51 @@
+# Venom appliance configuration — installed to /etc/venom/venom.toml on first
+# provision. Edit on the Pi (or before flashing) and `systemctl restart venom`.
+
+[venom]
+poll_interval = 10.0     # seconds between health cycles
+probe_timeout = 3.0      # seconds per reachability probe
+status_path = "/run/venom/status.json"
+
+[internet]
+host = "1.1.1.1"
+port = 53
+
+# ── Brain candidates, lowest priority number wins ────────────────────────────
+# The laptop running the FLINT brain service. Update `host` to your laptop's
+# LAN or Tailscale address. Priority 0 = always preferred when reachable.
+[[brain]]
+name = "laptop"
+host = "192.168.1.50"
+port = 8765
+priority = 0
+
+# Cloud fallbacks (reachability of the provider endpoint).
+[[brain]]
+name = "gemini"
+host = "generativelanguage.googleapis.com"
+port = 443
+priority = 10
+
+[[brain]]
+name = "groq"
+host = "api.groq.com"
+port = 443
+priority = 11
+
+[[brain]]
+name = "openai"
+host = "api.openai.com"
+port = 443
+priority = 12
+
+[[brain]]
+name = "anthropic"
+host = "api.anthropic.com"
+port = 443
+priority = 13
+
+[[brain]]
+name = "openrouter"
+host = "openrouter.ai"
+port = 443
+priority = 14

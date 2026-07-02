@@ -1,0 +1,32 @@
+[Unit]
+Description=Venom — FLINT wearable appliance daemon
+Documentation=https://github.com/Hrishikesh2512/FLINT
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+ExecStart=/opt/venom/venv/bin/python -m venom
+WatchdogSec=90
+Restart=always
+RestartSec=5
+User=venomd
+SupplementaryGroups=audio
+RuntimeDirectory=venom
+ConfigurationDirectory=venom
+
+# 2 GB Pi: never let the daemon (or a future leak) take the machine down.
+MemoryHigh=200M
+MemoryMax=300M
+
+# Hardening — the daemon only reads /proc/asound, probes TCP, and writes /run/venom.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

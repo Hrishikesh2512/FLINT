@@ -1,0 +1,16 @@
+[Unit]
+Description=Venom one-time provisioning (installs the appliance from the network)
+After=network-online.target time-sync.target
+Wants=network-online.target
+# Re-runs on every boot until provision.sh succeeds and disables it.
+ConditionPathExists=!/opt/venom/.provisioned
+
+[Service]
+Type=oneshot
+ExecStart=/opt/venom/provision/provision.sh
+TimeoutStartSec=30min
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target
