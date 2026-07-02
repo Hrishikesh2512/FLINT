@@ -72,20 +72,11 @@ fi
 # If the core imports crash, force-reinstall them fresh and re-verify.
 # A wheelhouse on the boot partition (staged by prepare-pendrive) is used
 # first so the repair works even on a bad connection.
-WHEELS=/boot/firmware/venom/wheels
-if ! "$VENV_DIR/bin/python" -c "import numpy, scipy, onnxruntime, openwakeword" 2>/dev/null; then
+if ! "$VENV_DIR/bin/python" -c "import numpy, scipy, sklearn.linear_model, onnxruntime, openwakeword" 2>/dev/null; then
     log "native libraries broken — force-reinstalling"
-    if [ -d "$WHEELS" ] && "$VENV_DIR/bin/pip" install --quiet --force-reinstall \
-            --no-index --find-links "$WHEELS" "numpy>=1.26,<2.5" "scipy>=1.11"; then
-        log "repaired from local wheelhouse"
-        "$VENV_DIR/bin/python" -c "import numpy, scipy" \
-            || "$VENV_DIR/bin/pip" install --quiet --force-reinstall --no-cache-dir \
-                   "numpy>=1.26,<2.5" "scipy>=1.11"
-    else
-        "$VENV_DIR/bin/pip" install --quiet --force-reinstall --no-cache-dir \
-            "numpy>=1.26,<2.5" "scipy>=1.11"
-    fi
-    "$VENV_DIR/bin/python" -c "import numpy, scipy, onnxruntime, openwakeword" \
+    "$VENV_DIR/bin/pip" install --quiet --force-reinstall --no-cache-dir \
+        "numpy>=1.26,<2.5" "scipy>=1.11" "scikit-learn>=1.3"
+    "$VENV_DIR/bin/python" -c "import numpy, scipy, sklearn.linear_model, onnxruntime, openwakeword" \
         || { log "libraries still broken after reinstall — will retry next boot"; exit 1; }
     log "native libraries repaired"
 fi
