@@ -13,7 +13,10 @@ voice = [
     "requests>=2.31",
     "sounddevice>=0.5",
     "numpy>=1.26",
-    "openwakeword>=0.6",
+    # On Linux, openwakeword hard-requires tflite-runtime, which has no
+    # wheels for modern Python — provision.sh installs it there with
+    # --no-deps instead. Declared only where it resolves cleanly.
+    'openwakeword>=0.6; platform_system == "Windows"',
     "onnxruntime>=1.17",
 ]
 
