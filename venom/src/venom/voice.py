@@ -6,8 +6,12 @@
     │  CPU)      │ ◄─────────── │  + tools)    │ ◄────────────────┘
     └────────────┘              └──────────────┘
 
-Timers keep working while asleep: a due timer chimes immediately and is
-announced at the start of the next conversation.
+Reliability model (learned on real hardware): the Bluetooth headset can
+drop at any moment and never stores its bond; audio streams die silently
+when the device vanishes. So the orchestrator wraps one full lifecycle —
+connect headset → pin mic profile → open streams → chime → listen — and
+any starvation or error tears the whole thing down and starts the cycle
+again. Timers keep working across all of it.
 """
 
 from __future__ import annotations
@@ -25,6 +29,14 @@ from venom.wake import WakeWordDetector
 
 log = logging.getLogger("venom.voice")
 
+# Wake-phase frame starvation: mic callbacks deliver ~15 frames/s; this many
+# consecutive empty seconds means the stream is dead or the headset is gone.
+STARVATION_SECONDS = 12
+
+
+class StreamsDied(Exception):
+    """Audio stopped flowing — rebuild the whole audio lifecycle."""
+
 
 class VoiceOrchestrator:
     def __init__(self, config: VenomConfig):
@@ -33,62 +45,87 @@ class VoiceOrchestrator:
         self.memory = MemoryStore(config.memory_path)
         self.timers = TimerBoard()
         self.registry = build_pi_registry(config, self.memory, self.timers)
-        self._missed_timers: list[str] = []
+        self._detector: WakeWordDetector | None = None
 
     async def run(self) -> None:
+        # The wake model loads once — it survives audio lifecycle rebuilds.
+        self._detector = WakeWordDetector(self.config.voice.wake_word,
+                                          self.config.voice.wake_threshold)
+        await asyncio.to_thread(self._detector.load)
+
+        first_cycle = True
+        while True:
+            try:
+                await self._audio_lifecycle(first_cycle)
+            except StreamsDied as exc:
+                log.warning("audio lifecycle ended: %s — rebuilding", exc)
+            except Exception:
+                log.exception("audio lifecycle crashed — rebuilding")
+            first_cycle = False
+            self.state = "reconnecting"
+            await asyncio.sleep(3)
+
+    # ── one full audio lifecycle: headset → streams → listen loop ────────────
+    async def _audio_lifecycle(self, first_cycle: bool) -> None:
         loop = asyncio.get_running_loop()
 
         if self.config.audio.use_bluetooth:
+            from venom.audio.routing import pin_bluetooth_audio
             from venom.btaudio import BluetoothHeadset
 
-            self.state = "pairing bluetooth headset"
+            self.state = "connecting bluetooth headset"
             headset = BluetoothHeadset(self.config.audio.bluetooth_mac,
                                        self.config.audio.bluetooth_name)
             while not await asyncio.to_thread(headset.wait_for_connection):
-                log.warning("bluetooth headset not connected yet — "
-                            "put it in pairing mode; retrying in 15s")
-                await asyncio.sleep(15)
+                log.warning("headset not connected — put it in pairing mode; retrying")
+                self.state = "waiting for headset (pairing mode)"
+                await asyncio.sleep(10)
+
+            # The mic only exists in the HFP profile — pin it every connect.
+            self.state = "activating headset microphone"
+            if not await asyncio.to_thread(pin_bluetooth_audio):
+                log.warning("no bluetooth microphone appeared — audio may be one-way")
 
         pick = current_devices(bluetooth=self.config.audio.use_bluetooth)
         log.info("audio devices — mic: %s, speaker: %s", pick.input_name, pick.output_name)
 
         speaker = SpeakerStream(pick)
-        speaker.start()
         mic = MicStream(pick, loop)
+        speaker.start()
         mic.start()
-
-        detector = WakeWordDetector(self.config.voice.wake_word,
-                                    self.config.voice.wake_threshold)
-        await asyncio.to_thread(detector.load)
-
-        chime(speaker)  # audible "Venom is up" on boot
         try:
+            chime(speaker)  # audible on every (re)connect: "Venom hears you"
             while True:
                 self.state = "wake"
-                await self._wake_phase(mic, speaker, detector)
+                await self._wake_phase(mic, speaker)
                 self.state = "conversation"
                 chime(speaker)
                 chime(speaker, frequency=1320.0)
                 await self._conversation_phase(mic, speaker)
-                detector.reset()
+                self._detector.reset()
         finally:
-            self.state = "stopped"
             mic.stop()
             speaker.stop()
 
-    async def _wake_phase(self, mic: MicStream, speaker: SpeakerStream,
-                          detector: WakeWordDetector) -> None:
+    async def _wake_phase(self, mic: MicStream, speaker: SpeakerStream) -> None:
+        starved = 0.0
         while True:
             for timer in self.timers.pop_due():
                 chime(speaker)
                 chime(speaker, frequency=1100.0)
-                self._missed_timers.append(timer.label)
+                self.timers.add(0, f"(already finished) {timer.label}")
                 log.info("timer fired while asleep: %s", timer.label)
             try:
                 frame = await asyncio.wait_for(mic.frames.get(), timeout=1.0)
+                starved = 0.0
             except TimeoutError:
+                starved += 1.0
+                if starved >= STARVATION_SECONDS:
+                    raise StreamsDied(
+                        f"no mic audio for {STARVATION_SECONDS}s (headset gone?)"
+                    ) from None
                 continue
-            if await asyncio.to_thread(detector.feed, frame):
+            if await asyncio.to_thread(self._detector.feed, frame):
                 log.info("wake word detected")
                 self._drain(mic)
                 return
@@ -96,11 +133,6 @@ class VoiceOrchestrator:
     async def _conversation_phase(self, mic: MicStream, speaker: SpeakerStream) -> None:
         session = LiveSession(self.config, self.registry, self.memory,
                               self.timers, mic.frames, speaker)
-        if self._missed_timers:
-            labels = ", ".join(self._missed_timers)
-            self._missed_timers.clear()
-            for label in labels.split(", "):
-                self.timers.add(0, f"(already finished) {label}")
         try:
             await session.run()
         except Exception:
