@@ -63,7 +63,27 @@ fi
 # install it without dependency resolution and supply the real ones.
 "$VENV_DIR/bin/pip" install --quiet --no-deps "openwakeword>=0.6"
 "$VENV_DIR/bin/pip" install --quiet "onnxruntime>=1.17" "numpy>=1.26,<2.5" \
-    "tqdm>=4.64" "scipy>=1.11" "scikit-learn>=1.3" "requests>=2.31"
+    "tqdm>=4.64" "scipy>=1.11" "requests>=2.31"
+
+# Venom never trains custom verifier models, and that (unused) corner of
+# openwakeword drags in scikit-learn, which won't import on this fresh
+# Python/OS combination. Make the import optional instead of fighting it.
+"$VENV_DIR/bin/python" - <<'PYEOF'
+from pathlib import Path
+import sys
+init = next(Path(sys.prefix, "lib").glob("python3.*/site-packages/openwakeword/__init__.py"))
+text = init.read_text()
+target = "from openwakeword.custom_verifier_model import train_custom_verifier"
+if target in text and "except Exception" not in text.split(target)[1][:60]:
+    text = text.replace(
+        target,
+        "try:\n    " + target + "\nexcept Exception:\n    train_custom_verifier = None",
+    )
+    init.write_text(text)
+    print("[venom-provision] openwakeword: custom-verifier import made optional")
+else:
+    print("[venom-provision] openwakeword: import already optional")
+PYEOF
 
 "$VENV_DIR/bin/pip" install --quiet --upgrade "$APP_DIR/venom[voice]"
 
@@ -72,11 +92,11 @@ fi
 # If the core imports crash, force-reinstall them fresh and re-verify.
 # A wheelhouse on the boot partition (staged by prepare-pendrive) is used
 # first so the repair works even on a bad connection.
-if ! "$VENV_DIR/bin/python" -c "import numpy, scipy, sklearn.linear_model, onnxruntime, openwakeword" 2>/dev/null; then
+if ! "$VENV_DIR/bin/python" -c "import numpy, scipy, onnxruntime, openwakeword" 2>/dev/null; then
     log "native libraries broken — force-reinstalling"
     "$VENV_DIR/bin/pip" install --quiet --force-reinstall --no-cache-dir \
-        "numpy>=1.26,<2.5" "scipy>=1.11" "scikit-learn>=1.3"
-    "$VENV_DIR/bin/python" -c "import numpy, scipy, sklearn.linear_model, onnxruntime, openwakeword" \
+        "numpy>=1.26,<2.5" "scipy>=1.11"
+    "$VENV_DIR/bin/python" -c "import numpy, scipy, onnxruntime, openwakeword" \
         || { log "libraries still broken after reinstall — will retry next boot"; exit 1; }
     log "native libraries repaired"
 fi
