@@ -23,9 +23,12 @@ dispatch table, the planner's tool documentation, and platform gating.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from typing import Any
+
+log = logging.getLogger("flint.tools")
 
 ANY_PLATFORM = "any"
 
@@ -37,6 +40,23 @@ _JSON_TYPES = {
     "array": list,
     "object": dict,
 }
+
+
+def _uppercase_schema_types(schema: dict[str, Any]) -> dict[str, Any]:
+    """Deep-copy a JSON schema with "type" values uppercased (Live API proto form)."""
+    out: dict[str, Any] = {}
+    for key, value in schema.items():
+        if key == "type" and isinstance(value, str):
+            out[key] = value.upper()
+        elif isinstance(value, dict):
+            out[key] = _uppercase_schema_types(value)
+        elif isinstance(value, list):
+            out[key] = [
+                _uppercase_schema_types(v) if isinstance(v, dict) else v for v in value
+            ]
+        else:
+            out[key] = value
+    return out
 
 
 class ToolError(Exception):
@@ -58,6 +78,9 @@ class ToolSpec:
     parameters: dict[str, Any]  # JSON schema ({} => no parameters)
     handler: Callable[..., Any]
     platforms: tuple[str, ...] = (ANY_PLATFORM,)
+    # "kwargs": handler(**args)   "parameters": handler(parameters=args)
+    # — the latter bridges legacy actions that take one params dict.
+    arg_style: str = "kwargs"
 
     def __post_init__(self) -> None:
         if not self.name.isidentifier():
@@ -66,11 +89,19 @@ class ToolSpec:
             raise ToolError(f"tool {self.name!r} needs a description")
         if self.parameters and self.parameters.get("type") != "object":
             raise ToolError(f"tool {self.name!r}: parameters schema must be type=object")
+        if self.arg_style not in ("kwargs", "parameters"):
+            raise ToolError(f"tool {self.name!r}: invalid arg_style {self.arg_style!r}")
 
     def available_on(self, platform: str) -> bool:
         return ANY_PLATFORM in self.platforms or platform in self.platforms
 
-    def validate_args(self, args: dict[str, Any]) -> None:
+    def sanitize_args(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Enforce the schema; returns the cleaned args.
+
+        LLM callers routinely invent extra arguments — those are dropped with
+        a warning rather than failing the call. Missing required arguments
+        and wrong types are hard errors (the caller planned wrong).
+        """
         properties: dict = self.parameters.get("properties", {}) if self.parameters else {}
         required: list = self.parameters.get("required", []) if self.parameters else []
 
@@ -80,9 +111,10 @@ class ToolSpec:
 
         unknown = [key for key in args if key not in properties]
         if unknown:
-            raise InvalidArgumentsError(f"{self.name}: unknown argument(s): {unknown}")
+            log.warning("%s: dropping unknown argument(s): %s", self.name, unknown)
 
-        for key, value in args.items():
+        cleaned = {key: value for key, value in args.items() if key in properties}
+        for key, value in cleaned.items():
             if value is None:
                 continue
             expected = _JSON_TYPES.get(properties[key].get("type", ""))
@@ -91,6 +123,7 @@ class ToolSpec:
                     f"{self.name}: argument {key!r} should be "
                     f"{properties[key]['type']}, got {type(value).__name__}"
                 )
+        return cleaned
 
 
 class ToolRegistry:
@@ -111,6 +144,7 @@ class ToolRegistry:
         description: str | None = None,
         parameters: dict[str, Any] | None = None,
         platforms: tuple[str, ...] = (ANY_PLATFORM,),
+        arg_style: str = "kwargs",
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             self.register(
@@ -120,6 +154,7 @@ class ToolRegistry:
                     parameters=parameters or {},
                     handler=func,
                     platforms=platforms,
+                    arg_style=arg_style,
                 )
             )
             return func
@@ -155,8 +190,7 @@ class ToolRegistry:
         without every tool having to declare it.
         """
         spec = self.get(name)
-        args = dict(args or {})
-        spec.validate_args(args)
+        args = spec.sanitize_args(dict(args or {}))
         if extra:
             import inspect
 
@@ -166,16 +200,27 @@ class ToolRegistry:
             )
             if not has_var_kw:
                 extra = {k: v for k, v in extra.items() if k in accepted}
+        if spec.arg_style == "parameters":
+            return spec.handler(parameters=args, **extra)
         return spec.handler(**args, **extra)
 
     # ── model-facing schemas ─────────────────────────────────────────────────
-    def gemini_declarations(self, platform: str | None = None) -> list[dict[str, Any]]:
-        """function_declarations for the Gemini (Live) API."""
+    def gemini_declarations(
+        self, platform: str | None = None, *, uppercase_types: bool = False
+    ) -> list[dict[str, Any]]:
+        """function_declarations for the Gemini API.
+
+        uppercase_types=True emits "OBJECT"/"STRING"-style type names, the
+        form the Live API's Schema proto validates against.
+        """
         out = []
         for spec in self._for_platform(platform):
             decl: dict[str, Any] = {"name": spec.name, "description": spec.description}
             if spec.parameters:
-                decl["parameters"] = spec.parameters
+                schema = spec.parameters
+                if uppercase_types:
+                    schema = _uppercase_schema_types(schema)
+                decl["parameters"] = schema
             out.append(decl)
         return out
 
@@ -194,10 +239,14 @@ class ToolRegistry:
             for spec in self._for_platform(platform)
         ]
 
-    def planner_documentation(self, platform: str | None = None) -> str:
+    def planner_documentation(
+        self, platform: str | None = None, exclude: tuple[str, ...] = ()
+    ) -> str:
         """Human/planner-readable tool list — generated, never hand-written."""
         blocks = []
         for spec in self._for_platform(platform):
+            if spec.name in exclude:
+                continue
             lines = [f"{spec.name}", f"  {spec.description}"]
             properties = spec.parameters.get("properties", {}) if spec.parameters else {}
             required = set(spec.parameters.get("required", [])) if spec.parameters else set()

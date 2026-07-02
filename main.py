@@ -25,6 +25,7 @@ from google.genai import types
 from ui import FlintUI
 from core import i18n as _i18n
 from core.tool_registry import TOOL_DECLARATIONS
+from core.tools import EMPTY_RESULT_FALLBACKS, get_registry
 from core.async_pipeline import get_pipeline, Priority
 from core.ws_listener import get_listener
 from core.cloud_bridge import get_bridge
@@ -32,22 +33,6 @@ from memory.memory_manager import (
     load_memory, update_memory, format_memory_for_prompt,
     should_extract_memory, extract_memory,
 )
-
-from actions.file_processor   import file_processor
-from actions.open_app         import open_app
-from actions.weather_report   import weather_action
-from actions.send_message     import send_message
-from actions.reminder         import reminder
-from actions.computer_settings import computer_settings
-from actions.screen_processor import screen_process
-from actions.youtube_video    import youtube_video
-from actions.desktop          import desktop_control
-from actions.browser_control  import browser_control
-from actions.file_controller  import file_controller
-from actions.code_helper      import code_helper
-from actions.dev_agent        import dev_agent
-from actions.web_search       import web_search as web_search_action
-from actions.computer_control import computer_control
 
 
 def get_base_dir():
@@ -205,65 +190,17 @@ class FlintLive:
         self._speaking_lock = threading.Lock()
         self._reply_lock    = threading.Lock()
         self._pending_replies: list = []     # remote clients awaiting a reply
-        self._handlers      = self._build_handlers()
+        self.registry       = get_registry()
         self.ui.on_text_command = self._on_text_command
 
-    # ── tool dispatch table ───────────────────────────────────────────────────
-    def _build_handlers(self) -> dict:
-        """name → callable(args) executed on a pipeline worker thread."""
-        ui = self.ui
-
-        def _file_processor(a):
-            if not a.get("file_path") and ui.current_file:
-                a["file_path"] = ui.current_file
-            return file_processor(parameters=a, player=ui, speak=self.speak)
-
-        def _screen(a):
-            screen_process(parameters=a, response=None, player=ui,
-                           session_memory=None)
-            return ("Vision module activated. Stay completely silent — "
-                    "vision module will speak directly.")
-
-        def _agent_task(a):
-            from agent.task_queue import get_queue, TaskPriority
-            pr = {"low": TaskPriority.LOW, "normal": TaskPriority.NORMAL,
-                  "high": TaskPriority.HIGH}.get(
-                      str(a.get("priority", "normal")).lower(),
-                      TaskPriority.NORMAL)
-            task_id = get_queue().submit(goal=a.get("goal", ""), priority=pr,
-                                         speak=self.speak)
-            return f"Task started (ID: {task_id})."
-
-        return {
-            # NB: the actions below return their own accurate status strings;
-            # the fallbacks must never assert success the action didn't claim
-            "open_app":          lambda a: open_app(parameters=a, response=None, player=ui)
-                                           or f"No status returned for opening {a.get('app_name')}.",
-            "weather_report":    lambda a: weather_action(parameters=a, player=ui)
-                                           or "Weather delivered.",
-            "browser_control":   lambda a: browser_control(parameters=a, player=ui) or "Done.",
-            "file_controller":   lambda a: file_controller(parameters=a, player=ui) or "Done.",
-            "send_message":      lambda a: send_message(parameters=a, response=None, player=ui,
-                                                        session_memory=None)
-                                           or ("Message status unknown — could not confirm "
-                                               "it was sent."),
-            "reminder":          lambda a: reminder(parameters=a, response=None, player=ui)
-                                           or "Reminder set.",
-            "youtube_video":     lambda a: youtube_video(parameters=a, response=None, player=ui)
-                                           or "Done.",
-            "computer_settings": lambda a: computer_settings(parameters=a, response=None,
-                                                             player=ui) or "Done.",
-            "desktop_control":   lambda a: desktop_control(parameters=a, player=ui) or "Done.",
-            "code_helper":       lambda a: code_helper(parameters=a, player=ui,
-                                                       speak=self.speak) or "Done.",
-            "dev_agent":         lambda a: dev_agent(parameters=a, player=ui,
-                                                     speak=self.speak) or "Done.",
-            "web_search":        lambda a: web_search_action(parameters=a, player=ui) or "Done.",
-            "computer_control":  lambda a: computer_control(parameters=a, player=ui) or "Done.",
-            "file_processor":    _file_processor,
-            "screen_process":    _screen,
-            "agent_task":        _agent_task,
-        }
+    # ── tool dispatch (shared registry) ───────────────────────────────────────
+    def _dispatch_tool(self, name: str, args: dict) -> str:
+        """Runs on a pipeline worker thread; the registry validates args,
+        lazily imports the action, and forwards the UI/speak context."""
+        result = self.registry.dispatch(
+            name, args, player=self.ui, speak=self.speak)
+        # Fallbacks never assert success an action didn't claim.
+        return result or EMPTY_RESULT_FALLBACKS.get(name, "Done.")
 
     # ── remote (smartphone) bridge ───────────────────────────────────────────
     def start_remote_listener(self):
@@ -397,13 +334,12 @@ class FlintLive:
             return types.FunctionResponse(
                 id=fc.id, name=name, response={"result": "Shutting down."})
 
-        handler = self._handlers.get(name)
-        if handler is None:
+        if name not in self.registry:
             result = f"Unknown tool: {name}"
         else:
             # off to a worker thread — the session loop and Qt frame stay live
-            job = self.pipeline.submit(f"tool:{name}", handler, args,
-                                       priority=Priority.HIGH)
+            job = self.pipeline.submit(f"tool:{name}", self._dispatch_tool,
+                                       name, args, priority=Priority.HIGH)
             try:
                 result = await asyncio.wrap_future(job.future) or "Done."
             except Exception as e:

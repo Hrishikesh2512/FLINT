@@ -1,67 +1,97 @@
-"""Cross-checks between the tool registry, the agent executor, and the planner.
+"""Guards for the single-source tool system.
 
-These guard against the drift that plagued v1 (tools declared in one place but
-unhandled in another). They intentionally avoid importing main.py / ui.py,
-which require a display and audio hardware.
+core/tools.py is the only place tools are defined; these tests verify that
+everything downstream (Live declarations, planner docs, dispatch) is derived
+from it and stays coherent — the drift that plagued v1 cannot recur silently.
 """
 
-import re
+import sys
 
+import pytest
+
+from agent import planner
 from core.tool_registry import TOOL_DECLARATIONS
-from agent import executor, planner
+from core.tools import EMPTY_RESULT_FALLBACKS, PLANNER_HIDDEN, get_registry
+from flint_core.tools import InvalidArgumentsError, UnknownToolError
+
+EXPECTED_TOOLS = {
+    "open_app", "web_search", "weather_report", "send_message", "reminder",
+    "youtube_video", "screen_process", "computer_settings", "browser_control",
+    "file_controller", "desktop_control", "code_helper", "dev_agent",
+    "agent_task", "computer_control", "file_processor", "shutdown_flint",
+    "save_memory",
+}
 
 
-def _registry_names() -> set[str]:
-    return {tool["name"] for tool in TOOL_DECLARATIONS}
+def test_registry_defines_the_expected_toolset():
+    assert set(get_registry().names()) == EXPECTED_TOOLS
 
 
-def _executor_dispatch_names() -> set[str]:
-    """Tool names the executor's _call_tool dispatch chain handles."""
-    import inspect
-
-    src = inspect.getsource(executor._call_tool)
-    return set(re.findall(r'tool == "([a-z_]+)"', src))
+def test_importing_tools_does_not_import_action_modules():
+    # Lazy imports keep startup light and CI free of pyautogui/cv2/playwright.
+    heavy = [m for m in sys.modules if m.startswith("actions.")]
+    assert heavy == [], f"actions imported eagerly: {heavy}"
 
 
-def test_registry_has_no_duplicate_tools():
-    names = [tool["name"] for tool in TOOL_DECLARATIONS]
-    assert len(names) == len(set(names))
+def test_live_declarations_derived_from_registry():
+    decls = {d["name"]: d for d in TOOL_DECLARATIONS}
+    assert set(decls) == EXPECTED_TOOLS
+    # Live API proto form: uppercase type names all the way down.
+    schema = decls["open_app"]["parameters"]
+    assert schema["type"] == "OBJECT"
+    assert schema["properties"]["app_name"]["type"] == "STRING"
+    assert decls["web_search"]["parameters"]["properties"]["items"]["type"] == "ARRAY"
 
 
-def test_every_declared_tool_has_schema():
-    for tool in TOOL_DECLARATIONS:
-        assert tool["description"].strip()
-        assert "properties" in tool["parameters"] or tool["parameters"] == {}
-
-
-def test_executor_dispatch_only_uses_registered_tools():
-    # Everything the executor can run must be a declared tool the model
-    # could also call directly. (The reverse is not required: some tools —
-    # screen_process's silent mode, agent_task itself, save_memory,
-    # shutdown_flint, file_processor — are live-session-only.)
-    live_session_only = {"agent_task", "save_memory", "shutdown_flint", "file_processor"}
-    assert _executor_dispatch_names() <= _registry_names() - live_session_only
-
-
-def test_planner_prompt_only_references_registered_tools():
-    # Tool sections in the planner prompt appear as a name on its own line
-    # followed by an indented parameter list.
-    prompt_tools = set(
-        re.findall(r"^([a-z_]+)\n  ", planner.PLANNER_PROMPT, flags=re.MULTILINE)
+def test_live_declarations_validate_against_gemini_sdk():
+    genai_types = pytest.importorskip("google.genai.types")
+    # If the SDK's Schema proto rejects our declarations, the live session
+    # would fail at connect time — catch that here instead.
+    config = genai_types.LiveConnectConfig(
+        response_modalities=["AUDIO"],
+        tools=[{"function_declarations": TOOL_DECLARATIONS}],
     )
-    unknown = prompt_tools - _registry_names()
-    assert not unknown, f"Planner prompt references unregistered tools: {unknown}"
+    assert config.tools
 
 
-def test_removed_tools_are_gone_everywhere():
+def test_planner_prompt_contains_generated_docs_only():
+    prompt = planner.planner_prompt()
+    for name in EXPECTED_TOOLS - set(PLANNER_HIDDEN):
+        assert name in prompt, f"{name} missing from planner docs"
+    for name in PLANNER_HIDDEN:
+        assert f"\n{name}\n" not in prompt, f"hidden tool {name} leaked into planner docs"
+    assert "<TOOL_DOCS>" not in prompt
+
+
+def test_executor_dispatch_rejects_unknown_tool():
+    from agent.executor import _call_tool
+
+    with pytest.raises(UnknownToolError):
+        _call_tool("definitely_not_a_tool", {}, None)
+
+
+def test_dispatch_validates_required_args():
+    with pytest.raises(InvalidArgumentsError, match="app_name"):
+        get_registry().dispatch("open_app", {})
+
+
+def test_save_memory_dispatch_round_trip(tmp_path, monkeypatch):
+    from memory import memory_manager as mm
+
+    monkeypatch.setattr(mm, "MEMORY_PATH", tmp_path / "long_term.json")
+    result = get_registry().dispatch(
+        "save_memory",
+        {"category": "preferences", "key": "editor", "value": "VS Code"},
+    )
+    assert result == "ok"
+    assert mm.load_memory()["preferences"]["editor"]["value"] == "VS Code"
+
+
+def test_fallbacks_only_reference_registered_tools():
+    assert set(EMPTY_RESULT_FALLBACKS) <= EXPECTED_TOOLS
+
+
+def test_removed_v1_tools_stay_gone():
     removed = {"game_updater", "flight_finder", "cmd_control", "generated_code"}
-    assert not removed & _registry_names()
-    assert not removed & _executor_dispatch_names()
-    assert not any(name in planner.PLANNER_PROMPT for name in removed)
-
-
-def test_executor_rejects_unknown_tool():
-    import pytest
-
-    with pytest.raises(ValueError, match="Unknown tool"):
-        executor._call_tool("definitely_not_a_tool", {}, None)
+    assert not removed & set(get_registry().names())
+    assert not any(name in planner.planner_prompt() for name in removed)

@@ -52,9 +52,9 @@ def test_missing_required_argument(registry):
         registry.dispatch("weather_report", {})
 
 
-def test_unknown_argument_rejected(registry):
-    with pytest.raises(InvalidArgumentsError, match="unknown argument"):
-        registry.dispatch("weather_report", {"city": "Pune", "bogus": 1})
+def test_unknown_argument_dropped_not_fatal(registry):
+    # LLMs invent extra args; those are dropped, the call still succeeds.
+    assert registry.dispatch("weather_report", {"city": "Pune", "bogus": 1}) == "Pune:1"
 
 
 def test_wrong_type_rejected(registry):
@@ -96,6 +96,45 @@ def test_gemini_declarations(registry):
     decls = {d["name"]: d for d in registry.gemini_declarations()}
     assert decls["weather_report"]["parameters"] == WEATHER_SCHEMA
     assert "parameters" not in decls["click_stuff"]
+
+
+def test_gemini_declarations_uppercase_for_live_api(registry):
+    decls = {d["name"]: d for d in registry.gemini_declarations(uppercase_types=True)}
+    schema = decls["weather_report"]["parameters"]
+    assert schema["type"] == "OBJECT"
+    assert schema["properties"]["city"]["type"] == "STRING"
+    assert schema["properties"]["days"]["type"] == "INTEGER"
+    # source schema untouched (deep copy)
+    assert WEATHER_SCHEMA["type"] == "object"
+
+
+def test_parameters_arg_style_bridges_legacy_actions():
+    reg = ToolRegistry()
+
+    @reg.tool(
+        description="legacy-style action",
+        parameters=WEATHER_SCHEMA,
+        arg_style="parameters",
+    )
+    def legacy_action(parameters=None, player=None):
+        return f"{parameters['city']}|player={player}"
+
+    assert reg.dispatch("legacy_action", {"city": "Pune"}, player="UI") == "Pune|player=UI"
+
+
+def test_planner_documentation_exclude():
+    reg = ToolRegistry()
+
+    @reg.tool(description="visible tool")
+    def alpha():
+        pass
+
+    @reg.tool(description="hidden tool")
+    def beta():
+        pass
+
+    doc = reg.planner_documentation(exclude=("beta",))
+    assert "alpha" in doc and "beta" not in doc
 
 
 def test_openai_tools_format(registry):

@@ -1,7 +1,7 @@
 from core.llm import get_gateway
+from core.tools import PLANNER_HIDDEN, get_registry
 
-
-PLANNER_PROMPT = """You are the planning module of FLINT, a personal AI assistant.
+PLANNER_PROMPT_TEMPLATE = """You are the planning module of FLINT, a personal AI assistant.
 Your job: break any user goal into a sequence of steps using ONLY the tools listed below.
 
 ABSOLUTE RULES:
@@ -14,78 +14,8 @@ ABSOLUTE RULES:
 
 AVAILABLE TOOLS AND THEIR PARAMETERS:
 
-open_app
-  app_name: string (required)
+<TOOL_DOCS>
 
-web_search
-  query: string (required) — write a clear, focused search query
-  mode: "search" or "compare" (optional, default: search)
-  items: list of strings (optional, for compare mode)
-  aspect: string (optional, for compare mode)
-
-browser_control
-  action: "go_to" | "search" | "click" | "type" | "scroll" | "get_text" | "press" | "close" (required)
-  url: string (for go_to)
-  query: string (for search)
-  text: string (for click/type)
-  direction: "up" | "down" (for scroll)
-
-file_controller
-  action: "write" | "create_file" | "read" | "list" | "delete" | "move" | "copy" | "find" | "disk_usage" (required)
-  path: string — use "desktop" for Desktop folder
-  name: string — filename
-  content: string — file content (for write/create_file)
-
-computer_settings
-  action: string (required)
-  description: string — natural language description
-  value: string (optional)
-
-computer_control
-  action: "type" | "click" | "hotkey" | "press" | "scroll" | "screenshot" | "screen_find" | "screen_click" (required)
-  text: string (for type)
-  x, y: int (for click)
-  keys: string (for hotkey, e.g. "ctrl+c")
-  key: string (for press)
-  direction: "up" | "down" (for scroll)
-  description: string (for screen_find/screen_click)
-
-screen_process
-  text: string (required) — what to analyze or ask about the screen
-  angle: "screen" | "camera" (optional)
-
-send_message
-  receiver: string (required)
-  message_text: string (required)
-  platform: string (required)
-
-reminder
-  date: string YYYY-MM-DD (required)
-  time: string HH:MM (required)
-  message: string (required)
-
-desktop_control
-  action: "wallpaper" | "organize" | "clean" | "list" | "task" (required)
-  path: string (optional)
-  task: string (optional)
-
-youtube_video
-  action: "play" | "summarize" | "trending" (required)
-  query: string (for play)
-
-weather_report
-  city: string (required)
-
-code_helper
-  action: "write" | "edit" | "run" | "explain" (required)
-  description: string (required)
-  language: string (optional)
-  output_path: string (optional)
-  file_path: string (optional)
-
-dev_agent
-  description: string (required)
-  language: string (optional)
 EXAMPLES:
 
 Goal: "research mechanical engineering and save it to a notepad file"
@@ -133,6 +63,13 @@ OUTPUT — return ONLY valid JSON, no markdown, no explanation, no code blocks:
 """
 
 
+def planner_prompt() -> str:
+    """The planner system prompt with the tool list generated live from the
+    registry — the docs can never drift from what's actually dispatchable."""
+    docs = get_registry().planner_documentation(exclude=PLANNER_HIDDEN)
+    return PLANNER_PROMPT_TEMPLATE.replace("<TOOL_DOCS>", docs)
+
+
 def create_plan(goal: str, context: str = "") -> dict:
     user_input = f"Goal: {goal}"
     if context:
@@ -140,7 +77,7 @@ def create_plan(goal: str, context: str = "") -> dict:
 
     try:
         plan = get_gateway().chat_json(
-            user_input, system=PLANNER_PROMPT,
+            user_input, system=planner_prompt(),
             model="gemini-2.5-flash-lite", temperature=0.2,
         )
 
@@ -190,7 +127,7 @@ Error: {error}
 Create a REVISED plan for the remaining work only. Do not repeat completed steps."""
 
     try:
-        plan = get_gateway().chat_json(prompt, system=PLANNER_PROMPT, temperature=0.2)
+        plan = get_gateway().chat_json(prompt, system=planner_prompt(), temperature=0.2)
 
         print(f"[Planner] 🔄 Revised plan: {len(plan['steps'])} steps")
         return plan
