@@ -147,22 +147,21 @@ def _get_transcript(video_id: str) -> str | None:
 
 
 def _summarize_with_gemini(transcript: str, video_url: str) -> str:
-    from or_client import client
+    from core.llm import get_gateway
 
     max_chars = 80000
     truncated = transcript[:max_chars] + ("..." if len(transcript) > max_chars else "")
 
-    return client.chat(
+    return get_gateway().chat(
         f"Please summarize this YouTube video transcript:\n\n{truncated}",
         system=(
             "You are FLINT, an AI assistant. "
             "Summarize YouTube video transcripts clearly and concisely. "
             "Structure: 1-sentence overview, then 3-5 key points. "
-            "Be direct. Address the user as 'sir'. "
-            "Match the language of the transcript."
+            "Be direct. Match the language of the transcript."
         ),
         max_tokens=2048,
-    )
+    ).text
 
 
 def _save_summary(content: str, video_url: str) -> str:

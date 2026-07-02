@@ -139,11 +139,11 @@ def update_memory(memory_update: dict) -> dict:
 
 def should_extract_memory(user_text: str, flint_text: str, api_key: str = "") -> bool:
     try:
-        from or_client import client
+        from core.llm import get_gateway
 
         combined = f"User: {user_text[:300]}\nFlint: {flint_text[:1000]}"
 
-        result = client.chat(
+        result = get_gateway().chat(
             f"Does this conversation contain ANY of the following?\n"
             f"- Personal facts (name, age, city, job, birthday, nationality)\n"
             f"- Preferences or favorites (food, color, music, sport, game, film, book, etc.)\n"
@@ -156,7 +156,7 @@ def should_extract_memory(user_text: str, flint_text: str, api_key: str = "") ->
             max_tokens=5,
             temperature=0.0,
         )
-        return "YES" in result.upper()
+        return "YES" in result.text.upper()
 
     except Exception as e:
         print(f"[Memory] ⚠️ Stage1 check failed: {e}")
@@ -165,11 +165,11 @@ def should_extract_memory(user_text: str, flint_text: str, api_key: str = "") ->
 
 def extract_memory(user_text: str, flint_text: str, api_key: str = "") -> dict:
     try:
-        from or_client import client
+        from core.llm import get_gateway
 
         combined = f"User: {user_text[:600]}\nFlint: {flint_text[:300]}"
 
-        raw = client.chat(
+        raw = get_gateway().chat(
             f"Extract ALL memorable personal facts from this conversation. Any language.\n"
             f"Return ONLY valid JSON. Use {{}} if truly nothing is worth saving.\n\n"
             f"Category guide:\n"
@@ -200,9 +200,10 @@ def extract_memory(user_text: str, flint_text: str, api_key: str = "") -> dict:
             system="Return ONLY valid JSON. No markdown, no explanation, no extra text.",
             max_tokens=1024,
             temperature=0.2,
+            json_mode=True,
         )
 
-        clean = raw.strip()
+        clean = raw.text.strip()
         clean = re.sub(r"```(?:json)?", "", clean).strip().rstrip("`").strip()
 
         if not clean or clean == "{}":

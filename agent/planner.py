@@ -1,17 +1,4 @@
-import json
-import re
-import sys
-from pathlib import Path
-
-
-def get_base_dir() -> Path:
-    if getattr(sys, "frozen", False):
-        return Path(sys.executable).parent
-    return Path(__file__).resolve().parent.parent
-
-
-BASE_DIR        = get_base_dir()
-API_CONFIG_PATH = BASE_DIR / "config" / "api_keys.json"
+from core.llm import get_gateway
 
 
 PLANNER_PROMPT = """You are the planning module of FLINT, a personal AI assistant.
@@ -146,30 +133,16 @@ OUTPUT — return ONLY valid JSON, no markdown, no explanation, no code blocks:
 """
 
 
-def _get_api_key() -> str:
-    with open(API_CONFIG_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)["gemini_api_key"]
-
-
 def create_plan(goal: str, context: str = "") -> dict:
-    import google.generativeai as genai
-
-    genai.configure(api_key=_get_api_key())
-    model = genai.GenerativeModel(
-        model_name="gemini-2.5-flash-lite",
-        system_instruction=PLANNER_PROMPT
-    )
-
     user_input = f"Goal: {goal}"
     if context:
         user_input += f"\n\nContext: {context}"
 
     try:
-        response = model.generate_content(user_input)
-        text     = response.text.strip()
-        text     = re.sub(r"```(?:json)?", "", text).strip().rstrip("`").strip()
-
-        plan = json.loads(text)
+        plan = get_gateway().chat_json(
+            user_input, system=PLANNER_PROMPT,
+            model="gemini-2.5-flash-lite", temperature=0.2,
+        )
 
         if "steps" not in plan or not isinstance(plan["steps"], list):
             raise ValueError("Invalid plan structure")
@@ -180,9 +153,6 @@ def create_plan(goal: str, context: str = "") -> dict:
 
         return plan
 
-    except json.JSONDecodeError as e:
-        print(f"[Planner] ⚠️ JSON parse failed: {e}")
-        return _fallback_plan(goal)
     except Exception as e:
         print(f"[Planner] ⚠️ Planning failed: {e}")
         return _fallback_plan(goal)
@@ -205,14 +175,6 @@ def _fallback_plan(goal: str) -> dict:
 
 
 def replan(goal: str, completed_steps: list, failed_step: dict, error: str) -> dict:
-    import google.generativeai as genai
-
-    genai.configure(api_key=_get_api_key())
-    model = genai.GenerativeModel(
-        model_name="gemini-2.5-flash",
-        system_instruction=PLANNER_PROMPT
-    )
-
     completed_summary = "\n".join(
         f"  - Step {s['step']} ({s['tool']}): DONE" for s in completed_steps
     )
@@ -228,10 +190,7 @@ Error: {error}
 Create a REVISED plan for the remaining work only. Do not repeat completed steps."""
 
     try:
-        response = model.generate_content(prompt)
-        text     = response.text.strip()
-        text     = re.sub(r"```(?:json)?", "", text).strip().rstrip("`").strip()
-        plan     = json.loads(text)
+        plan = get_gateway().chat_json(prompt, system=PLANNER_PROMPT, temperature=0.2)
 
         print(f"[Planner] 🔄 Revised plan: {len(plan['steps'])} steps")
         return plan

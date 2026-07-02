@@ -561,7 +561,7 @@ _DANGEROUS_ACTIONS = {"restart", "shutdown"}
 
 
 def _detect_action(description: str) -> dict:
-    from or_client import client
+    from core.llm import get_gateway
 
     available = ", ".join(sorted(ACTION_MAP.keys())) + \
                 ", volume_set, type_text, press_key, reload_n"
@@ -578,8 +578,7 @@ Rules:
 - Return ONLY the JSON, no explanation, no markdown."""
 
     try:
-        raw  = client.chat_json(prompt, system="Return only valid JSON. No extra text.")
-        return raw
+        return get_gateway().chat_json(prompt, system="Return only valid JSON. No extra text.")
     except Exception as e:
         print(f"[Settings] Intent detection failed: {e}")
         return {"action": description.lower().replace(" ", "_"), "value": None}

@@ -1,18 +1,7 @@
 import json
-import re
-import sys
-from pathlib import Path
 from enum import Enum
 
-
-def get_base_dir() -> Path:
-    if getattr(sys, "frozen", False):
-        return Path(sys.executable).parent
-    return Path(__file__).resolve().parent.parent
-
-
-BASE_DIR        = get_base_dir()
-API_CONFIG_PATH = BASE_DIR / "config" / "api_keys.json"
+from core.llm import get_gateway
 
 
 class ErrorDecision(Enum):
@@ -49,11 +38,6 @@ Return ONLY valid JSON:
 """
 
 
-def _get_api_key() -> str:
-    with open(API_CONFIG_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)["gemini_api_key"]
-
-
 def analyze_error(
     step: dict,
     error: str,
@@ -78,8 +62,6 @@ def analyze_error(
             "user_message": str
         }
     """
-    import google.generativeai as genai
-
     if attempt >= max_attempts:
         print(f"[ErrorHandler] ⚠️ Max attempts reached for step {step.get('step')} — forcing replan")
         return {
@@ -89,12 +71,6 @@ def analyze_error(
             "max_retries":   0,
             "user_message":  "Trying a different approach."
         }
-
-    genai.configure(api_key=_get_api_key())
-    model = genai.GenerativeModel(
-        model_name="gemini-2.5-flash-lite",
-        system_instruction=ERROR_ANALYST_PROMPT
-    )
 
     prompt = f"""Failed step:
 Tool: {step.get('tool')}
@@ -108,12 +84,11 @@ Error:
 Attempt number: {attempt}"""
 
     try:
-        response = model.generate_content(prompt)
-        text     = response.text.strip()
-        text     = re.sub(r"```(?:json)?", "", text).strip().rstrip("`").strip()
-
-        result = json.loads(text)
-        decision_str = result.get("decision", "replan").lower()
+        result = get_gateway().chat_json(
+            prompt, system=ERROR_ANALYST_PROMPT,
+            model="gemini-2.5-flash-lite", temperature=0.2,
+        )
+        decision_str = str(result.get("decision", "replan")).lower()
         decision_map = {
             "retry":  ErrorDecision.RETRY,
             "skip":   ErrorDecision.SKIP,

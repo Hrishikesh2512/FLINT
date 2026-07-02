@@ -307,7 +307,7 @@ def _focus_window(title: str) -> str:
     return f"focus_window: unknown OS '{os_name}'"
 def _screen_find(description: str) -> tuple[int, int] | None:
     try:
-        from or_client import client
+        from core.llm import get_gateway
         from core.capture_engine import get_engine
 
         _require_pyautogui()
@@ -316,14 +316,14 @@ def _screen_find(description: str) -> tuple[int, int] | None:
         # reuse the same encoded image token instead of re-encoding a PNG.
         frame = get_engine().capture_screen()
 
-        text = client.vision(
+        text = get_gateway().vision(
             f"This is a downscaled screenshot of a {w}×{h} pixel screen. "
             f"Locate the UI element: '{description}'. "
             f"Reply ONLY with its center in FULL-SCREEN coordinates "
             f"(0,0 top-left, {w},{h} bottom-right) as: x,y — or NOT_FOUND",
-            image_b64=frame.b64,
-            mime=frame.mime,
-        )
+            frame.b64,
+            frame.mime,
+        ).text
 
         if "NOT_FOUND" in text.upper():
             return None
