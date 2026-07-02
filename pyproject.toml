@@ -5,9 +5,10 @@ description = "FLINT — voice-first AI engineering companion (Windows app + Ven
 requires-python = ">=3.11"
 license = { text = "Proprietary" }
 dependencies = [
-    # LLM / voice
+    # LLM / voice — google-genai only for the Live audio session;
+    # all other model calls go through flint-core's gateway
     "google-genai==2.8.0",
-    "google-generativeai==0.8.6",   # legacy SDK — removed in Phase 1 (LLM gateway)
+    "flint-core",   # local package: pip install -e packages/flint-core first
     # UI
     "PyQt6==6.11.0",
     # Core runtime

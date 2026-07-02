@@ -13,33 +13,19 @@
 
 import subprocess
 import sys
-import json
 import re
 import time
 from pathlib import Path
 
+from core.llm import GatewayModel, get_gateway
 
-def get_base_dir():
-    if getattr(sys, "frozen", False):
-        return Path(sys.executable).parent
-    return Path(__file__).resolve().parent.parent
-
-BASE_DIR           = get_base_dir()
-API_CONFIG_PATH    = BASE_DIR / "config" / "api_keys.json"
 DESKTOP            = Path.home() / "Desktop"
 MAX_BUILD_ATTEMPTS = 3
 GEMINI_MODEL       = "gemini-2.5-flash"
 
 
-def _get_api_key() -> str:
-    with open(API_CONFIG_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)["gemini_api_key"]
-
-
 def _get_gemini(model: str = GEMINI_MODEL):
-    import google.generativeai as genai
-    genai.configure(api_key=_get_api_key())
-    return genai.GenerativeModel(model)
+    return GatewayModel(model=model)
 
 
 def _clean_code(text: str) -> str:
@@ -455,12 +441,9 @@ def _screen_debug_action(description, file_path, player, speak=None) -> str:
             print(f"[Code] ⚠️ Could not read file: {err}")
 
     try:
-        from google import genai
-        from google.genai import types
+        import base64
 
-        client = genai.Client(api_key=_get_api_key())
-
-        image_bytes = screenshot_path.read_bytes()
+        image_b64 = base64.b64encode(screenshot_path.read_bytes()).decode("ascii")
 
         user_question = description or "What error or problem do you see on the screen? How can it be fixed?"
 
@@ -480,14 +463,8 @@ Please:
 
 Be specific and actionable. If you see an error message, quote it exactly."""
 
-        contents = [
-            types.Part.from_bytes(data=image_bytes, mime_type="image/png"),
-            analysis_prompt,
-        ]
-
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=contents,
+        response = get_gateway().vision(
+            analysis_prompt, image_b64, "image/png", max_tokens=4096,
         )
 
         analysis = response.text.strip()

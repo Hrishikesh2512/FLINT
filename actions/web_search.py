@@ -104,9 +104,10 @@ def web_search(
     query  = params.get("query", "").strip()
     mode   = params.get("mode",  "search").lower().strip()
     items  = params.get("items", [])
+    aspect = (params.get("aspect") or "general").strip() or "general"
 
     if not query and not items:
-        return "Please provide a search query, sir."
+        return "Please provide a search query."
 
     if items and mode != "compare":
         mode = "compare"
@@ -115,6 +116,19 @@ def web_search(
         player.write_log(f"[Search] {query or ', '.join(items)}")
 
     print(f"[WebSearch] 🔍 Query: {query!r}  Mode: {mode}")
+
+    if mode == "compare" and items:
+        return _compare(items, aspect)
+
+    # 1) Gemini with google_search grounding — a real web search, not recall.
+    try:
+        result = _gemini_search(query)
+        print("[WebSearch] ✅ Grounded search OK.")
+        return result
+    except Exception as e:
+        print(f"[WebSearch] ⚠️ Grounded search failed ({e}) — trying LLM answer...")
+
+    # 2) Plain LLM answer through the gateway (any provider).
     try:
         from core.llm import get_gateway
         result = get_gateway().chat(
@@ -125,11 +139,13 @@ def web_search(
         return result.text
     except Exception as e:
         print(f"[WebSearch] ⚠️ LLM answer failed ({e}) — trying DDG...")
-        try:
-            results = _ddg_search(query)
-            result  = _format_ddg(query, results)
-            print(f"[WebSearch] ✅ DDG: {len(results)} result(s).")
-            return result
-        except Exception as ddg_err:
-            print(f"[WebSearch] ❌ All backends failed: {ddg_err}")
-            return f"Search failed: {ddg_err}"
+
+    # 3) Raw DuckDuckGo snippets — always available, no key needed.
+    try:
+        results = _ddg_search(query)
+        formatted = _format_ddg(query, results)
+        print(f"[WebSearch] ✅ DDG: {len(results)} result(s).")
+        return formatted
+    except Exception as ddg_err:
+        print(f"[WebSearch] ❌ All backends failed: {ddg_err}")
+        return f"Search failed: {ddg_err}"
