@@ -145,6 +145,12 @@ mkdir -p /etc/wireplumber/wireplumber.conf.d
 install -m 0644 "$APP_DIR/venom/provisioning/80-venom-bluetooth.conf" \
     /etc/wireplumber/wireplumber.conf.d/80-venom-bluetooth.conf
 
+# BlueZ's D-Bus policy reserves HFP profile registration for root; grant it
+# to the service user or the headset microphone never exists.
+install -m 0644 "$APP_DIR/venom/provisioning/venom-dbus-bluetooth.conf" \
+    /etc/dbus-1/system.d/venom-dbus-bluetooth.conf
+systemctl reload dbus 2>/dev/null || true
+
 # ── 6. install + start the services ───────────────────────────────────────────
 # System-wide PipeWire/WirePlumber: Bluetooth audio with no user session.
 install -m 0644 "$APP_DIR/venom/provisioning/pipewire-system.service" \
