@@ -102,11 +102,16 @@ if ! "$VENV_DIR/bin/python" -c "import numpy, scipy, onnxruntime, openwakeword" 
 fi
 
 # Wake word models: use copies staged on the boot partition when present,
-# else download once.
-OWW_DST="$(ls -d "$VENV_DIR"/lib/python3.*/site-packages/openwakeword/resources/models 2>/dev/null | head -1)"
-if [ -d /boot/firmware/venom/oww-models ] && [ -n "$OWW_DST" ]; then
-    cp -n /boot/firmware/venom/oww-models/*.onnx "$OWW_DST"/ 2>/dev/null || true
-    log "wake word models staged from boot partition"
+# else download once. (Resolve the package dir via Python — a bare ls glob
+# exits non-zero when the fresh install lacks the models dir, killing the
+# script under set -e.)
+OWW_DST="$("$VENV_DIR/bin/python" -c 'import openwakeword, pathlib; print(pathlib.Path(openwakeword.__file__).parent / "resources" / "models")' 2>/dev/null || true)"
+if [ -n "$OWW_DST" ]; then
+    mkdir -p "$OWW_DST"
+    if [ -d /boot/firmware/venom/oww-models ]; then
+        cp -n /boot/firmware/venom/oww-models/*.onnx "$OWW_DST"/ 2>/dev/null || true
+        log "wake word models staged from boot partition"
+    fi
 fi
 "$VENV_DIR/bin/python" - <<'PYEOF'
 import openwakeword.utils
