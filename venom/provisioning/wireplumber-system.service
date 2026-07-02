@@ -9,6 +9,11 @@ User=venomd
 SupplementaryGroups=audio bluetooth
 Environment=XDG_RUNTIME_DIR=/run/pipewire
 Environment=PIPEWIRE_RUNTIME_DIR=/run/pipewire
+# No user session on an appliance: give it the system bus (BlueZ lives there)
+# and a writable state home.
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/dbus/system_bus_socket
+Environment=XDG_STATE_HOME=/var/lib/wireplumber
+StateDirectory=wireplumber
 ExecStart=/usr/bin/wireplumber
 Restart=always
 RestartSec=3

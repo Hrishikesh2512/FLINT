@@ -136,6 +136,9 @@ else
     chgrp venomd /etc/venom/venom.toml && chmod 0640 /etc/venom/venom.toml
 fi
 
+# Fresh RPi OS ships Bluetooth soft-blocked — unblock it or nothing pairs.
+rfkill unblock bluetooth 2>/dev/null || true
+
 # ── 6. install + start the services ───────────────────────────────────────────
 # System-wide PipeWire/WirePlumber: Bluetooth audio with no user session.
 install -m 0644 "$APP_DIR/venom/provisioning/pipewire-system.service" \
