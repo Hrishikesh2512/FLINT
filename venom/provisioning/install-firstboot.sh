@@ -16,6 +16,22 @@ cp -f "$SRC"/venom-provision.service /etc/systemd/system/venom-provision.service
 [ -f "$SRC"/venom.toml ] && cp -f "$SRC"/venom.toml /opt/venom/provision/venom.toml
 chmod +x /opt/venom/provision/provision.sh
 
+# Forget unwanted Wi-Fi networks: one SSID per line in venom/forget-wifi.txt.
+# Needed when a network configured at flash time turns out to be hostile
+# (e.g. guest networks with client isolation) — deletes every NM profile
+# that references it, including stale cloud-init renders.
+if [ -f "$SRC"/forget-wifi.txt ]; then
+    while IFS= read -r ssid; do
+        [ -z "$ssid" ] && continue
+        grep -l "$ssid" /etc/NetworkManager/system-connections/* 2>/dev/null \
+            | while IFS= read -r conn; do
+                rm -f "$conn"
+                echo "[venom] forgot Wi-Fi profile: $conn (matched '$ssid')"
+            done
+    done < "$SRC"/forget-wifi.txt
+    command -v nmcli >/dev/null 2>&1 && nmcli connection reload 2>/dev/null || true
+fi
+
 # Extra Wi-Fi networks (phone hotspot etc.) — NetworkManager keyfiles so the
 # Pi hops between home Wi-Fi and the hotspot automatically, no cables ever.
 if [ -f "$SRC"/extra-wifi.tsv ]; then
