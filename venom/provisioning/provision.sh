@@ -139,6 +139,12 @@ fi
 # Fresh RPi OS ships Bluetooth soft-blocked — unblock it or nothing pairs.
 rfkill unblock bluetooth 2>/dev/null || true
 
+# WirePlumber gates Bluetooth on an active login seat by default; an
+# appliance has none. Install the override before starting the services.
+mkdir -p /etc/wireplumber/wireplumber.conf.d
+install -m 0644 "$APP_DIR/venom/provisioning/80-venom-bluetooth.conf" \
+    /etc/wireplumber/wireplumber.conf.d/80-venom-bluetooth.conf
+
 # ── 6. install + start the services ───────────────────────────────────────────
 # System-wide PipeWire/WirePlumber: Bluetooth audio with no user session.
 install -m 0644 "$APP_DIR/venom/provisioning/pipewire-system.service" \
