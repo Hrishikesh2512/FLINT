@@ -17,7 +17,7 @@ voice = [
     # wheels for modern Python — provision.sh installs it there with
     # --no-deps instead. Declared only where it resolves cleanly.
     'openwakeword>=0.6; platform_system == "Windows"',
-    "onnxruntime>=1.17",
+    "onnxruntime>=1.20,<1.22",
 ]
 
 [project.scripts]

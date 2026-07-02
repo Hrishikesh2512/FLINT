@@ -62,7 +62,7 @@ fi
 # modern Python (3.13 on current RPi OS). Venom uses its ONNX path, so
 # install it without dependency resolution and supply the real ones.
 "$VENV_DIR/bin/pip" install --quiet --no-deps "openwakeword>=0.6"
-"$VENV_DIR/bin/pip" install --quiet "onnxruntime>=1.17" "numpy>=1.26,<2.5" \
+"$VENV_DIR/bin/pip" install --quiet "onnxruntime>=1.20,<1.22" "numpy>=1.26,<2.5" \
     "tqdm>=4.64" "scipy>=1.11" "requests>=2.31"
 
 # Venom never trains custom verifier models, and that (unused) corner of
