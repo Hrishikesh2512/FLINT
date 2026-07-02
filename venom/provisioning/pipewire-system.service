@@ -1,0 +1,18 @@
+[Unit]
+Description=PipeWire audio server (system-wide, Venom appliance)
+After=bluetooth.service
+
+[Service]
+Type=simple
+User=venomd
+SupplementaryGroups=audio bluetooth
+RuntimeDirectory=pipewire
+RuntimeDirectoryPreserve=yes
+Environment=XDG_RUNTIME_DIR=/run/pipewire
+Environment=PIPEWIRE_RUNTIME_DIR=/run/pipewire
+ExecStart=/usr/bin/pipewire
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -23,20 +23,24 @@ class DevicePick:
     output_name: str
 
 
-# Tried in order: a USB device always beats the Pi's built-in
-# "bcm2835 Headphones" jack, which would otherwise match "headphone".
-_HINT_TIERS = (("usb",), ("headset",))
+# Hint tiers tried in order. Bluetooth audio flows through PipeWire, whose
+# ALSA plugin shows up as a "pipewire" (or "pulse"-compat) device; picking it
+# routes to whatever headset PipeWire currently holds. For USB, an explicit
+# USB device always beats the Pi's built-in "bcm2835 Headphones" jack.
+_TIERS_BLUETOOTH = (("pipewire",), ("pulse",), ("default",))
+_TIERS_USB = (("usb",), ("headset",))
 
 
-def pick_devices(devices: list[dict]) -> DevicePick:
+def pick_devices(devices: list[dict], bluetooth: bool = False) -> DevicePick:
     """Choose input/output devices from a sounddevice.query_devices() table."""
+    tiers = _TIERS_BLUETOOTH if bluetooth else _TIERS_USB
 
     def find(kind: str) -> tuple[int | None, str]:
         key = f"max_{kind}_channels"
         candidates = [
             (index, dev) for index, dev in enumerate(devices) if dev.get(key, 0) > 0
         ]
-        for tier in _HINT_TIERS:
+        for tier in tiers:
             for index, dev in candidates:
                 name = str(dev.get("name", "")).lower()
                 if any(hint in name for hint in tier):
@@ -50,8 +54,8 @@ def pick_devices(devices: list[dict]) -> DevicePick:
     return DevicePick(in_index, out_index, in_name, out_name)
 
 
-def current_devices() -> DevicePick:
+def current_devices(bluetooth: bool = False) -> DevicePick:
     import sounddevice as sd
 
     table = [dict(d) for d in sd.query_devices()]
-    return pick_devices(table)
+    return pick_devices(table, bluetooth=bluetooth)

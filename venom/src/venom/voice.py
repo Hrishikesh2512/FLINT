@@ -37,7 +37,19 @@ class VoiceOrchestrator:
 
     async def run(self) -> None:
         loop = asyncio.get_running_loop()
-        pick = current_devices()
+
+        if self.config.audio.use_bluetooth:
+            from venom.btaudio import BluetoothHeadset
+
+            self.state = "pairing bluetooth headset"
+            headset = BluetoothHeadset(self.config.audio.bluetooth_mac,
+                                       self.config.audio.bluetooth_name)
+            while not await asyncio.to_thread(headset.wait_for_connection):
+                log.warning("bluetooth headset not connected yet — "
+                            "put it in pairing mode; retrying in 15s")
+                await asyncio.sleep(15)
+
+        pick = current_devices(bluetooth=self.config.audio.use_bluetooth)
         log.info("audio devices — mic: %s, speaker: %s", pick.input_name, pick.output_name)
 
         speaker = SpeakerStream(pick)

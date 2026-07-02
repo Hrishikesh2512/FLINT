@@ -29,7 +29,7 @@ apt-get update -qq
 apt-get install -y -qq --no-install-recommends \
     git python3-venv python3-pip \
     libportaudio2 alsa-utils \
-    bluez
+    bluez pipewire pipewire-alsa wireplumber libspa-0.2-bluez5
 
 # ── 3. fetch / update the repo ────────────────────────────────────────────────
 if [ -d "$APP_DIR/.git" ]; then
@@ -55,6 +55,7 @@ PYEOF
 # ── 5. service account + config ───────────────────────────────────────────────
 id venomd >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin venomd
 usermod -aG audio venomd
+usermod -aG bluetooth venomd || true
 
 mkdir -p /etc/venom
 if [ ! -f /etc/venom/venom.toml ]; then
@@ -68,9 +69,16 @@ else
     chgrp venomd /etc/venom/venom.toml && chmod 0640 /etc/venom/venom.toml
 fi
 
-# ── 6. install + start the daemon ─────────────────────────────────────────────
+# ── 6. install + start the services ───────────────────────────────────────────
+# System-wide PipeWire/WirePlumber: Bluetooth audio with no user session.
+install -m 0644 "$APP_DIR/venom/provisioning/pipewire-system.service" \
+    /etc/systemd/system/pipewire-system.service
+install -m 0644 "$APP_DIR/venom/provisioning/wireplumber-system.service" \
+    /etc/systemd/system/wireplumber-system.service
 install -m 0644 "$APP_DIR/venom/provisioning/venom.service" /etc/systemd/system/venom.service
 systemctl daemon-reload
+systemctl enable bluetooth.service pipewire-system.service wireplumber-system.service
+systemctl restart bluetooth.service pipewire-system.service wireplumber-system.service
 systemctl enable venom.service
 systemctl restart venom.service
 

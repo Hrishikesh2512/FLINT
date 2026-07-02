@@ -1,7 +1,7 @@
 [Unit]
-Description=Venom — FLINT wearable appliance daemon
+Description=Venom — standalone voice assistant appliance
 Documentation=https://github.com/Hrishikesh2512/FLINT
-After=network-online.target sound.target
+After=network-online.target sound.target bluetooth.service wireplumber-system.service
 Wants=network-online.target
 
 [Service]
@@ -11,7 +11,10 @@ WatchdogSec=90
 Restart=always
 RestartSec=5
 User=venomd
-SupplementaryGroups=audio
+SupplementaryGroups=audio bluetooth
+# Bluetooth audio flows through the system-wide PipeWire instance.
+Environment=PIPEWIRE_RUNTIME_DIR=/run/pipewire
+Environment=XDG_RUNTIME_DIR=/run/pipewire
 RuntimeDirectory=venom
 ConfigurationDirectory=venom
 StateDirectory=venom

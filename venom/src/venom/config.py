@@ -68,6 +68,29 @@ DEFAULT_CLOUD_CANDIDATES: tuple[BrainCandidate, ...] = (
 
 
 @dataclass(frozen=True)
+class AudioConfig:
+    # "bluetooth": pair/connect the configured headset, route via PipeWire.
+    # "usb": pick a USB sound card. "auto": bluetooth if configured, else usb.
+    output: str = "auto"
+    bluetooth_mac: str = ""
+    bluetooth_name: str = ""
+
+    def __post_init__(self) -> None:
+        if self.output not in ("auto", "bluetooth", "usb"):
+            raise ValueError(f"audio.output must be auto|bluetooth|usb, got {self.output!r}")
+
+    @property
+    def bluetooth_configured(self) -> bool:
+        return bool(self.bluetooth_mac or self.bluetooth_name)
+
+    @property
+    def use_bluetooth(self) -> bool:
+        if self.output == "bluetooth":
+            return True
+        return self.output == "auto" and self.bluetooth_configured
+
+
+@dataclass(frozen=True)
 class VoiceConfig:
     enabled: bool = True
     wake_word: str = "hey_jarvis"      # openWakeWord pretrained model name
@@ -96,6 +119,7 @@ class VenomConfig:
     gemini_api_key: str = ""
     brains: tuple[BrainCandidate, ...] = field(default=DEFAULT_CLOUD_CANDIDATES)
     voice: VoiceConfig = field(default_factory=VoiceConfig)
+    audio: AudioConfig = field(default_factory=AudioConfig)
 
     def __post_init__(self) -> None:
         if self.poll_interval <= 0:
@@ -138,6 +162,7 @@ def load_config(path: Path | None = None) -> VenomConfig:
     internet = data.get("internet", {})
     gemini = data.get("gemini", {})
     voice = data.get("voice", {})
+    audio = data.get("audio", {})
     raw_brains = data.get("brain", [])
 
     brains = _parse_brains(raw_brains) if raw_brains else DEFAULT_CLOUD_CANDIDATES
@@ -165,5 +190,10 @@ def load_config(path: Path | None = None) -> VenomConfig:
             voice_name=str(voice.get("voice_name", voice_defaults.voice_name)),
             user_name=str(voice.get("user_name", voice_defaults.user_name)),
             language=str(voice.get("language", voice_defaults.language)),
+        ),
+        audio=AudioConfig(
+            output=str(audio.get("output", "auto")),
+            bluetooth_mac=str(audio.get("bluetooth_mac", "")).strip(),
+            bluetooth_name=str(audio.get("bluetooth_name", "")).strip(),
         ),
     )

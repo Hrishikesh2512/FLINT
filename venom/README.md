@@ -42,8 +42,8 @@ venom/src/venom/
 
 ## Requirements
 
-- Raspberry Pi 4 (2 GB is plenty) with a USB pendrive (16 GB+) and a USB
-  headset with mic
+- Raspberry Pi 4 (2 GB is plenty) with a USB pendrive (16 GB+)
+- A **Bluetooth headset** with mic (auto-paired — see below) or a USB headset
 - A [Gemini API key](https://aistudio.google.com/apikey)
 - One-time check: Pi 4 boards ship USB-boot-ready from **2020-09** onward.
   Older boards need a one-time EEPROM update via any SD card
@@ -68,9 +68,17 @@ cd venom\provisioning
 hotspot so Venom follows you out of the house. The Pi hops between known
 networks automatically (home Wi-Fi preferred, hotspot on the go).
 
+The script also **auto-detects the Bluetooth headset paired with your
+laptop** and bakes its identity in (override with `-BluetoothMac` /
+`-BluetoothName`). Audio routes through a system-wide PipeWire instance —
+speaker and microphone both work over Bluetooth, no user session needed.
+
 **3. Plug into the Pi and power on.** First boot takes ~10 minutes with
-Wi-Fi in range (filesystem expands → Venom installs itself → the service
-starts). You'll hear a **single chime** in the headset when Venom is up.
+Wi-Fi in range (filesystem expands → Venom installs itself → services
+start). **Put your headset in pairing mode during this boot** — the Pi
+finds it, pairs, and marks it trusted. That's a one-time step: from then
+on the headset reconnects to the Pi automatically whenever it's on and in
+range. You'll hear a **single chime** when Venom is up.
 
 **4. Talk:** say **"Hey Jarvis"** → two rising chimes → speak. That's it.
 

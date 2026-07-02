@@ -32,6 +32,10 @@ param(
     # Extra Wi-Fi networks beyond the one Imager configured, e.g. your phone
     # hotspot: -ExtraWifi "MyPhone=hotspotpass","Office=officepass"
     [string[]]$ExtraWifi = @(),
+    # Bluetooth headset. When omitted, the script tries to detect the headset
+    # currently paired with THIS laptop and bakes that in.
+    [string]$BluetoothMac,
+    [string]$BluetoothName,
     # Optional laptop brain (additive, never required).
     [string]$LaptopHost,
     [int]$LaptopPort = 8765,
@@ -41,6 +45,30 @@ param(
 
 $ErrorActionPreference = "Stop"
 $payloadSrc = $PSScriptRoot
+
+function Find-BluetoothHeadset {
+    # Remote Bluetooth devices known to this laptop appear as PnP devices with
+    # InstanceId BTHENUM\DEV_<12-hex-MAC>. Prefer ones that look like audio.
+    $found = @()
+    $devices = Get-PnpDevice -Class Bluetooth -Status OK -ErrorAction SilentlyContinue
+    foreach ($dev in $devices) {
+        if ($dev.InstanceId -match 'BTHENUM\\DEV_([0-9A-F]{12})') {
+            $raw = $Matches[1]
+            $mac = ($raw -split '(?<=\G..)(?=.)') -join ':'
+            $found += [pscustomobject]@{ Name = $dev.FriendlyName; Mac = $mac }
+        }
+    }
+    if (-not $found) { return $null }
+    $found = @($found | Sort-Object Mac -Unique)
+    $audioLike = $found | Where-Object {
+        $_.Name -match 'head|ear|bud|air|sound|wh-|wf-|jbl|boat|noise|oneplus|realme'
+    }
+    if (@($audioLike).Count -ge 1) { return @($audioLike)[0] }
+    if (@($found).Count -eq 1) { return @($found)[0] }
+    Write-Host "Multiple Bluetooth devices known to this laptop:" -ForegroundColor Yellow
+    $found | ForEach-Object { Write-Host ("  {0}  {1}" -f $_.Mac, $_.Name) }
+    return $null
+}
 
 function Find-BootPartition {
     $candidates = Get-Volume -ErrorAction SilentlyContinue |
@@ -97,6 +125,23 @@ if ($LaptopHost) {
     $toml = $toml -replace 'host = "192\.168\.1\.50"', ('host = "' + $LaptopHost + '"')
     $toml = $toml -replace 'port = 8765', ('port = ' + $LaptopPort)
     Write-Host "Laptop brain   : ${LaptopHost}:${LaptopPort} (optional additive)"
+}
+
+# Bluetooth headset: explicit params win; otherwise detect from this laptop.
+if (-not $BluetoothMac -and -not $BluetoothName) {
+    $detected = Find-BluetoothHeadset
+    if ($detected) {
+        $BluetoothMac  = $detected.Mac
+        $BluetoothName = $detected.Name
+        Write-Host ("BT headset     : detected '" + $detected.Name + "' (" + $detected.Mac + ")")
+    }
+}
+if ($BluetoothMac)  { $toml = $toml -replace 'bluetooth_mac = ""',  ('bluetooth_mac = "' + $BluetoothMac + '"') }
+if ($BluetoothName) { $toml = $toml -replace 'bluetooth_name = ""', ('bluetooth_name = "' + $BluetoothName + '"') }
+if ($BluetoothMac -or $BluetoothName) {
+    Write-Host "BT headset     : baked in - put it in PAIRING MODE near the Pi on first boot (once)"
+} else {
+    Write-Host "BT headset     : none configured; Venom will use a USB headset if present" -ForegroundColor Yellow
 }
 # Shell scripts on the Pi read this file - write it with Unix endings, no BOM.
 [IO.File]::WriteAllText((Join-Path $dest "venom.toml"), ($toml -replace "`r`n", "`n"))

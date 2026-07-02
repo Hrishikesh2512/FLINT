@@ -40,12 +40,12 @@ class Supervisor:
         )
         resolution = await self.resolver.resolve()
         internet = await internet_task
-        headset = find_usb_audio()
+        headset_desc = await asyncio.to_thread(self._headset_status)
 
         snapshot: dict[str, Any] = {
             "version": __version__,
             "internet": internet,
-            "headset": headset.description if headset else None,
+            "headset": headset_desc,
             "brain": resolution.brain.name if resolution.brain else None,
             "online": resolution.online,
             "voice": self.voice_state,
@@ -53,6 +53,22 @@ class Supervisor:
         self._log_transitions(snapshot, resolution.switched)
         self.status.write(snapshot)
         return snapshot
+
+    def _headset_status(self) -> str | None:
+        """Bluetooth headset connection state, or the USB card description."""
+        if self.config.audio.use_bluetooth:
+            try:
+                from venom.btaudio import BluetoothHeadset
+
+                headset = BluetoothHeadset(self.config.audio.bluetooth_mac,
+                                           self.config.audio.bluetooth_name)
+                if headset.mac and headset.connected:
+                    return f"bluetooth {headset.mac}"
+            except (ValueError, FileNotFoundError, OSError):
+                pass
+            return None
+        card = find_usb_audio()
+        return card.description if card else None
 
     def _log_transitions(self, snapshot: dict[str, Any], brain_switched: bool) -> None:
         prev = self._last
