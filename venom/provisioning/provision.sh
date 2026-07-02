@@ -62,7 +62,7 @@ fi
 # modern Python (3.13 on current RPi OS). Venom uses its ONNX path, so
 # install it without dependency resolution and supply the real ones.
 "$VENV_DIR/bin/pip" install --quiet --no-deps "openwakeword>=0.6"
-"$VENV_DIR/bin/pip" install --quiet "onnxruntime>=1.17" "numpy>=1.26" \
+"$VENV_DIR/bin/pip" install --quiet "onnxruntime>=1.17" "numpy>=1.26,<2.5" \
     "tqdm>=4.64" "scipy>=1.11" "scikit-learn>=1.3" "requests>=2.31"
 
 "$VENV_DIR/bin/pip" install --quiet --upgrade "$APP_DIR/venom[voice]"
@@ -76,14 +76,14 @@ WHEELS=/boot/firmware/venom/wheels
 if ! "$VENV_DIR/bin/python" -c "import numpy, scipy, onnxruntime, openwakeword" 2>/dev/null; then
     log "native libraries broken — force-reinstalling"
     if [ -d "$WHEELS" ] && "$VENV_DIR/bin/pip" install --quiet --force-reinstall \
-            --no-index --find-links "$WHEELS" "numpy>=1.26" "scipy>=1.11"; then
+            --no-index --find-links "$WHEELS" "numpy>=1.26,<2.5" "scipy>=1.11"; then
         log "repaired from local wheelhouse"
         "$VENV_DIR/bin/python" -c "import numpy, scipy" \
             || "$VENV_DIR/bin/pip" install --quiet --force-reinstall --no-cache-dir \
-                   "numpy>=1.26" "scipy>=1.11"
+                   "numpy>=1.26,<2.5" "scipy>=1.11"
     else
         "$VENV_DIR/bin/pip" install --quiet --force-reinstall --no-cache-dir \
-            "numpy>=1.26" "scipy>=1.11"
+            "numpy>=1.26,<2.5" "scipy>=1.11"
     fi
     "$VENV_DIR/bin/python" -c "import numpy, scipy, onnxruntime, openwakeword" \
         || { log "libraries still broken after reinstall — will retry next boot"; exit 1; }

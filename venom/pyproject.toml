@@ -12,7 +12,7 @@ voice = [
     "google-genai>=1.0",   # Gemini Live audio sessions
     "requests>=2.31",
     "sounddevice>=0.5",
-    "numpy>=1.26",
+    "numpy>=1.26,<2.5",
     # On Linux, openwakeword hard-requires tflite-runtime, which has no
     # wheels for modern Python — provision.sh installs it there with
     # --no-deps instead. Declared only where it resolves cleanly.
