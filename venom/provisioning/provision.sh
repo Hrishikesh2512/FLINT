@@ -70,20 +70,37 @@ fi
 # Self-heal: a power cut mid-install can leave corrupted native wheels
 # (observed on real hardware: numpy Bus error after an unclean reboot).
 # If the core imports crash, force-reinstall them fresh and re-verify.
+# A wheelhouse on the boot partition (staged by prepare-pendrive) is used
+# first so the repair works even on a bad connection.
+WHEELS=/boot/firmware/venom/wheels
 if ! "$VENV_DIR/bin/python" -c "import numpy, scipy, onnxruntime, openwakeword" 2>/dev/null; then
     log "native libraries broken — force-reinstalling"
-    "$VENV_DIR/bin/pip" install --quiet --force-reinstall --no-cache-dir \
-        "numpy>=1.26" "scipy>=1.11" "onnxruntime>=1.17"
+    if [ -d "$WHEELS" ] && "$VENV_DIR/bin/pip" install --quiet --force-reinstall \
+            --no-index --find-links "$WHEELS" "numpy>=1.26" "scipy>=1.11"; then
+        log "repaired from local wheelhouse"
+        "$VENV_DIR/bin/python" -c "import numpy, scipy" \
+            || "$VENV_DIR/bin/pip" install --quiet --force-reinstall --no-cache-dir \
+                   "numpy>=1.26" "scipy>=1.11"
+    else
+        "$VENV_DIR/bin/pip" install --quiet --force-reinstall --no-cache-dir \
+            "numpy>=1.26" "scipy>=1.11"
+    fi
     "$VENV_DIR/bin/python" -c "import numpy, scipy, onnxruntime, openwakeword" \
         || { log "libraries still broken after reinstall — will retry next boot"; exit 1; }
     log "native libraries repaired"
 fi
 
-# Pre-download the wake word model so the first boot needs no extra network.
+# Wake word models: use copies staged on the boot partition when present,
+# else download once.
+OWW_DST="$(ls -d "$VENV_DIR"/lib/python3.*/site-packages/openwakeword/resources/models 2>/dev/null | head -1)"
+if [ -d /boot/firmware/venom/oww-models ] && [ -n "$OWW_DST" ]; then
+    cp -n /boot/firmware/venom/oww-models/*.onnx "$OWW_DST"/ 2>/dev/null || true
+    log "wake word models staged from boot partition"
+fi
 "$VENV_DIR/bin/python" - <<'PYEOF'
 import openwakeword.utils
 openwakeword.utils.download_models(["hey_jarvis"])
-print("[venom-provision] wake word model cached")
+print("[venom-provision] wake word model ready")
 PYEOF
 
 # ── 5. service account + config ───────────────────────────────────────────────
