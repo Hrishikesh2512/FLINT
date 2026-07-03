@@ -82,9 +82,11 @@ class VoiceOrchestrator:
                 await asyncio.sleep(10)
 
             # The mic only exists in the HFP profile — pin it every connect.
+            # A lifecycle without a microphone is useless (the wake loop would
+            # sit deaf on the sink monitor), so failure here restarts the cycle.
             self.state = "activating headset microphone"
-            if not await asyncio.to_thread(pin_bluetooth_audio):
-                log.warning("no bluetooth microphone appeared — audio may be one-way")
+            if not await asyncio.to_thread(pin_bluetooth_audio, 3.0, 6):
+                raise StreamsDied("headset connected but no microphone appeared")
 
         pick = current_devices(bluetooth=self.config.audio.use_bluetooth)
         log.info("audio devices — mic: %s, speaker: %s", pick.input_name, pick.output_name)
