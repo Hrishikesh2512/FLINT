@@ -78,24 +78,24 @@ fi
 
 # ── 4. python environment + venom package (with the voice stack) ─────────────
 [ -d "$VENV_DIR" ] || python3 -m venv "$VENV_DIR"
-"$VENV_DIR/bin/pip" install --quiet --upgrade "$APP_DIR/packages/flint-core"
-
-# openwakeword declares tflite-runtime on Linux, which has no wheels for
-# modern Python (3.13 on current RPi OS). Venom uses its ONNX path, so
-# install it without dependency resolution and supply the real ones.
-"$VENV_DIR/bin/pip" install --quiet --no-deps "openwakeword>=0.6"
-"$VENV_DIR/bin/pip" install --quiet "onnxruntime>=1.20,<1.22" "numpy>=1.26,<2.5" \
-    "tqdm>=4.64" "scipy>=1.11" "requests>=2.31"
 
 # ── Heavy dependency install — ONLY on first run or when venom's declared
 # dependencies change. A code-only "Update from GitHub" skips this entire
-# block: rebuilding evdev from C source and re-resolving the dep tree every
-# time spiked memory and swap-thrashed the 1.8 GB Pi, stalling SSH and the
-# web console mid-update. Code refresh is the cheap step at the end.
+# block: resolving onnxruntime/numpy/scipy and rebuilding evdev from C
+# source every time spiked memory and swap-thrashed the 1.8 GB Pi, stalling
+# SSH and the web console mid-update. Code refresh is the cheap step below.
 DEPS_HASH="$(sha256sum "$APP_DIR/venom/pyproject.toml" | cut -d' ' -f1)"
 DEPS_MARK=/opt/venom/.deps-hash
 if [ ! -f "$STAMP" ] || [ "$(cat "$DEPS_MARK" 2>/dev/null)" != "$DEPS_HASH" ]; then
     log "installing dependencies (first run or deps changed)"
+
+    "$VENV_DIR/bin/pip" install --quiet --upgrade "$APP_DIR/packages/flint-core"
+    # openwakeword declares tflite-runtime on Linux, which has no wheels for
+    # modern Python (3.13 on current RPi OS). Venom uses its ONNX path, so
+    # install it without dependency resolution and supply the real ones.
+    "$VENV_DIR/bin/pip" install --quiet --no-deps "openwakeword>=0.6"
+    "$VENV_DIR/bin/pip" install --quiet "onnxruntime>=1.20,<1.22" "numpy>=1.26,<2.5" \
+        "tqdm>=4.64" "scipy>=1.11" "requests>=2.31"
 
     # Venom never trains custom verifier models, and that (unused) corner of
     # openwakeword drags in scikit-learn, which won't import on this fresh
@@ -150,10 +150,11 @@ else
     log "dependencies unchanged — skipping heavy install"
 fi
 
-# Always refresh venom's own code (pure Python: no build, no dep resolution,
-# a few hundred KB). Version stays 0.1.0 across commits, so --force-reinstall
-# --no-deps is what makes a pushed fix actually reach the running service.
-"$VENV_DIR/bin/pip" install --quiet --force-reinstall --no-deps "$APP_DIR/venom"
+# Always refresh our own code (pure Python: no build, no dep resolution,
+# a few hundred KB). Versions stay constant across commits, so
+# --force-reinstall --no-deps is what makes a pushed fix actually land.
+"$VENV_DIR/bin/pip" install --quiet --force-reinstall --no-deps \
+    "$APP_DIR/packages/flint-core" "$APP_DIR/venom"
 
 # ── 5. service account + config ───────────────────────────────────────────────
 # Service user is "venom" (the console terminal's `whoami` shows it).
