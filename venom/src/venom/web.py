@@ -141,7 +141,10 @@ style="flex:1;min-width:120px"></form></details>
 <button onclick="sys('update')">&#11015; update</button>
 <button onclick="sys('restart')">&#8635; restart</button>
 <button onclick="sys('reboot')">&#9888; reboot</button>
-<button onclick="localStorage.removeItem('vtok');location.reload()">lock</button></div></details>
+<button onclick="sys('poweroff')" style=border-color:var(--red)>&#9211; power off</button>
+<button onclick="localStorage.removeItem('vtok');location.reload()">lock</button></div>
+<div class=lbl style=margin-top:6px>always power off here (or ssh + `sudo poweroff`) and wait
+for the green LED to stop before unplugging &mdash; never pull power live</div></details>
 <script>
 const $=id=>document.getElementById(id),H=s=>(s+'').replace(/[<&]/g,c=>c=='<'?'&lt;':'&amp;');
 let n=0;
@@ -192,8 +195,9 @@ if(t)api('/api/prompt',{text:t});$('text').value=''};
 function music(a,q){api('/api/music',{action:a,query:q||''})}
 function vol(d){api('/api/volume',{delta:d}).then(()=>setTimeout(tick,400))}
 function sys(a){if(a=='reboot'&&!confirm('REBOOT the Pi?'))return;
+if(a=='poweroff'&&!confirm('POWER OFF the Pi? Wait for the green LED to stop, then unplug.'))return;
 if(a=='update'&&!confirm('Pull latest from GitHub and reinstall?'))return;
-api('/api/system',{action:a})}
+api('/api/system',{action:a}).then(async r=>{if(a=='poweroff')alert((await r.json()).result)})}
 async function bt(scan){$('btlist').innerHTML='<div class=lbl>scanning...</div>';
 const d=await(await api('/api/bluetooth'+(scan?'/scan':''))).json();
 $('btlist').innerHTML=d.map(x=>`<div class=row><span class="led ${x.connected?'on':''}">`+
@@ -391,7 +395,7 @@ class WebConsole:
 
     def system(self, action: str) -> str:
         """Privileged actions via the root control unit watching /run/venom."""
-        if action not in ("update", "restart", "reboot"):
+        if action not in ("update", "restart", "reboot", "poweroff"):
             return "unknown action"
         try:
             CONTROL_REQUEST.write_text(action)
@@ -400,7 +404,9 @@ class WebConsole:
         notes = {"update": "Updating from GitHub — takes a few minutes, "
                            "then Venom restarts.",
                  "restart": "Restarting Venom...",
-                 "reboot": "Rebooting the Pi..."}
+                 "reboot": "Rebooting the Pi...",
+                 "poweroff": "Shutting down cleanly — wait for the green LED "
+                             "to stop blinking, then it's safe to unplug."}
         if self.orchestrator is not None:
             self.orchestrator.transcript.append(("system", notes[action]))
         return notes[action]

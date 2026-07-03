@@ -8,8 +8,9 @@ CMD=$(head -c 64 "$REQ" | tr -cd 'a-z-')
 rm -f "$REQ"
 echo "[venom-control] request: $CMD"
 case "$CMD" in
-    update)  exec /opt/venom/provision/provision.sh ;;
-    restart) exec systemctl restart venom.service ;;
-    reboot)  exec /sbin/reboot ;;
-    *)       echo "[venom-control] unknown request: $CMD" ;;
+    update)   exec /opt/venom/provision/provision.sh ;;
+    restart)  exec systemctl restart venom.service ;;
+    reboot)   exec /sbin/reboot ;;
+    poweroff) exec /sbin/poweroff ;;   # clean shutdown: flush + unmount
+    *)        echo "[venom-control] unknown request: $CMD" ;;
 esac
