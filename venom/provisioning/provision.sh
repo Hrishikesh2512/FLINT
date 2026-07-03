@@ -10,6 +10,10 @@ LOCK=/run/venom-provision.lock
 exec 200>"$LOCK"
 flock -n 200 || { echo "[venom-provision] another run is active — exiting"; exit 0; }
 
+# Never compete with the voice loop for CPU/IO — a saturated Pi is deaf.
+renice -n 19 -p $$ >/dev/null 2>&1 || true
+ionice -c3 -p $$ 2>/dev/null || true
+
 REPO_URL="${VENOM_REPO_URL:-https://github.com/Hrishikesh2512/FLINT.git}"
 REPO_BRANCH="${VENOM_REPO_BRANCH:-v2/rebuild}"
 APP_DIR=/opt/venom/app
@@ -61,6 +65,15 @@ if [ -f "$APP_DIR/venom/provisioning/provision.sh" ] \
     cp "$APP_DIR/venom/provisioning/provision.sh" "$0"
     chmod +x "$0"
     exec "$0"
+fi
+
+# Boot fast path: if this exact commit is already installed, there is
+# nothing to do — pip alone takes minutes of full load on a Pi 4.
+INSTALLED_MARK=/opt/venom/.installed-commit
+HEAD_COMMIT=$(git -C "$APP_DIR" rev-parse HEAD)
+if [ -f "$STAMP" ] && [ "$(cat "$INSTALLED_MARK" 2>/dev/null)" = "$HEAD_COMMIT" ]; then
+    log "already at $HEAD_COMMIT — nothing to install"
+    exit 0
 fi
 
 # ── 4. python environment + venom package (with the voice stack) ─────────────
@@ -216,6 +229,7 @@ EOF
 iw dev wlan0 set power_save off 2>/dev/null || true
 
 date -u +"%Y-%m-%dT%H:%M:%SZ" > "$STAMP"
+echo "$HEAD_COMMIT" > "$INSTALLED_MARK"
 
 # Stay enabled: this script re-runs on every boot as the update channel —
 # git fetch + pip install of local paths is seconds when nothing changed,
