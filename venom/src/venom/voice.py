@@ -32,10 +32,33 @@ log = logging.getLogger("venom.voice")
 # Wake-phase frame starvation: mic callbacks deliver ~15 frames/s; this many
 # consecutive empty seconds means the stream is dead or the headset is gone.
 STARVATION_SECONDS = 12
+# Frames that keep arriving but are all exactly zero: the capture path was
+# silently rerouted (observed live: headset drops mid-lifecycle and PipeWire
+# falls back to the built-in jack's sink monitor — Venom sits deaf forever).
+SILENCE_REBUILD_SECONDS = 20
 
 
 class StreamsDied(Exception):
     """Audio stopped flowing — rebuild the whole audio lifecycle."""
+
+
+class SilenceTracker:
+    """Detects a dead capture path: a real microphone always carries a noise
+    floor, so sustained bit-exact silence means nobody is actually listening."""
+
+    def __init__(self, limit_seconds: float = SILENCE_REBUILD_SECONDS,
+                 sample_rate: int = 16000):
+        self._limit = limit_seconds
+        self._rate = sample_rate
+        self._silent = 0.0
+
+    def update(self, frame: bytes) -> bool:
+        """Feed one mic frame; True when the silence limit is crossed."""
+        if any(frame):
+            self._silent = 0.0
+        else:
+            self._silent += len(frame) / 2 / self._rate
+        return self._silent >= self._limit
 
 
 class VoiceOrchestrator:
@@ -128,6 +151,7 @@ class VoiceOrchestrator:
 
     async def _wake_phase(self, mic: MicStream, speaker: SpeakerStream) -> None:
         starved = 0.0
+        silence = SilenceTracker()
         while True:
             for timer in self.timers.pop_due():
                 chime(speaker)
@@ -144,6 +168,11 @@ class VoiceOrchestrator:
                         f"no mic audio for {STARVATION_SECONDS}s (headset gone?)"
                     ) from None
                 continue
+            if silence.update(frame):
+                raise StreamsDied(
+                    f"mic delivered pure digital silence for "
+                    f"{SILENCE_REBUILD_SECONDS}s (capture path rerouted?)"
+                )
             if await asyncio.to_thread(self._detector.feed, frame):
                 log.info("wake word detected")
                 self._drain(mic)

@@ -31,6 +31,17 @@ PERSONA = (
 )
 
 
+def is_normal_closure(exc: BaseException) -> bool:
+    """Websocket close 1000/1001 surfaces as APIError('1000 None') or a
+    ConnectionClosed — an orderly goodbye, not a failure."""
+    if type(exc).__name__ in ("ConnectionClosedOK", "ConnectionClosed"):
+        return True
+    try:
+        return int(getattr(exc, "code", -1)) in (1000, 1001)
+    except (TypeError, ValueError):
+        return False
+
+
 def build_system_instruction(config: VenomConfig, memory: MemoryStore) -> str:
     parts = [PERSONA.replace("{user_name}", config.voice.user_name)]
     parts.append("[CURRENT DATE & TIME]\n" + time.strftime("%A, %B %d, %Y — %I:%M %p") + "\n")
@@ -96,8 +107,15 @@ class LiveSession:
                 frame = await asyncio.wait_for(self.mic_frames.get(), timeout=0.5)
             except TimeoutError:
                 continue
-            await self._session.send_realtime_input(
-                media={"data": frame, "mime_type": "audio/pcm"})
+            try:
+                await self._session.send_realtime_input(
+                    media={"data": frame, "mime_type": "audio/pcm"})
+            except Exception as exc:
+                # The socket closing under an in-flight send is part of every
+                # intentional session end — not an error, no error chime.
+                if self._ended.is_set() or is_normal_closure(exc):
+                    return
+                raise
 
     async def _downlink(self) -> None:
         try:
@@ -118,6 +136,10 @@ class LiveSession:
 
                     if response.tool_call:
                         await self._handle_tools(response.tool_call)
+        except Exception as exc:
+            if not (self._ended.is_set() or is_normal_closure(exc)):
+                raise
+            log.info("live session closed (%s)", type(exc).__name__)
         finally:
             self._ended.set()
 

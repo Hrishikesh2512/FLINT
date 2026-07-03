@@ -271,6 +271,37 @@ def test_speaker_rebuffers_after_drain():
     assert speaker._fill(1024) == b"\x00" * 1024  # back to prebuffering
 
 
+# ── session teardown & dead-capture-path detection ───────────────────────────
+def test_is_normal_closure():
+    from venom.live import is_normal_closure
+
+    class FakeAPIError(Exception):
+        def __init__(self, code):
+            self.code = code
+
+    class ConnectionClosedOK(Exception):
+        pass
+
+    assert is_normal_closure(FakeAPIError(1000))
+    assert is_normal_closure(FakeAPIError(1001))
+    assert is_normal_closure(ConnectionClosedOK())
+    assert not is_normal_closure(FakeAPIError(1011))
+    assert not is_normal_closure(RuntimeError("boom"))
+
+
+def test_silence_tracker_flags_bitexact_silence_only():
+    from venom.voice import SilenceTracker
+
+    tracker = SilenceTracker(limit_seconds=1.0, sample_rate=16000)
+    zeros = b"\x00" * 8000          # 0.25 s of dead frames (binary-exact)
+    noise = b"\x01\x00" * 4000      # 0.25 s with a real noise floor
+    for _ in range(3):
+        assert not tracker.update(zeros)
+    assert tracker.update(zeros)     # 1.0 s of pure zeros -> dead path
+    assert not tracker.update(noise)  # any signal resets it
+    assert not tracker.update(zeros)
+
+
 def test_build_system_instruction(tmp_path):
     from venom.live import build_system_instruction
 
