@@ -132,6 +132,11 @@ build <span id=ver>?</span></div>
 <pre id=mem>...</pre></details>
 <details ontoggle="if(this.open)loadLogs()"><summary>[+] LOGS</summary>
 <div class=row><button onclick="loadLogs()">refresh</button></div><pre id=logs></pre></details>
+<details ontoggle="if(this.open)termInit()"><summary>[+] TERMINAL</summary>
+<pre id=term style=height:230px;overflow-y:auto;margin:6px 0></pre>
+<form class=row id=termform><span id=cwd style=color:var(--amber)>~</span>
+<input id=termin autocomplete=off spellcheck=false autocapitalize=off
+style="flex:1;min-width:120px"></form></details>
 <details><summary>[+] SYSTEM</summary><div class=row>
 <button onclick="sys('update')">&#11015; update</button>
 <button onclick="sys('restart')">&#8635; restart</button>
@@ -209,6 +214,19 @@ async function loadLogs(){$('logs').textContent='loading...';
 $('logs').textContent=(await(await api('/api/logs')).json()).text}
 async function loadMem(){$('mem').textContent='loading...';
 $('mem').textContent=(await(await api('/api/memory')).json()).text}
+let hist=[],hp=0;
+async function runTerm(c){const r=await(await api('/api/term',{cmd:c})).json();
+$('term').textContent+=$('cwd').textContent+'$ '+c+'\\n'+(r.out||'')+'\\n';
+$('cwd').textContent=r.cwd;$('term').scrollTop=1e9}
+function termInit(){setTimeout(()=>$('termin').focus(),60);
+if(!$('term').textContent){$('term').textContent=
+'venom shell // runs as venomd (unprivileged, read-mostly). \\u2191/\\u2193 = history\\n';
+runTerm('whoami; pwd')}}
+$('termform').onsubmit=e=>{e.preventDefault();const c=$('termin').value;
+if(c.trim()){hist.push(c);hp=hist.length;runTerm(c)}$('termin').value=''};
+$('termin').onkeydown=e=>{if(e.key=='ArrowUp'&&hp>0){$('termin').value=hist[--hp];
+e.preventDefault()}else if(e.key=='ArrowDown'){hp=Math.min(hist.length,hp+1);
+$('termin').value=hist[hp]||''}};
 setInterval(()=>$('clock').textContent=new Date().toLocaleTimeString(),1000);
 setInterval(tick,1500);setInterval(vtick,3000);tick();vtick();
 </script>""".replace("__BANNER__", BANNER)
@@ -223,6 +241,8 @@ class WebConsole:
         self.orchestrator = None  # set by attach(); may be replaced on restart
         self.loop = None
         self._prev_cpu = None  # (idle, total) for %-usage deltas
+        self._cwd = None       # terminal working dir, persisted across calls
+        self._prev_cwd = None  # for `cd -`
 
     def authorized(self, headers) -> bool:
         """A request is allowed when no token is set, or it presents it."""
@@ -433,6 +453,42 @@ class WebConsole:
         self.system("restart")
         return "Saved — restarting Venom to apply."
 
+    def terminal(self, cmd: str) -> dict:
+        """Run a shell command on the Pi and return combined output. Tracks
+        the working directory across calls so `cd` behaves. Runs as the
+        (unprivileged, ProtectSystem=strict) venomd user — a read-mostly
+        exploration shell, not root."""
+        import os
+
+        if self._cwd is None:
+            self._cwd = "/opt/venom/app" if os.path.isdir("/opt/venom/app") else "/"
+        cmd = (cmd or "").strip()
+        if not cmd:
+            return {"out": "", "cwd": self._cwd}
+
+        # cd is a shell builtin — subprocess can't persist it, so handle it.
+        if cmd == "cd" or cmd.startswith("cd "):
+            target = cmd[2:].strip() or "/"
+            if target == "-":
+                target = self._prev_cwd or self._cwd
+            new = os.path.normpath(
+                os.path.join(self._cwd, os.path.expanduser(target)))
+            if os.path.isdir(new):
+                self._prev_cwd, self._cwd = self._cwd, new
+                return {"out": "", "cwd": self._cwd}
+            return {"out": f"cd: {target}: not a directory", "cwd": self._cwd}
+
+        try:
+            r = subprocess.run(cmd, shell=True, cwd=self._cwd, capture_output=True,
+                               text=True, timeout=30,
+                               env={**os.environ, "TERM": "dumb"})
+            out = (r.stdout or "") + (r.stderr or "")
+        except subprocess.TimeoutExpired:
+            out = "[timed out after 30s]"
+        except Exception as exc:
+            out = f"[error: {exc}]"
+        return {"out": out[-20000:], "cwd": self._cwd}
+
     @staticmethod
     def logs(lines: int = 60) -> str:
         out = subprocess.run(
@@ -519,6 +575,9 @@ class WebConsole:
                 elif self.path == "/api/settings":
                     result = console.settings_set(data)
                     self._send(json.dumps({"result": result}).encode())
+                elif self.path == "/api/term":
+                    self._send(json.dumps(
+                        console.terminal(str(data.get("cmd", "")))).encode())
                 else:
                     self._send(b"{}")
 
