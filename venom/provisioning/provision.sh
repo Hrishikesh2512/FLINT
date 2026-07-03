@@ -128,6 +128,7 @@ id venomd >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin
 usermod -aG audio venomd
 usermod -aG bluetooth venomd || true
 usermod -aG input venomd || true  # headset AVRCP buttons
+usermod -aG systemd-journal venomd || true  # web console log viewer
 
 mkdir -p /etc/venom
 if [ ! -f /etc/venom/venom.toml ]; then
@@ -169,7 +170,15 @@ install -m 0644 "$APP_DIR/venom/provisioning/pipewire-system.service" \
 install -m 0644 "$APP_DIR/venom/provisioning/wireplumber-system.service" \
     /etc/systemd/system/wireplumber-system.service
 install -m 0644 "$APP_DIR/venom/provisioning/venom.service" /etc/systemd/system/venom.service
+# Root control channel: the web console writes /run/venom/control.request,
+# this path unit dispatches update/restart/reboot with root rights.
+install -m 0755 "$APP_DIR/venom/provisioning/control.sh" /opt/venom/provision/control.sh
+install -m 0644 "$APP_DIR/venom/provisioning/venom-control.path" \
+    /etc/systemd/system/venom-control.path
+install -m 0644 "$APP_DIR/venom/provisioning/venom-control.service" \
+    /etc/systemd/system/venom-control.service
 systemctl daemon-reload
+systemctl enable --now venom-control.path
 systemctl enable bluetooth.service pipewire-system.service wireplumber-system.service
 systemctl restart bluetooth.service pipewire-system.service wireplumber-system.service
 systemctl enable venom.service

@@ -1,0 +1,8 @@
+[Unit]
+Description=Watch for Venom control requests from the web console
+
+[Path]
+PathExists=/run/venom/control.request
+
+[Install]
+WantedBy=multi-user.target

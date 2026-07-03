@@ -1,0 +1,9 @@
+[Unit]
+Description=Venom control dispatcher (update / restart / reboot)
+
+[Service]
+Type=oneshot
+ExecStart=/opt/venom/provision/control.sh
+TimeoutStartSec=30min
+StandardOutput=journal
+StandardError=journal

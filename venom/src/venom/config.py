@@ -154,11 +154,25 @@ def load_config(path: Path | None = None) -> VenomConfig:
     if path is None:
         path = Path(os.environ.get("VENOM_CONFIG", str(DEFAULT_CONFIG_PATH)))
 
-    if not path.exists():
-        return VenomConfig()
+    data: dict = {}
+    if path.exists():
+        with open(path, "rb") as fh:
+            data = tomllib.load(fh)
 
-    with open(path, "rb") as fh:
-        data = tomllib.load(fh)
+    # Runtime overrides written by the web console (venom can write its own
+    # state dir, but /etc is sealed by systemd hardening). One level deep.
+    override_path = Path(os.environ.get("VENOM_OVERRIDE",
+                                        "/var/lib/venom/override.toml"))
+    try:
+        with open(override_path, "rb") as fh:
+            for section, values in tomllib.load(fh).items():
+                if isinstance(values, dict):
+                    data.setdefault(section, {}).update(values)
+    except (OSError, tomllib.TOMLDecodeError):
+        pass
+
+    if not data:
+        return VenomConfig()
 
     venom = data.get("venom", {})
     internet = data.get("internet", {})

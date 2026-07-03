@@ -11,7 +11,7 @@ WatchdogSec=90
 Restart=always
 RestartSec=5
 User=venomd
-SupplementaryGroups=audio bluetooth
+SupplementaryGroups=audio bluetooth input systemd-journal
 # Bluetooth audio flows through the system-wide PipeWire instance.
 Environment=PIPEWIRE_RUNTIME_DIR=/run/pipewire
 Environment=XDG_RUNTIME_DIR=/run/pipewire

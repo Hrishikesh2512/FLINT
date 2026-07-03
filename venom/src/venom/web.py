@@ -13,9 +13,42 @@ import json
 import logging
 import subprocess
 import threading
+import tomllib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 
 log = logging.getLogger("venom.web")
+
+CONTROL_REQUEST = Path("/run/venom/control.request")
+OVERRIDE_PATH = Path("/var/lib/venom/override.toml")
+VOICE_KEYS = ("wake_word", "wake_threshold", "voice_name", "user_name",
+              "inactivity_timeout")
+
+
+def _toml_value(value) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    return json.dumps(str(value))
+
+
+def write_override(section: str, values: dict,
+                   path: Path = OVERRIDE_PATH) -> None:
+    """Merge `values` into [section] of the override TOML the daemon owns."""
+    data: dict = {}
+    try:
+        data = tomllib.loads(path.read_text())
+    except (OSError, tomllib.TOMLDecodeError):
+        pass
+    data.setdefault(section, {}).update(values)
+    lines = []
+    for sect, vals in data.items():
+        lines.append(f"[{sect}]")
+        lines += [f"{k} = {_toml_value(v)}" for k, v in vals.items()]
+        lines.append("")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines))
 
 PAGE = """<!doctype html><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
@@ -43,6 +76,20 @@ button{cursor:pointer}button:hover{background:#21262d}</style>
 <button onclick="music('stop')">&#9632; Stop</button>
 <button onclick="vol(-10)">Vol-</button><button onclick="vol(10)">Vol+</button>
 </div>
+<details><summary>&#128266; Bluetooth</summary><div class=row>
+<button onclick="bt(0)">Paired devices</button>
+<button onclick="bt(1)">Scan nearby (8s)</button></div>
+<div id=btlist></div></details>
+<details><summary>&#9881;&#65039; Settings</summary><div id=settings></div>
+<div class=row><button onclick="saveSettings()">Save &amp; restart</button></div></details>
+<details><summary>&#128203; Logs</summary>
+<div class=row><button onclick="loadLogs()">Refresh</button></div>
+<pre id=logs style="font-size:11px;overflow-x:auto;background:#161b22;
+border:1px solid #30363d;border-radius:8px;padding:8px"></pre></details>
+<details><summary>&#128295; System</summary><div class=row>
+<button onclick="sys('update')">&#11015; Update from GitHub</button>
+<button onclick="sys('restart')">&#8635; Restart Venom</button>
+<button onclick="sys('reboot')">&#9888; Reboot Pi</button></div></details>
 <script>
 const $=id=>document.getElementById(id);let n=0;
 async function api(p,b){return fetch(p,b?{method:'POST',body:JSON.stringify(b)}:{})}
@@ -60,6 +107,27 @@ $('say').onsubmit=e=>{e.preventDefault();if($('text').value.trim())
 api('/api/prompt',{text:$('text').value.trim()});$('text').value=''};
 function music(a,q){api('/api/music',{action:a,query:q||''})}
 function vol(d){api('/api/volume',{delta:d})}
+function sys(a){if(a=='reboot'&&!confirm('Reboot the Pi?'))return;
+if(a=='update'&&!confirm('Pull latest code from GitHub and reinstall?'))return;
+api('/api/system',{action:a})}
+async function bt(scan){$('btlist').innerHTML='<i>looking...</i>';
+const d=await(await api('/api/bluetooth'+(scan?'/scan':''))).json();
+$('btlist').innerHTML=d.map(x=>`<div class=row><span class="pill ${
+x.connected?'ok':''}">${x.name} ${x.connected?'&#10003;':''}</span>
+<button onclick="btUse('${x.mac}','${x.name.replace(/'/g,'')}')">Use</button>
+</div>`).join('')||'<i>none found</i>'}
+function btUse(m,n){if(confirm('Switch headset to '+n+'? Venom restarts.'))
+api('/api/bluetooth',{mac:m,name:n})}
+async function loadSettings(){const s=await(await api('/api/settings')).json();
+$('settings').innerHTML=Object.entries(s).map(([k,v])=>
+`<div class=row><label style=min-width:140px>${k}</label>
+<input data-k=${k} value="${v}"></div>`).join('')}
+function saveSettings(){const b={};document.querySelectorAll('#settings input')
+.forEach(i=>b[i.dataset.k]=i.value);
+if(confirm('Save settings and restart Venom?'))api('/api/settings',b)}
+async function loadLogs(){const l=await(await api('/api/logs')).json();
+$('logs').textContent=l.text}
+loadSettings();
 setInterval(tick,1500);tick();
 </script>"""
 
@@ -113,6 +181,71 @@ class WebConsole:
         orch.transcript.append(("system", result))
         return result
 
+    def system(self, action: str) -> str:
+        """Privileged actions via the root control unit watching /run/venom."""
+        if action not in ("update", "restart", "reboot"):
+            return "unknown action"
+        try:
+            CONTROL_REQUEST.write_text(action)
+        except OSError as exc:
+            return f"control channel unavailable: {exc}"
+        notes = {"update": "Updating from GitHub — takes a few minutes, "
+                           "then Venom restarts.",
+                 "restart": "Restarting Venom...",
+                 "reboot": "Rebooting the Pi..."}
+        if self.orchestrator is not None:
+            self.orchestrator.transcript.append(("system", notes[action]))
+        return notes[action]
+
+    @staticmethod
+    def bluetooth_list(scan_seconds: int = 0) -> list[dict]:
+        from venom.btaudio import parse_devices
+
+        def run(args, timeout=10):
+            out = subprocess.run(["bluetoothctl", *args], capture_output=True,
+                                 text=True, timeout=timeout)
+            return (out.stdout or "") + (out.stderr or "")
+
+        if scan_seconds:
+            run(["--timeout", str(scan_seconds), "scan", "on"],
+                timeout=scan_seconds + 10)
+        devices = []
+        for mac, name in parse_devices(run(["devices"])).items():
+            connected = "Connected: yes" in run(["info", mac])
+            devices.append({"mac": mac, "name": name, "connected": connected})
+        return devices
+
+    def bluetooth_use(self, mac: str, name: str) -> str:
+        """Persist a new preferred headset and restart to adopt it."""
+        write_override("audio", {"output": "bluetooth",
+                                 "bluetooth_mac": mac, "bluetooth_name": name})
+        self.system("restart")
+        return f"Switching to {name or mac} — restarting Venom."
+
+    def settings_get(self) -> dict:
+        from venom.config import load_config
+
+        voice = load_config().voice
+        return {k: getattr(voice, k) for k in VOICE_KEYS}
+
+    def settings_set(self, values: dict) -> str:
+        clean = {k: values[k] for k in VOICE_KEYS if k in values}
+        for key in ("wake_threshold", "inactivity_timeout"):
+            if key in clean:
+                clean[key] = float(clean[key])
+        if not clean:
+            return "nothing to change"
+        write_override("voice", clean)
+        self.system("restart")
+        return "Saved — restarting Venom to apply."
+
+    @staticmethod
+    def logs(lines: int = 60) -> str:
+        out = subprocess.run(
+            ["journalctl", "-u", "venom", "-n", str(lines), "--no-pager",
+             "-o", "short-precise"], capture_output=True, text=True, timeout=10)
+        return out.stdout or out.stderr or "(journal not readable)"
+
     @staticmethod
     def volume(delta: int) -> None:
         sign = "+" if delta >= 0 else "-"
@@ -137,6 +270,13 @@ class WebConsole:
             def do_GET(self):
                 if self.path == "/api/state":
                     self._send(json.dumps(console.state()).encode())
+                elif self.path.startswith("/api/bluetooth"):
+                    scan = 8 if "scan" in self.path else 0
+                    self._send(json.dumps(console.bluetooth_list(scan)).encode())
+                elif self.path == "/api/settings":
+                    self._send(json.dumps(console.settings_get()).encode())
+                elif self.path == "/api/logs":
+                    self._send(json.dumps({"text": console.logs()}).encode())
                 else:
                     self._send(PAGE.encode(), "text/html; charset=utf-8")
 
@@ -159,6 +299,16 @@ class WebConsole:
                     except Exception as exc:
                         log.debug("volume failed: %s", exc)
                     self._send(b"{}")
+                elif self.path == "/api/system":
+                    result = console.system(str(data.get("action", "")))
+                    self._send(json.dumps({"result": result}).encode())
+                elif self.path == "/api/bluetooth":
+                    result = console.bluetooth_use(str(data.get("mac", "")),
+                                                   str(data.get("name", "")))
+                    self._send(json.dumps({"result": result}).encode())
+                elif self.path == "/api/settings":
+                    result = console.settings_set(data)
+                    self._send(json.dumps({"result": result}).encode())
                 else:
                     self._send(b"{}")
 
