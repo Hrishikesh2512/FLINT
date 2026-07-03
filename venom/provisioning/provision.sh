@@ -87,10 +87,20 @@ fi
 "$VENV_DIR/bin/pip" install --quiet "onnxruntime>=1.20,<1.22" "numpy>=1.26,<2.5" \
     "tqdm>=4.64" "scipy>=1.11" "requests>=2.31"
 
-# Venom never trains custom verifier models, and that (unused) corner of
-# openwakeword drags in scikit-learn, which won't import on this fresh
-# Python/OS combination. Make the import optional instead of fighting it.
-"$VENV_DIR/bin/python" - <<'PYEOF'
+# ── Heavy dependency install — ONLY on first run or when venom's declared
+# dependencies change. A code-only "Update from GitHub" skips this entire
+# block: rebuilding evdev from C source and re-resolving the dep tree every
+# time spiked memory and swap-thrashed the 1.8 GB Pi, stalling SSH and the
+# web console mid-update. Code refresh is the cheap step at the end.
+DEPS_HASH="$(sha256sum "$APP_DIR/venom/pyproject.toml" | cut -d' ' -f1)"
+DEPS_MARK=/opt/venom/.deps-hash
+if [ ! -f "$STAMP" ] || [ "$(cat "$DEPS_MARK" 2>/dev/null)" != "$DEPS_HASH" ]; then
+    log "installing dependencies (first run or deps changed)"
+
+    # Venom never trains custom verifier models, and that (unused) corner of
+    # openwakeword drags in scikit-learn, which won't import on this fresh
+    # Python/OS combination. Make the import optional instead of fighting it.
+    "$VENV_DIR/bin/python" - <<'PYEOF'
 from pathlib import Path
 import sys
 init = next(Path(sys.prefix, "lib").glob("python3.*/site-packages/openwakeword/__init__.py"))
@@ -107,45 +117,43 @@ else:
     print("[venom-provision] openwakeword: import already optional")
 PYEOF
 
-# --force-reinstall --no-deps: the package version stays 0.1.0 across
-# commits, so a plain --upgrade sees "already satisfied" and ships stale
-# code to the device. Force just the venom package (deps handled below);
-# it is small and fast, and guarantees pushed fixes actually land.
-"$VENV_DIR/bin/pip" install --quiet --upgrade "$APP_DIR/venom[voice]"
-"$VENV_DIR/bin/pip" install --quiet --force-reinstall --no-deps "$APP_DIR/venom"
-"$VENV_DIR/bin/pip" install --quiet --upgrade yt-dlp evdev
+    "$VENV_DIR/bin/pip" install --quiet --upgrade "$APP_DIR/venom[voice]"
+    "$VENV_DIR/bin/pip" install --quiet --upgrade yt-dlp evdev
 
-# Self-heal: a power cut mid-install can leave corrupted native wheels
-# (observed on real hardware: numpy Bus error after an unclean reboot).
-# If the core imports crash, force-reinstall them fresh and re-verify.
-# A wheelhouse on the boot partition (staged by prepare-pendrive) is used
-# first so the repair works even on a bad connection.
-if ! "$VENV_DIR/bin/python" -c "import numpy, scipy, onnxruntime, openwakeword" 2>/dev/null; then
-    log "native libraries broken — force-reinstalling"
-    "$VENV_DIR/bin/pip" install --quiet --force-reinstall --no-cache-dir \
-        "numpy>=1.26,<2.5" "scipy>=1.11"
-    "$VENV_DIR/bin/python" -c "import numpy, scipy, onnxruntime, openwakeword" \
-        || { log "libraries still broken after reinstall — will retry next boot"; exit 1; }
-    log "native libraries repaired"
-fi
-
-# Wake word models: use copies staged on the boot partition when present,
-# else download once. (Resolve the package dir via Python — a bare ls glob
-# exits non-zero when the fresh install lacks the models dir, killing the
-# script under set -e.)
-OWW_DST="$("$VENV_DIR/bin/python" -c 'import openwakeword, pathlib; print(pathlib.Path(openwakeword.__file__).parent / "resources" / "models")' 2>/dev/null || true)"
-if [ -n "$OWW_DST" ]; then
-    mkdir -p "$OWW_DST"
-    if [ -d /boot/firmware/venom/oww-models ]; then
-        cp -n /boot/firmware/venom/oww-models/*.onnx "$OWW_DST"/ 2>/dev/null || true
-        log "wake word models staged from boot partition"
+    # Self-heal: a power cut mid-install can leave corrupted native wheels
+    # (observed on real hardware: numpy Bus error after an unclean reboot).
+    if ! "$VENV_DIR/bin/python" -c "import numpy, scipy, onnxruntime, openwakeword" 2>/dev/null; then
+        log "native libraries broken — force-reinstalling"
+        "$VENV_DIR/bin/pip" install --quiet --force-reinstall --no-cache-dir \
+            "numpy>=1.26,<2.5" "scipy>=1.11"
+        "$VENV_DIR/bin/python" -c "import numpy, scipy, onnxruntime, openwakeword" \
+            || { log "libraries still broken after reinstall — will retry next boot"; exit 1; }
+        log "native libraries repaired"
     fi
-fi
-"$VENV_DIR/bin/python" - <<'PYEOF'
+
+    # Wake word models: staged copies on the boot partition, else download.
+    OWW_DST="$("$VENV_DIR/bin/python" -c 'import openwakeword, pathlib; print(pathlib.Path(openwakeword.__file__).parent / "resources" / "models")' 2>/dev/null || true)"
+    if [ -n "$OWW_DST" ]; then
+        mkdir -p "$OWW_DST"
+        if [ -d /boot/firmware/venom/oww-models ]; then
+            cp -n /boot/firmware/venom/oww-models/*.onnx "$OWW_DST"/ 2>/dev/null || true
+            log "wake word models staged from boot partition"
+        fi
+    fi
+    "$VENV_DIR/bin/python" - <<'PYEOF'
 import openwakeword.utils
 openwakeword.utils.download_models(["hey_jarvis"])
 print("[venom-provision] wake word model ready")
 PYEOF
+    echo "$DEPS_HASH" > "$DEPS_MARK"
+else
+    log "dependencies unchanged — skipping heavy install"
+fi
+
+# Always refresh venom's own code (pure Python: no build, no dep resolution,
+# a few hundred KB). Version stays 0.1.0 across commits, so --force-reinstall
+# --no-deps is what makes a pushed fix actually reach the running service.
+"$VENV_DIR/bin/pip" install --quiet --force-reinstall --no-deps "$APP_DIR/venom"
 
 # ── 5. service account + config ───────────────────────────────────────────────
 id venomd >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin venomd
