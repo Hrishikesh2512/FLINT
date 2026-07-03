@@ -158,9 +158,15 @@ fi
 # ── 5. service account + config ───────────────────────────────────────────────
 # Service user is "venom" (the console terminal's `whoami` shows it).
 # Migrate a legacy "venomd" account in place so existing file ownership
-# and group memberships carry over without orphaning anything.
+# and group memberships carry over without orphaning anything. usermod -l
+# refuses while the account owns live processes, so stop its services
+# first (section 6 restarts them under the new name).
 if id venomd >/dev/null 2>&1 && ! id venom >/dev/null 2>&1; then
     log "renaming service user venomd -> venom"
+    systemctl stop venom.service pipewire-system.service \
+        wireplumber-system.service 2>/dev/null || true
+    pkill -KILL -u venomd 2>/dev/null || true
+    sleep 1
     usermod -l venom venomd
     groupmod -n venom venomd 2>/dev/null || true
 fi
