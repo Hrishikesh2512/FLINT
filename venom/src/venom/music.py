@@ -14,13 +14,14 @@ import threading
 
 log = logging.getLogger("venom.music")
 
-YTDLP = "/opt/venom/venv/bin/yt-dlp"
+# Invoke as a module: immune to console-script corruption on flaky flash.
+YTDLP = ["/opt/venom/venv/bin/python", "-m", "yt_dlp"]
 DEFAULT_TIMEOUT = 25  # seconds for search/URL resolution
 
 
 class MusicPlayer:
-    def __init__(self, ytdlp: str = YTDLP):
-        self._ytdlp = ytdlp
+    def __init__(self, ytdlp: list[str] | None = None):
+        self._ytdlp = list(ytdlp or YTDLP)
         self._proc: subprocess.Popen | None = None
         self._title = ""
         self._lock = threading.Lock()
@@ -44,7 +45,7 @@ class MusicPlayer:
 
         try:
             out = subprocess.run(
-                [self._ytdlp, "--no-playlist", "-f", "bestaudio/best",
+                [*self._ytdlp, "--no-playlist", "-f", "bestaudio/best",
                  "--print", "title", "--print", "url",
                  f"ytsearch1:{query}"],
                 capture_output=True, text=True, timeout=DEFAULT_TIMEOUT,
