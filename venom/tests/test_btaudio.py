@@ -92,10 +92,23 @@ def test_parse_info_in_range_flag():
     assert parse_info(INFO_CONNECTED)["connected"] is True
 
 
+def test_direct_connect_when_idle_no_pairing_mode():
+    # not connected -> direct page connect succeeds (real-hardware behavior)
+    runner = ScriptedRunner([
+        INFO_OUT_OF_RANGE,   # initial status
+        INFO_CONNECTED,      # status after the direct connect attempt
+    ])
+    headset, scans = make(runner)
+    assert headset.ensure_connected() is True
+    assert scans == []  # never needed discovery
+    assert any(c.startswith("connect") for c in runner.flat())
+
+
 def test_full_pairing_flow_with_continuous_scan():
-    # not connected -> visible in range -> pair -> trust -> connect
+    # not connected -> direct connect fails -> visible in range -> pair -> connect
     runner = ScriptedRunner([
         INFO_OUT_OF_RANGE,     # initial status: not connected
+        INFO_OUT_OF_RANGE,     # status after failed direct connect
         INFO_IN_RANGE_FRESH,   # wait_visible poll: broadcasting now
         INFO_IN_RANGE_FRESH,   # state before pair
         INFO_IN_RANGE_PAIRED,  # connected check before connect
