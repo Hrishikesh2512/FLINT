@@ -4,7 +4,7 @@ After=bluetooth.service
 
 [Service]
 Type=simple
-User=venomd
+User=venom
 SupplementaryGroups=audio bluetooth
 RuntimeDirectory=pipewire
 RuntimeDirectoryPreserve=yes

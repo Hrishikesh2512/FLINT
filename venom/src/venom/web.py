@@ -479,9 +479,11 @@ class WebConsole:
             return {"out": f"cd: {target}: not a directory", "cwd": self._cwd}
 
         try:
-            r = subprocess.run(cmd, shell=True, cwd=self._cwd, capture_output=True,
-                               text=True, timeout=30,
-                               env={**os.environ, "TERM": "dumb"})
+            # A real bash login shell: pipes, globs, redirection, $VARS,
+            # command substitution, aliases in /etc/profile — the full set.
+            r = subprocess.run(["/bin/bash", "-lc", cmd], cwd=self._cwd,
+                               capture_output=True, text=True, timeout=30,
+                               env={**os.environ, "TERM": "xterm-256color"})
             out = (r.stdout or "") + (r.stderr or "")
         except subprocess.TimeoutExpired:
             out = "[timed out after 30s]"

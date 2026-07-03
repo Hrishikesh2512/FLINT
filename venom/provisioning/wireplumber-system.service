@@ -5,7 +5,7 @@ Requires=pipewire-system.service
 
 [Service]
 Type=simple
-User=venomd
+User=venom
 SupplementaryGroups=audio bluetooth
 Environment=XDG_RUNTIME_DIR=/run/pipewire
 Environment=PIPEWIRE_RUNTIME_DIR=/run/pipewire

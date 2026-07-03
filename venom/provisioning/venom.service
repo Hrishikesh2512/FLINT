@@ -10,7 +10,7 @@ ExecStart=/opt/venom/venv/bin/python -m venom
 WatchdogSec=90
 Restart=always
 RestartSec=5
-User=venomd
+User=venom
 SupplementaryGroups=audio bluetooth input systemd-journal
 # Bluetooth audio flows through the system-wide PipeWire instance.
 Environment=PIPEWIRE_RUNTIME_DIR=/run/pipewire

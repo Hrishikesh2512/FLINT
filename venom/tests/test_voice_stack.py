@@ -346,6 +346,25 @@ def test_probe_any_false_when_all_down():
         network.probe_tcp = orig
 
 
+# ── web console terminal ──────────────────────────────────────────────────────
+def test_terminal_cd_tracks_directory(tmp_path):
+    from venom.web import WebConsole
+
+    console = WebConsole()
+    console._cwd = str(tmp_path)
+    sub = tmp_path / "child"
+    sub.mkdir()
+
+    assert console.terminal("cd child")["cwd"] == str(sub)
+    assert console.terminal("cd ..")["cwd"] == str(tmp_path)
+    # a bad path is reported, not applied
+    r = console.terminal("cd nope")
+    assert "not a directory" in r["out"] and r["cwd"] == str(tmp_path)
+    # `cd -` returns to the previous directory
+    console.terminal("cd child")
+    assert console.terminal("cd -")["cwd"] == str(tmp_path)
+
+
 # ── web console auth ──────────────────────────────────────────────────────────
 def test_web_authorized_gate():
     from venom.web import WebConsole

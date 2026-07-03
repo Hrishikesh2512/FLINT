@@ -156,23 +156,33 @@ fi
 "$VENV_DIR/bin/pip" install --quiet --force-reinstall --no-deps "$APP_DIR/venom"
 
 # ── 5. service account + config ───────────────────────────────────────────────
-id venomd >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin venomd
-usermod -aG audio venomd
-usermod -aG bluetooth venomd || true
-usermod -aG input venomd || true  # headset AVRCP buttons
-usermod -aG systemd-journal venomd || true  # web console log viewer
+# Service user is "venom" (the console terminal's `whoami` shows it).
+# Migrate a legacy "venomd" account in place so existing file ownership
+# and group memberships carry over without orphaning anything.
+if id venomd >/dev/null 2>&1 && ! id venom >/dev/null 2>&1; then
+    log "renaming service user venomd -> venom"
+    usermod -l venom venomd
+    groupmod -n venom venomd 2>/dev/null || true
+fi
+id venom >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin venom
+usermod -aG audio venom
+usermod -aG bluetooth venom || true
+usermod -aG input venom || true  # headset AVRCP buttons
+usermod -aG systemd-journal venom || true  # web console log viewer
 
 mkdir -p /etc/venom
 if [ ! -f /etc/venom/venom.toml ]; then
     if [ -f "$PROVISION_DIR/venom.toml" ]; then
-        install -m 0640 -g venomd "$PROVISION_DIR/venom.toml" /etc/venom/venom.toml
+        install -m 0640 -g venom "$PROVISION_DIR/venom.toml" /etc/venom/venom.toml
     else
-        install -m 0640 -g venomd "$APP_DIR/venom/provisioning/venom.toml" /etc/venom/venom.toml
+        install -m 0640 -g venom "$APP_DIR/venom/provisioning/venom.toml" /etc/venom/venom.toml
     fi
 else
     # keep existing config but tighten perms (it holds the API key)
-    chgrp venomd /etc/venom/venom.toml && chmod 0640 /etc/venom/venom.toml
+    chgrp venom /etc/venom/venom.toml && chmod 0640 /etc/venom/venom.toml
 fi
+# Old files may still be owned by the pre-rename account name.
+chown -R venom:venom /var/lib/venom 2>/dev/null || true
 
 # Web console access PIN: generate once, persist in the state dir. It
 # survives config rewrites; read it over SSH with:
@@ -182,7 +192,7 @@ if [ ! -s /var/lib/venom/web_token ]; then
     (openssl rand -hex 4 2>/dev/null \
         || tr -dc 'a-f0-9' </dev/urandom | head -c 8) > /var/lib/venom/web_token
 fi
-chown venomd:venomd /var/lib/venom/web_token 2>/dev/null || true
+chown venom:venom /var/lib/venom/web_token 2>/dev/null || true
 chmod 640 /var/lib/venom/web_token
 log "web console PIN: $(cat /var/lib/venom/web_token)"
 
