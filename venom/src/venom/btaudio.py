@@ -126,6 +126,17 @@ class BluetoothHeadset:
         if self.mac and self.status()["connected"]:
             return True
 
+        # Idle headsets often accept a direct page connection (and re-pair
+        # silently via the agent) even though they refuse discovery — try
+        # that first; it turns "hold the pairing button" into "just turn
+        # the earbuds on". Verified on real hardware.
+        if self.mac:
+            self._run(["connect", self.mac], 30)
+            if self.status()["connected"]:
+                log.info("bluetooth headset connected directly (no pairing mode): %s",
+                         self.mac)
+                return True
+
         if not self.wait_visible():
             log.info("headset not broadcasting — pairing mode needed; will retry")
             return False
