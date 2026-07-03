@@ -4,6 +4,12 @@
 # Idempotent: safe to re-run after a partial failure (power loss, no Wi-Fi).
 set -euo pipefail
 
+# Single instance: boot unit, control channel, and manual runs must never
+# overlap — concurrent pip installs corrupt the venv.
+LOCK=/run/venom-provision.lock
+exec 200>"$LOCK"
+flock -n 200 || { echo "[venom-provision] another run is active — exiting"; exit 0; }
+
 REPO_URL="${VENOM_REPO_URL:-https://github.com/Hrishikesh2512/FLINT.git}"
 REPO_BRANCH="${VENOM_REPO_BRANCH:-v2/rebuild}"
 APP_DIR=/opt/venom/app
