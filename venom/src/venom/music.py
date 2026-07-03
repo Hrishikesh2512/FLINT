@@ -8,7 +8,9 @@ process so the voice loop stays fully responsive — the wake word and
 
 from __future__ import annotations
 
+import json
 import logging
+import socket
 import subprocess
 import threading
 
@@ -17,6 +19,7 @@ log = logging.getLogger("venom.music")
 # Invoke as a module: immune to console-script corruption on flaky flash.
 YTDLP = ["/opt/venom/venv/bin/python", "-m", "yt_dlp"]
 DEFAULT_TIMEOUT = 25  # seconds for search/URL resolution
+MPV_SOCKET = "/run/venom/mpv.sock"
 
 
 class MusicPlayer:
@@ -60,7 +63,8 @@ class MusicPlayer:
 
         with self._lock:
             self._proc = subprocess.Popen(
-                ["mpv", "--no-video", "--really-quiet", "--volume=70", url],
+                ["mpv", "--no-video", "--really-quiet", "--volume=70",
+                 f"--input-ipc-server={MPV_SOCKET}", url],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             )
             self._title = title
@@ -78,3 +82,28 @@ class MusicPlayer:
                 proc.kill()
             return "Music stopped."
         return "Nothing is playing."
+
+    # ── pause / resume (voice tools + the headset button) ────────────────────
+    def _ipc(self, command: list) -> dict:
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+                sock.settimeout(3)
+                sock.connect(MPV_SOCKET)
+                sock.sendall(json.dumps({"command": command}).encode() + b"\n")
+                return json.loads(sock.recv(4096).split(b"\n")[0])
+        except (OSError, json.JSONDecodeError) as exc:
+            log.debug("mpv ipc failed: %s", exc)
+            return {}
+
+    def toggle_pause(self) -> str:
+        if not self.playing:
+            return "Nothing is playing."
+        self._ipc(["cycle", "pause"])
+        state = self._ipc(["get_property", "pause"]).get("data")
+        return "Paused." if state else "Resumed."
+
+    def set_paused(self, paused: bool) -> str:
+        if not self.playing:
+            return "Nothing is playing."
+        self._ipc(["set_property", "pause", paused])
+        return "Paused." if paused else "Resumed."

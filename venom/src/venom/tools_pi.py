@@ -146,6 +146,14 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
         def stop_music() -> str:
             return music.stop()
 
+        @reg.tool(description="Pauses the currently playing music (resumable).")
+        def pause_music() -> str:
+            return music.set_paused(True)
+
+        @reg.tool(description="Resumes paused music.")
+        def resume_music() -> str:
+            return music.set_paused(False)
+
         @reg.tool(description="Tells what music is currently playing, if any.")
         def now_playing() -> str:
             title = music.now_playing

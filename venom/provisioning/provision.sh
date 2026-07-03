@@ -87,7 +87,7 @@ else:
 PYEOF
 
 "$VENV_DIR/bin/pip" install --quiet --upgrade "$APP_DIR/venom[voice]"
-"$VENV_DIR/bin/pip" install --quiet --upgrade yt-dlp
+"$VENV_DIR/bin/pip" install --quiet --upgrade yt-dlp evdev
 
 # Self-heal: a power cut mid-install can leave corrupted native wheels
 # (observed on real hardware: numpy Bus error after an unclean reboot).
@@ -125,6 +125,7 @@ PYEOF
 id venomd >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin venomd
 usermod -aG audio venomd
 usermod -aG bluetooth venomd || true
+usermod -aG input venomd || true  # headset AVRCP buttons
 
 mkdir -p /etc/venom
 if [ ! -f /etc/venom/venom.toml ]; then

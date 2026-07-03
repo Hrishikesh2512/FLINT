@@ -60,6 +60,10 @@ class VoiceOrchestrator:
         self._detector_ready = asyncio.create_task(
             asyncio.to_thread(self._detector.load))
 
+        from venom.buttons import watch_buttons
+
+        asyncio.create_task(watch_buttons(self.music))
+
         first_cycle = True
         while True:
             try:
