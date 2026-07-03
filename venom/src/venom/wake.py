@@ -44,6 +44,23 @@ class WakeWordDetector:
         if self._model is not None:
             self._model.reset()
 
+    @staticmethod
+    def _normalize(audio):
+        """Boost quiet speech toward full scale before scoring.
+
+        Narrowband Bluetooth mics (8 kHz CVSD) deliver soft, muffled audio
+        that scores poorly; amplifying quiet-but-real signal recovers a lot
+        of detection margin. Silence stays silent (no gain below the floor),
+        loud audio is left untouched.
+        """
+        import numpy as np
+
+        samples = audio.astype(np.float32)
+        peak = float(np.abs(samples).max())
+        if 300.0 < peak < 16000.0:
+            samples *= min(8.0, 16000.0 / peak)
+        return np.clip(samples, -32768, 32767).astype(np.int16)
+
     def feed(self, chunk: bytes) -> bool:
         """Add mic audio; True the moment the wake word is detected."""
         if self._model is None:
@@ -56,7 +73,7 @@ class WakeWordDetector:
             frame, self._buffer = (
                 self._buffer[:WAKE_FRAME_BYTES], self._buffer[WAKE_FRAME_BYTES:]
             )
-            audio = np.frombuffer(frame, dtype=np.int16)
+            audio = self._normalize(np.frombuffer(frame, dtype=np.int16))
             scores = self._model.predict(audio)
             score = max(scores.values()) if scores else 0.0
             if score >= self.threshold:

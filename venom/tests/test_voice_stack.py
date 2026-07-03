@@ -67,6 +67,20 @@ def test_detector_requires_load():
         WakeWordDetector().feed(b"\x00" * WAKE_FRAME_BYTES)
 
 
+def test_normalize_boosts_quiet_speech_leaves_silence_and_loud():
+    import numpy as np
+
+    quiet = np.full(1280, 900, dtype=np.int16)     # soft speech
+    boosted = WakeWordDetector._normalize(quiet)
+    assert boosted.max() > 6000                     # amplified toward full scale
+
+    silence = np.full(1280, 50, dtype=np.int16)     # below the noise floor
+    assert WakeWordDetector._normalize(silence).max() == 50
+
+    loud = np.full(1280, 20000, dtype=np.int16)     # already strong
+    assert WakeWordDetector._normalize(loud).max() == 20000
+
+
 def test_inactivity_timer():
     now = [100.0]
     timer = InactivityTimer(timeout=10, clock=lambda: now[0])
