@@ -489,7 +489,8 @@ class WebConsole:
             # command substitution, aliases in /etc/profile — the full set.
             r = subprocess.run(["/bin/bash", "-lc", cmd], cwd=self._cwd,
                                capture_output=True, text=True, timeout=30,
-                               env={**os.environ, "TERM": "xterm-256color"})
+                               env={**os.environ, "TERM": "xterm-256color",
+                                    "HOME": "/var/lib/venom"})
             out = (r.stdout or "") + (r.stderr or "")
         except subprocess.TimeoutExpired:
             out = "[timed out after 30s]"
