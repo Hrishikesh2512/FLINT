@@ -62,7 +62,9 @@ class VoiceOrchestrator:
 
         from venom.buttons import watch_buttons
 
-        asyncio.create_task(watch_buttons(self.music))
+        # Keep a reference: asyncio only holds tasks weakly, and a
+        # garbage-collected watcher means the headset buttons silently die.
+        self._buttons_task = asyncio.create_task(watch_buttons(self.music))
 
         first_cycle = True
         while True:

@@ -23,18 +23,20 @@ for i in $(seq 1 30); do
 done
 getent hosts github.com >/dev/null 2>&1 || { log "no network — will retry next boot"; exit 1; }
 
-# ── 2. system packages ────────────────────────────────────────────────────────
-export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq
-apt-get install -y -qq --no-install-recommends \
-    git python3-venv python3-pip gcc python3-dev \
-    libportaudio2 alsa-utils \
-    bluez pipewire pipewire-alsa wireplumber \
-    mpv
-# Bluetooth SPA plugin: named libspa-0.2-bluetooth on Debian 12+/RPi OS;
-# older releases used libspa-0.2-bluez5. Take whichever exists.
-apt-get install -y -qq --no-install-recommends libspa-0.2-bluetooth \
-    || apt-get install -y -qq --no-install-recommends libspa-0.2-bluez5
+# ── 2. system packages (first successful run only — apt is slow) ─────────────
+if [ ! -f "$STAMP" ]; then
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -qq
+    apt-get install -y -qq --no-install-recommends \
+        git python3-venv python3-pip gcc python3-dev \
+        libportaudio2 alsa-utils iw \
+        bluez pipewire pipewire-alsa wireplumber \
+        mpv
+    # Bluetooth SPA plugin: named libspa-0.2-bluetooth on Debian 12+/RPi OS;
+    # older releases used libspa-0.2-bluez5. Take whichever exists.
+    apt-get install -y -qq --no-install-recommends libspa-0.2-bluetooth \
+        || apt-get install -y -qq --no-install-recommends libspa-0.2-bluez5
+fi
 
 # ── 3. fetch / update the repo ────────────────────────────────────────────────
 if [ -d "$APP_DIR/.git" ]; then
@@ -188,6 +190,23 @@ if command -v raspi-config >/dev/null 2>&1; then
     raspi-config nonint do_blanking 1 || true
 fi
 
+# Wi-Fi power save costs 100–600 ms latency spikes on every packet and
+# starves Bluetooth on the Pi's shared radio — always off for a voice
+# wearable (measured: ping avg dropped from ~350 ms to <10 ms).
+mkdir -p /etc/NetworkManager/conf.d
+cat > /etc/NetworkManager/conf.d/venom-wifi.conf <<'EOF'
+[connection]
+wifi.powersave = 2
+EOF
+iw dev wlan0 set power_save off 2>/dev/null || true
+
 date -u +"%Y-%m-%dT%H:%M:%SZ" > "$STAMP"
-systemctl disable venom-provision.service || true
+
+# Stay enabled: this script re-runs on every boot as the update channel —
+# git fetch + pip install of local paths is seconds when nothing changed,
+# and every fix pushed upstream reaches the device hands-free.
+install -m 0644 "$APP_DIR/venom/provisioning/venom-provision.service" \
+    /etc/systemd/system/venom-provision.service
+systemctl daemon-reload
+systemctl enable venom-provision.service || true
 log "done — venom.service is running. Status: /run/venom/status.json"

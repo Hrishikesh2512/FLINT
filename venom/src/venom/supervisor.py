@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import signal
+import subprocess
 from typing import Any
 
 from venom import __version__, sdnotify
@@ -64,7 +65,7 @@ class Supervisor:
                                            self.config.audio.bluetooth_name)
                 if headset.mac and headset.connected:
                     return f"bluetooth {headset.mac}"
-            except (ValueError, FileNotFoundError, OSError):
+            except (ValueError, OSError, subprocess.SubprocessError):
                 pass
             return None
         card = find_usb_audio()

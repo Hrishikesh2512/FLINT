@@ -87,6 +87,18 @@ def pin_bluetooth_audio(wait: float = 2.0, attempts: int = 3) -> bool:
             time.sleep(wait)
             continue
 
+        # Fast path: a bluez source already exists, so the mic-capable
+        # profile is active. Re-switching the profile here would tear the
+        # Bluetooth audio link down audibly for nothing — just re-assert
+        # the defaults (silent) and report ready.
+        nodes = find_bluez_nodes(objects, card)
+        if "source" in nodes:
+            for node_id in nodes.values():
+                _run(["wpctl", "set-default", str(node_id)])
+            log.info("bluetooth mic already live (sink=%s source=%s)",
+                     nodes.get("sink"), nodes.get("source"))
+            return True
+
         profiles = enum_profiles(objects, card)
         target = pick_headset_profile(profiles)
         if target is None:

@@ -1,9 +1,7 @@
 [Unit]
-Description=Venom one-time provisioning (installs the appliance from the network)
+Description=Venom provisioning & self-update (pulls fixes from the repo every boot)
 After=network-online.target time-sync.target
 Wants=network-online.target
-# Re-runs on every boot until provision.sh succeeds and disables it.
-ConditionPathExists=!/opt/venom/.provisioned
 
 [Service]
 Type=oneshot

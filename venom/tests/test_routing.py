@@ -53,3 +53,18 @@ def test_find_bluez_nodes():
     nodes = find_bluez_nodes(GRAPH, 70)
     assert nodes == {"sink": 71, "source": 72}
     assert find_bluez_nodes(GRAPH, 48) == {"sink": 35}
+
+
+def test_pin_skips_profile_switch_when_mic_already_live(monkeypatch):
+    """Re-pinning must not tear down a working link with a profile switch."""
+    from venom.audio import routing
+
+    calls: list[list[str]] = []
+    monkeypatch.setattr(routing, "pw_dump", lambda: GRAPH)
+    monkeypatch.setattr(routing, "_run",
+                        lambda args, timeout=10: calls.append(args) or "")
+
+    assert routing.pin_bluetooth_audio(wait=0, attempts=1) is True
+    assert all(call[:2] != ["wpctl", "set-profile"] for call in calls)
+    defaults = [call for call in calls if call[:2] == ["wpctl", "set-default"]]
+    assert {call[2] for call in defaults} == {"71", "72"}

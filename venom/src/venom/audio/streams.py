@@ -71,13 +71,51 @@ class MicStream:
 
 
 class SpeakerStream:
-    """24 kHz mono int16 playback with instant flush on interruption."""
+    """24 kHz mono int16 playback with instant flush on interruption.
+
+    Network audio arrives in bursts; playing the instant bytes land turns
+    every jitter hiccup into an audible crackle. After an underrun the
+    stream holds silence until ~PREBUFFER_MS has accumulated (or the data
+    has waited MAX_HOLD_MS — short tails still play), then runs gapless.
+    """
+
+    PREBUFFER_MS = 120
+    MAX_HOLD_MS = 250
 
     def __init__(self, pick: DevicePick):
         self._pick = pick
         self._buffer: queue_mod.Queue[bytes] = queue_mod.Queue()
         self._pending = b""
         self._stream = None
+        self._starved = True   # start in "wait for prebuffer" state
+        self._held_ms = 0.0
+
+    def _fill(self, needed: int) -> bytes:
+        """Next `needed` bytes for the device (silence-padded), advancing
+        the jitter-buffer state. Runs in the audio callback."""
+        chunk = self._pending
+        while True:
+            try:
+                chunk += self._buffer.get_nowait()
+            except queue_mod.Empty:
+                break
+
+        bytes_per_ms = (SPEAKER_SAMPLE_RATE * 2) / 1000
+        if self._starved and chunk:
+            self._held_ms += needed / bytes_per_ms
+            if (len(chunk) >= needed + int(self.PREBUFFER_MS * bytes_per_ms)
+                    or self._held_ms >= self.MAX_HOLD_MS):
+                self._starved = False
+                self._held_ms = 0.0
+        if self._starved:
+            self._pending = chunk
+            return b"\x00" * needed
+
+        out, self._pending = chunk[:needed], chunk[needed:]
+        if not self._pending:
+            self._starved = True  # drained — re-buffer before the next burst
+            self._held_ms = 0.0
+        return out.ljust(needed, b"\x00")
 
     def start(self) -> None:
         import sounddevice as sd
@@ -85,16 +123,7 @@ class SpeakerStream:
         def callback(outdata, frames, _time, status):
             if status:
                 log.debug("speaker status: %s", status)
-            needed = frames * 2  # int16 mono
-            chunk = self._pending
-            while len(chunk) < needed:
-                try:
-                    chunk += self._buffer.get_nowait()
-                except queue_mod.Empty:
-                    break
-            out, self._pending = chunk[:needed], chunk[needed:]
-            out = out.ljust(needed, b"\x00")
-            outdata[:] = out
+            outdata[:] = self._fill(frames * 2)  # int16 mono
 
         self._stream = sd.RawOutputStream(
             samplerate=SPEAKER_SAMPLE_RATE, channels=CHANNELS, dtype="int16",
@@ -109,6 +138,8 @@ class SpeakerStream:
     def flush(self) -> None:
         """Drop everything queued — the user interrupted the model."""
         self._pending = b""
+        self._starved = True
+        self._held_ms = 0.0
         try:
             while True:
                 self._buffer.get_nowait()

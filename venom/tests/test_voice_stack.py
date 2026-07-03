@@ -228,6 +228,49 @@ def test_speaker_flush():
     assert not speaker.playing
 
 
+# ── speaker jitter buffer ─────────────────────────────────────────────────────
+def _ms_bytes(ms: float) -> int:
+    return int(SPEAKER_SAMPLE_RATE * 2 * ms / 1000)
+
+
+def test_speaker_prebuffers_after_underrun():
+    """A trickle below the prebuffer threshold plays silence, not crackle."""
+    speaker = SpeakerStream(DevicePick(None, None, "t", "t"))
+    speaker.play(b"\x11\x11" * 100)  # 200 bytes ≈ 4 ms — way below threshold
+    out = speaker._fill(2048)
+    assert out == b"\x00" * 2048          # held back, not played
+    assert speaker.playing                # ... and not dropped
+
+
+def test_speaker_plays_once_prebuffer_met():
+    speaker = SpeakerStream(DevicePick(None, None, "t", "t"))
+    payload = b"\x11\x11" * (_ms_bytes(SpeakerStream.PREBUFFER_MS + 60) // 2)
+    speaker.play(payload)
+    out = speaker._fill(2048)
+    assert out == payload[:2048]
+
+
+def test_speaker_short_tail_plays_after_max_hold():
+    """Sub-threshold audio (a clipped word ending) must still come out."""
+    speaker = SpeakerStream(DevicePick(None, None, "t", "t"))
+    tail = b"\x22\x22" * 100
+    speaker.play(tail)
+    block = _ms_bytes(SpeakerStream.MAX_HOLD_MS * 0.6)  # two calls cross the hold
+    out = speaker._fill(block)
+    assert out == b"\x00" * block         # first call still holds
+    out = speaker._fill(block)
+    assert out[:len(tail)] == tail        # released by the hold timeout
+
+
+def test_speaker_rebuffers_after_drain():
+    speaker = SpeakerStream(DevicePick(None, None, "t", "t"))
+    speaker.play(b"\x11\x11" * (_ms_bytes(SpeakerStream.PREBUFFER_MS + 60) // 2))
+    while speaker.playing:
+        speaker._fill(4096)
+    speaker.play(b"\x33\x33" * 10)        # next burst starts small again
+    assert speaker._fill(1024) == b"\x00" * 1024  # back to prebuffering
+
+
 def test_build_system_instruction(tmp_path):
     from venom.live import build_system_instruction
 
