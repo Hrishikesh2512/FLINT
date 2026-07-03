@@ -48,7 +48,7 @@ class MusicPlayer:
 
         try:
             out = subprocess.run(
-                [*self._ytdlp, "--no-playlist", "-f", "bestaudio/best",
+                [*self._ytdlp, "-4", "--no-playlist", "-f", "bestaudio/best",
                  "--print", "title", "--print", "url",
                  f"ytsearch1:{query}"],
                 capture_output=True, text=True, timeout=DEFAULT_TIMEOUT,
@@ -64,6 +64,7 @@ class MusicPlayer:
         with self._lock:
             self._proc = subprocess.Popen(
                 ["mpv", "--no-video", "--really-quiet", "--volume=70",
+                 "--network-timeout=15",  # a dead CDN link must fail, not hang
                  f"--input-ipc-server={MPV_SOCKET}", url],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             )
