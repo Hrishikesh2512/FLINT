@@ -118,8 +118,38 @@ def set_alsa_volume(percent: int, card_index: int | None = None) -> str:
 
 # ── registry ─────────────────────────────────────────────────────────────────
 def build_pi_registry(config: VenomConfig, memory: MemoryStore,
-                      timers: TimerBoard) -> ToolRegistry:
+                      timers: TimerBoard, music=None) -> ToolRegistry:
     reg = ToolRegistry(platform="linux")
+
+    if music is not None:
+        @reg.tool(
+            description=(
+                "Plays a song, artist, album, or any music/audio from YouTube "
+                "through the user's headset. Use whenever the user asks to "
+                "play something. Note: playback replaces any current song."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string",
+                              "description": "What to play, e.g. 'Kesariya', 'lofi beats'"},
+                },
+                "required": ["query"],
+            },
+        )
+        def play_music(query: str) -> str:
+            return music.play(query)
+
+        @reg.tool(
+            description="Stops the currently playing music.",
+        )
+        def stop_music() -> str:
+            return music.stop()
+
+        @reg.tool(description="Tells what music is currently playing, if any.")
+        def now_playing() -> str:
+            title = music.now_playing
+            return f"Now playing: {title}." if title else "Nothing is playing."
 
     @reg.tool(
         description=(

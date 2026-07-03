@@ -29,7 +29,8 @@ apt-get update -qq
 apt-get install -y -qq --no-install-recommends \
     git python3-venv python3-pip \
     libportaudio2 alsa-utils \
-    bluez pipewire pipewire-alsa wireplumber
+    bluez pipewire pipewire-alsa wireplumber \
+    mpv
 # Bluetooth SPA plugin: named libspa-0.2-bluetooth on Debian 12+/RPi OS;
 # older releases used libspa-0.2-bluez5. Take whichever exists.
 apt-get install -y -qq --no-install-recommends libspa-0.2-bluetooth \
@@ -86,6 +87,7 @@ else:
 PYEOF
 
 "$VENV_DIR/bin/pip" install --quiet --upgrade "$APP_DIR/venom[voice]"
+"$VENV_DIR/bin/pip" install --quiet --upgrade yt-dlp
 
 # Self-heal: a power cut mid-install can leave corrupted native wheels
 # (observed on real hardware: numpy Bus error after an unclean reboot).

@@ -175,6 +175,30 @@ def test_pi_registry_dispatch(pi_setup):
     assert registry.dispatch("end_conversation", {}) == "Ending conversation."
 
 
+def test_music_tools_registered_and_dispatch(tmp_path):
+    class FakeMusic:
+        def __init__(self):
+            self.now_playing = ""
+
+        def play(self, query):
+            self.now_playing = query
+            return f"Playing {query}."
+
+        def stop(self):
+            self.now_playing = ""
+            return "Music stopped."
+
+    config = VenomConfig(gemini_api_key="k", memory_path=tmp_path / "m.json")
+    music = FakeMusic()
+    registry = build_pi_registry(config, MemoryStore(config.memory_path),
+                                 TimerBoard(), music=music)
+    assert {"play_music", "stop_music", "now_playing"} <= set(registry.names())
+    assert registry.dispatch("play_music", {"query": "Kesariya"}) == "Playing Kesariya."
+    assert "Kesariya" in registry.dispatch("now_playing", {})
+    assert registry.dispatch("stop_music", {}) == "Music stopped."
+    assert registry.dispatch("now_playing", {}) == "Nothing is playing."
+
+
 def test_pi_declarations_validate_against_gemini_sdk(pi_setup):
     genai_types = pytest.importorskip("google.genai.types")
     registry, _, _ = pi_setup

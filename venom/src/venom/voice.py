@@ -44,7 +44,11 @@ class VoiceOrchestrator:
         self.state = "starting"
         self.memory = MemoryStore(config.memory_path)
         self.timers = TimerBoard()
-        self.registry = build_pi_registry(config, self.memory, self.timers)
+        from venom.music import MusicPlayer
+
+        self.music = MusicPlayer()
+        self.registry = build_pi_registry(config, self.memory, self.timers,
+                                          music=self.music)
         self._detector: WakeWordDetector | None = None
 
     async def run(self) -> None:
