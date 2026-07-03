@@ -107,7 +107,12 @@ else:
     print("[venom-provision] openwakeword: import already optional")
 PYEOF
 
+# --force-reinstall --no-deps: the package version stays 0.1.0 across
+# commits, so a plain --upgrade sees "already satisfied" and ships stale
+# code to the device. Force just the venom package (deps handled below);
+# it is small and fast, and guarantees pushed fixes actually land.
 "$VENV_DIR/bin/pip" install --quiet --upgrade "$APP_DIR/venom[voice]"
+"$VENV_DIR/bin/pip" install --quiet --force-reinstall --no-deps "$APP_DIR/venom"
 "$VENV_DIR/bin/pip" install --quiet --upgrade yt-dlp evdev
 
 # Self-heal: a power cut mid-install can leave corrupted native wheels
