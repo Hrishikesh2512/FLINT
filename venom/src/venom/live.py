@@ -56,15 +56,24 @@ class LiveSession:
 
     def __init__(self, config: VenomConfig, registry: ToolRegistry,
                  memory: MemoryStore, timers: TimerBoard,
-                 mic_frames: asyncio.Queue, speaker: SpeakerStream):
+                 mic_frames: asyncio.Queue, speaker: SpeakerStream,
+                 inbox: asyncio.Queue | None = None, transcript=None):
         self.config = config
         self.registry = registry
         self.memory = memory
         self.timers = timers
         self.mic_frames = mic_frames
         self.speaker = speaker
+        self._inbox = inbox          # console prompts (text turns)
+        self._transcript = transcript  # deque shared with the web console
+        self._turn_in = ""
+        self._turn_out = ""
         self._idle = InactivityTimer(config.voice.inactivity_timeout)
         self._ended = asyncio.Event()
+
+    def _record(self, who: str, text: str) -> None:
+        if self._transcript is not None and text.strip():
+            self._transcript.append((who, text.strip()))
 
     # ── session config ────────────────────────────────────────────────────────
     def _connect_config(self):
@@ -130,9 +139,16 @@ class LiveSession:
                         if getattr(content, "interrupted", None):
                             self.speaker.flush()
                         if content.input_transcription and content.input_transcription.text:
+                            self._turn_in += content.input_transcription.text
                             self._idle.touch()
                         if content.output_transcription and content.output_transcription.text:
-                            log.info("venom: %s", content.output_transcription.text.strip())
+                            self._turn_out += content.output_transcription.text
+                        if getattr(content, "turn_complete", None):
+                            self._record("you", self._turn_in)
+                            if self._turn_out:
+                                log.info("venom: %s", self._turn_out.strip())
+                            self._record("venom", self._turn_out)
+                            self._turn_in = self._turn_out = ""
 
                     if response.tool_call:
                         await self._handle_tools(response.tool_call)
@@ -169,6 +185,12 @@ class LiveSession:
     async def _housekeeping(self) -> None:
         """Fire due timers into the conversation; end the session on silence."""
         while not self._ended.is_set():
+            while self._inbox is not None and not self._inbox.empty():
+                text = self._inbox.get_nowait()
+                await self._session.send_client_content(
+                    turns={"role": "user", "parts": [{"text": text}]},
+                    turn_complete=True)
+                self._idle.touch()
             for timer in self.timers.pop_due():
                 chime(self.speaker)
                 chime(self.speaker, frequency=1100.0)

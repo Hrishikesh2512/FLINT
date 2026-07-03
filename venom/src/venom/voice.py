@@ -63,8 +63,13 @@ class SilenceTracker:
 
 class VoiceOrchestrator:
     def __init__(self, config: VenomConfig):
+        from collections import deque
+
         self.config = config
         self.state = "starting"
+        # Web console: prompts in, transcript out (thread-safe via event loop).
+        self.inbox: asyncio.Queue[str] = asyncio.Queue()
+        self.transcript = deque(maxlen=60)
         self.memory = MemoryStore(config.memory_path)
         self.timers = TimerBoard()
         from venom.music import MusicPlayer
@@ -158,6 +163,10 @@ class VoiceOrchestrator:
                 chime(speaker, frequency=1100.0)
                 self.timers.add(0, f"(already finished) {timer.label}")
                 log.info("timer fired while asleep: %s", timer.label)
+            if not self.inbox.empty():
+                log.info("console prompt while asleep — starting a session")
+                self._drain(mic)
+                return  # the session's housekeeping delivers the prompt
             try:
                 frame = await asyncio.wait_for(mic.frames.get(), timeout=1.0)
                 starved = 0.0
@@ -180,7 +189,8 @@ class VoiceOrchestrator:
 
     async def _conversation_phase(self, mic: MicStream, speaker: SpeakerStream) -> None:
         session = LiveSession(self.config, self.registry, self.memory,
-                              self.timers, mic.frames, speaker)
+                              self.timers, mic.frames, speaker,
+                              inbox=self.inbox, transcript=self.transcript)
         try:
             await session.run()
         except Exception:
@@ -203,8 +213,19 @@ class VoiceOrchestrator:
 async def run_voice_forever(config: VenomConfig, set_state) -> None:
     """Supervisor entry: keep the voice loop alive across crashes."""
     backoff = 2.0
+    console = None
+    if config.web_enabled:
+        try:
+            from venom.web import WebConsole
+
+            console = WebConsole(config.web_port)
+            console.start()
+        except Exception:
+            log.exception("web console failed to start — continuing without it")
     while True:
         orchestrator = VoiceOrchestrator(config)
+        if console is not None:
+            console.attach(orchestrator, asyncio.get_event_loop())
         try:
             set_state("voice: starting")
             started = asyncio.get_event_loop().time()

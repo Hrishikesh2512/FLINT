@@ -116,6 +116,8 @@ class VenomConfig:
     memory_path: Path = Path("/var/lib/venom/memory.json")
     internet_host: str = "1.1.1.1"
     internet_port: int = 53
+    web_enabled: bool = True   # browser console on the LAN
+    web_port: int = 8787
     gemini_api_key: str = ""
     brains: tuple[BrainCandidate, ...] = field(default=DEFAULT_CLOUD_CANDIDATES)
     voice: VoiceConfig = field(default_factory=VoiceConfig)
@@ -175,6 +177,8 @@ def load_config(path: Path | None = None) -> VenomConfig:
         memory_path=Path(venom.get("memory_path", "/var/lib/venom/memory.json")),
         internet_host=str(internet.get("host", "1.1.1.1")),
         internet_port=int(internet.get("port", 53)),
+        web_enabled=bool(data.get("web", {}).get("enabled", True)),
+        web_port=int(data.get("web", {}).get("port", 8787)),
         gemini_api_key=(
             os.environ.get("GEMINI_API_KEY", "").strip()
             or str(gemini.get("api_key", "")).strip()
