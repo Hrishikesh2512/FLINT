@@ -27,7 +27,7 @@ getent hosts github.com >/dev/null 2>&1 || { log "no network — will retry next
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq --no-install-recommends \
-    git python3-venv python3-pip \
+    git python3-venv python3-pip gcc python3-dev \
     libportaudio2 alsa-utils \
     bluez pipewire pipewire-alsa wireplumber \
     mpv
