@@ -1,13 +1,13 @@
-"""Bluetooth headset automation — pair once, reconnect forever.
+"""Bluetooth headset automation — pair once (per session, for bond-forgetting
+headsets), reconnect fast.
 
-Drives bluetoothctl non-interactively (BlueZ ships with the appliance).
-Modern headsets use "Just Works" pairing, so no PIN is involved: put the
-headset in pairing mode near the Pi on its first boot; Venom scans, pairs
-by MAC (or finds the MAC by name), trusts, and connects. `trust` makes
-BlueZ accept the headset automatically on every future power-on.
+Drives bluetoothctl non-interactively. Discovery runs as ONE continuous
+scan with fast polling — the moment the headset enters pairing mode it
+becomes visible and pairing follows within seconds (short scan windows
+made connects take minutes on real hardware).
 
-All command execution goes through an injectable runner so the whole flow
-is unit-testable without hardware.
+Command execution and the scanner process are injectable, so the whole
+flow is unit-testable without hardware.
 """
 
 from __future__ import annotations
@@ -33,6 +33,14 @@ def _default_runner(args: list[str], timeout: float) -> str:
     return (result.stdout or "") + (result.stderr or "")
 
 
+def _default_scanner():
+    """A running discovery session; caller terminates it."""
+    return subprocess.Popen(
+        ["bluetoothctl", "scan", "on"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+
+
 def normalize_mac(mac: str) -> str:
     mac = mac.strip().upper().replace("-", ":")
     if not MAC_RE.match(mac):
@@ -53,69 +61,83 @@ def parse_devices(output: str) -> dict[str, str]:
 
 
 def parse_info(output: str) -> dict[str, bool]:
-    """'info <mac>' output -> {paired, trusted, connected}."""
+    """'info <mac>' output -> {paired, trusted, connected, in_range}."""
     flags = {}
     for key in ("Paired", "Trusted", "Connected"):
         match = re.search(rf"{key}:\s*(yes|no)", output)
         flags[key.lower()] = bool(match and match.group(1) == "yes")
+    # RSSI only appears while the device is actually broadcasting in range.
+    flags["in_range"] = "RSSI:" in output or flags["connected"]
     return flags
 
 
 class BluetoothHeadset:
     def __init__(self, mac: str = "", name: str = "",
-                 runner: Runner = _default_runner):
+                 runner: Runner = _default_runner,
+                 scanner: Callable = _default_scanner):
         if not mac and not name:
             raise ValueError("need a Bluetooth MAC or a device name")
         self.mac = normalize_mac(mac) if mac else ""
         self.name = name
         self._run = runner
+        self._scanner = scanner
 
     # ── state ─────────────────────────────────────────────────────────────────
     def status(self) -> dict[str, bool]:
         if not self.mac:
-            return {"paired": False, "trusted": False, "connected": False}
+            return {"paired": False, "trusted": False,
+                    "connected": False, "in_range": False}
         return parse_info(self._run(["info", self.mac], 10))
 
     @property
     def connected(self) -> bool:
         return self.status()["connected"]
 
-    # ── discovery ─────────────────────────────────────────────────────────────
-    def discover_mac(self, scan_seconds: float = 12) -> str:
-        """Find the MAC by device name via a live scan (first boot only)."""
-        self._run(["power", "on"], 10)
-        self._run(["--timeout", str(int(scan_seconds)), "scan", "on"], scan_seconds + 10)
-        devices = parse_devices(self._run(["devices"], 10))
-        wanted = self.name.lower()
-        for mac, name in devices.items():
-            if wanted and wanted in name.lower():
-                log.info("found %r at %s", name, mac)
-                self.mac = mac
-                return mac
-        raise LookupError(
-            f"no Bluetooth device named like {self.name!r} in range — "
-            f"is the headset in pairing mode? (saw: {list(devices.values())[:5]})"
-        )
+    # ── discovery: one continuous scan, fast polling ─────────────────────────
+    def wait_visible(self, timeout: float = 45.0, poll: float = 2.0,
+                     sleep=time.sleep, clock=time.monotonic) -> bool:
+        scan = self._scanner()
+        try:
+            deadline = clock() + timeout
+            while clock() < deadline:
+                if not self.mac and self.name:
+                    for mac, name in parse_devices(self._run(["devices"], 10)).items():
+                        if self.name.lower() in name.lower():
+                            log.info("found %r at %s", name, mac)
+                            self.mac = mac
+                            break
+                if self.mac and self.status()["in_range"]:
+                    return True
+                sleep(poll)
+            return False
+        finally:
+            try:
+                scan.terminate()
+            except Exception:
+                pass
+            self._run(["scan", "off"], 10)
 
-    # ── the one-time pairing + every-boot connect ────────────────────────────
+    # ── pair (as needed) + connect ────────────────────────────────────────────
     def ensure_connected(self) -> bool:
-        """Pair/trust if needed, then connect. True when audio can flow."""
+        """True when audio can flow. Fast path when already connected."""
         self._run(["power", "on"], 10)
         self._run(["agent", "NoInputNoOutput"], 10)
 
-        if not self.mac:
-            self.discover_mac()
+        if self.mac and self.status()["connected"]:
+            return True
+
+        if not self.wait_visible():
+            log.info("headset not broadcasting — pairing mode needed; will retry")
+            return False
 
         state = self.status()
         if not state["paired"]:
             log.info("pairing with %s ...", self.mac)
-            self._run(["--timeout", "10", "scan", "on"], 20)  # must be in range
             out = self._run(["pair", self.mac], 30)
             if "Failed" in out and "AlreadyExists" not in out:
                 log.warning("pair failed: %s", out.strip()[:120])
                 return False
-        if not state["trusted"]:
-            self._run(["trust", self.mac], 10)
+        self._run(["trust", self.mac], 10)
 
         if not self.status()["connected"]:
             out = self._run(["connect", self.mac], 30)
@@ -127,14 +149,12 @@ class BluetoothHeadset:
             log.info("bluetooth headset connected: %s", self.mac)
         return connected
 
-    def wait_for_connection(self, attempts: int = 5, delay: float = 5.0,
+    def wait_for_connection(self, attempts: int = 3, delay: float = 3.0,
                             sleep=time.sleep) -> bool:
         for attempt in range(1, attempts + 1):
             try:
                 if self.ensure_connected():
                     return True
-            except LookupError as exc:
-                log.info("attempt %d/%d: %s", attempt, attempts, exc)
             except Exception:
                 log.exception("bluetooth attempt %d/%d failed", attempt, attempts)
             if attempt < attempts:
