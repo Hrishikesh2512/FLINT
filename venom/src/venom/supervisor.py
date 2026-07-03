@@ -18,7 +18,7 @@ from venom import __version__, sdnotify
 from venom.config import VenomConfig
 from venom.monitors.audio import find_usb_audio
 from venom.monitors.brain import BrainResolver
-from venom.monitors.network import probe_tcp
+from venom.monitors.network import probe_any
 from venom.status import StatusWriter
 
 log = logging.getLogger("venom")
@@ -36,8 +36,7 @@ class Supervisor:
     # ── one monitoring cycle ─────────────────────────────────────────────────
     async def cycle(self) -> dict[str, Any]:
         internet_task = asyncio.create_task(
-            probe_tcp(self.config.internet_host, self.config.internet_port,
-                      self.config.probe_timeout)
+            probe_any(self.config.internet_targets, self.config.probe_timeout)
         )
         resolution = await self.resolver.resolve()
         internet = await internet_task

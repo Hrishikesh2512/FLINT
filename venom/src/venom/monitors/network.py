@@ -24,3 +24,25 @@ async def probe_tcp(host: str, port: int, timeout: float = 3.0) -> bool:
     except OSError:
         pass
     return True
+
+
+async def probe_any(targets: tuple[tuple[str, int], ...],
+                    timeout: float = 3.0) -> bool:
+    """True as soon as ANY (host, port) is reachable — probed concurrently.
+
+    "Online" must not hinge on one host or one port: captive/hotspot
+    networks routinely block outbound 53 to 1.1.1.1 while HTTPS works
+    fine, which made the single-target probe report a false 'offline'.
+    """
+    if not targets:
+        return False
+    tasks = [asyncio.create_task(probe_tcp(host, port, timeout))
+             for host, port in targets]
+    try:
+        for done in asyncio.as_completed(tasks):
+            if await done:
+                return True
+        return False
+    finally:
+        for task in tasks:
+            task.cancel()

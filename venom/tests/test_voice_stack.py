@@ -271,6 +271,94 @@ def test_speaker_rebuffers_after_drain():
     assert speaker._fill(1024) == b"\x00" * 1024  # back to prebuffering
 
 
+# ── mic noise suppression ─────────────────────────────────────────────────────
+def test_noise_suppressor_never_lengthens_or_crashes():
+    import numpy as np
+
+    from venom.audio.denoise import NoiseSuppressor
+
+    ns = NoiseSuppressor()
+    tone = (np.sin(np.linspace(0, 40 * np.pi, 1024)) * 8000).astype(np.int16)
+    out = ns.process(tone.tobytes())
+    assert len(out) == len(tone.tobytes())
+    assert ns.process(b"") == b""          # empty frame is safe
+
+
+def test_noise_suppressor_attenuates_dc_and_rumble():
+    import numpy as np
+
+    from venom.audio.denoise import NoiseSuppressor
+
+    ns = NoiseSuppressor(expander=False)   # isolate the high-pass
+    dc = np.full(1024, 6000, dtype=np.int16)
+    # Prime the filter state, then measure a steady-state block.
+    ns.process(dc.tobytes())
+    out = np.frombuffer(ns.process(dc.tobytes()), dtype=np.int16)
+    assert abs(int(out.mean())) < 500       # DC/low-freq largely removed
+
+
+def test_noise_suppressor_passthrough_on_expander_open():
+    import numpy as np
+
+    from venom.audio.denoise import NoiseSuppressor
+
+    ns = NoiseSuppressor(highpass_hz=20.0)  # keep speech band intact
+    loud = (np.sin(np.linspace(0, 200 * np.pi, 1024)) * 12000).astype(np.int16)
+    for _ in range(5):
+        out = np.frombuffer(ns.process(loud.tobytes()), dtype=np.int16)
+    assert float(np.abs(out).max()) > 5000  # loud speech is not gated away
+
+
+# ── multi-target internet probe ───────────────────────────────────────────────
+def test_probe_any_succeeds_if_any_target_up():
+    import asyncio
+
+    from venom.monitors import network
+
+    async def fake(host, port, timeout):
+        await asyncio.sleep(0.01 if port == 443 else 0)
+        return port == 443     # only HTTPS answers (port 53 blocked)
+
+    async def go():
+        return await network.probe_any(
+            (("1.1.1.1", 53), ("1.1.1.1", 443)), timeout=1)
+
+    orig, network.probe_tcp = network.probe_tcp, fake
+    try:
+        assert asyncio.run(go()) is True
+    finally:
+        network.probe_tcp = orig
+
+
+def test_probe_any_false_when_all_down():
+    import asyncio
+
+    from venom.monitors import network
+
+    async def fake(host, port, timeout):
+        return False
+
+    orig, network.probe_tcp = network.probe_tcp, fake
+    try:
+        assert asyncio.run(network.probe_any((("a", 53), ("b", 443)))) is False
+        assert asyncio.run(network.probe_any(())) is False
+    finally:
+        network.probe_tcp = orig
+
+
+# ── web console auth ──────────────────────────────────────────────────────────
+def test_web_authorized_gate():
+    from venom.web import WebConsole
+
+    open_console = WebConsole(token="")
+    assert open_console.authorized({})           # no token -> open
+
+    locked = WebConsole(token="s3cret")
+    assert not locked.authorized({})
+    assert not locked.authorized({"Authorization": "Bearer wrong"})
+    assert locked.authorized({"Authorization": "Bearer s3cret"})
+
+
 # ── session teardown & dead-capture-path detection ───────────────────────────
 def test_is_normal_closure():
     from venom.live import is_normal_closure

@@ -92,7 +92,14 @@ border:1px solid #30363d;border-radius:8px;padding:8px"></pre></details>
 <button onclick="sys('reboot')">&#9888; Reboot Pi</button></div></details>
 <script>
 const $=id=>document.getElementById(id);let n=0;
-async function api(p,b){return fetch(p,b?{method:'POST',body:JSON.stringify(b)}:{})}
+function tok(){return localStorage.getItem('vtok')||''}
+async function api(p,b){
+const o=b?{method:'POST',body:JSON.stringify(b)}:{};
+o.headers={'Authorization':'Bearer '+tok()};
+const r=await fetch(p,o);
+if(r.status==401){const t=prompt('Enter Venom console PIN:');
+if(t){localStorage.setItem('vtok',t.trim());return api(p,b)}}
+return r}
 async function tick(){try{const s=await(await api('/api/state')).json();
 $('status').innerHTML=[['voice',s.voice,1],['internet',s.internet?'up':'down',s.internet],
 ['headset',s.headset||'none',!!s.headset],['brain',s.brain||'-',!!s.brain],
@@ -136,10 +143,18 @@ setInterval(tick,1500);tick();
 class WebConsole:
     """Owns the HTTP thread; the voice loop attaches itself on each start."""
 
-    def __init__(self, port: int = 8787):
+    def __init__(self, port: int = 8787, token: str = ""):
         self.port = port
+        self.token = token
         self.orchestrator = None  # set by attach(); may be replaced on restart
         self.loop = None
+
+    def authorized(self, headers) -> bool:
+        """A request is allowed when no token is set, or it presents it."""
+        if not self.token:
+            return True
+        supplied = (headers.get("Authorization", "") or "").removeprefix("Bearer ")
+        return supplied == self.token
 
     def attach(self, orchestrator, loop) -> None:
         self.orchestrator = orchestrator
@@ -267,14 +282,24 @@ class WebConsole:
             def log_message(self, *args):  # journald stays quiet
                 pass
 
-            def _send(self, body: bytes, ctype: str = "application/json"):
-                self.send_response(200)
+            def _send(self, body: bytes, ctype: str = "application/json",
+                      code: int = 200):
+                self.send_response(code)
                 self.send_header("Content-Type", ctype)
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
 
+            def _guard(self) -> bool:
+                """Serve 401 for unauthorized API calls; True when allowed."""
+                if console.authorized(self.headers):
+                    return True
+                self._send(b'{"error":"unauthorized"}', code=401)
+                return False
+
             def do_GET(self):
+                if self.path.startswith("/api/") and not self._guard():
+                    return
                 if self.path == "/api/state":
                     self._send(json.dumps(console.state()).encode())
                 elif self.path.startswith("/api/bluetooth"):
@@ -288,6 +313,8 @@ class WebConsole:
                     self._send(PAGE.encode(), "text/html; charset=utf-8")
 
             def do_POST(self):
+                if not self._guard():
+                    return
                 try:
                     size = int(self.headers.get("Content-Length", 0))
                     data = json.loads(self.rfile.read(size) or b"{}")

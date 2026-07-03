@@ -161,6 +161,18 @@ else
     chgrp venomd /etc/venom/venom.toml && chmod 0640 /etc/venom/venom.toml
 fi
 
+# Web console access PIN: generate once, persist in the state dir. It
+# survives config rewrites; read it over SSH with:
+#   ssh <user>@venom.local  then  sudo cat /var/lib/venom/web_token
+mkdir -p /var/lib/venom
+if [ ! -s /var/lib/venom/web_token ]; then
+    (openssl rand -hex 4 2>/dev/null \
+        || tr -dc 'a-f0-9' </dev/urandom | head -c 8) > /var/lib/venom/web_token
+fi
+chown venomd:venomd /var/lib/venom/web_token 2>/dev/null || true
+chmod 640 /var/lib/venom/web_token
+log "web console PIN: $(cat /var/lib/venom/web_token)"
+
 # Fresh RPi OS ships Bluetooth soft-blocked — unblock it or nothing pairs.
 rfkill unblock bluetooth 2>/dev/null || true
 
@@ -227,6 +239,13 @@ cat > /etc/NetworkManager/conf.d/venom-wifi.conf <<'EOF'
 wifi.powersave = 2
 EOF
 iw dev wlan0 set power_save off 2>/dev/null || true
+
+# Prefer IPv4: phone hotspots routinely advertise broken IPv6, which stalls
+# DNS/HTTPS (and music) for seconds before timing out to v4. Tell glibc to
+# try A records first everywhere.
+if ! grep -q '^precedence ::ffff:0:0/96  100' /etc/gai.conf 2>/dev/null; then
+    echo 'precedence ::ffff:0:0/96  100' >> /etc/gai.conf
+fi
 
 date -u +"%Y-%m-%dT%H:%M:%SZ" > "$STAMP"
 echo "$HEAD_COMMIT" > "$INSTALLED_MARK"

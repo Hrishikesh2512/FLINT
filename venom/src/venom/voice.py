@@ -136,8 +136,14 @@ class VoiceOrchestrator:
         pick = current_devices(bluetooth=self.config.audio.use_bluetooth)
         log.info("audio devices — mic: %s, speaker: %s", pick.input_name, pick.output_name)
 
+        suppressor = None
+        if self.config.audio.noise_suppression:
+            from venom.audio.denoise import NoiseSuppressor
+
+            suppressor = NoiseSuppressor()
+
         speaker = SpeakerStream(pick)
-        mic = MicStream(pick, loop)
+        mic = MicStream(pick, loop, suppressor=suppressor)
         speaker.start()
         mic.start()
         try:
@@ -218,8 +224,10 @@ async def run_voice_forever(config: VenomConfig, set_state) -> None:
         try:
             from venom.web import WebConsole
 
-            console = WebConsole(config.web_port)
+            console = WebConsole(config.web_port, token=config.web_token)
             console.start()
+            if not config.web_token:
+                log.warning("web console has NO token — open to anyone on the LAN")
         except Exception:
             log.exception("web console failed to start — continuing without it")
     while True:

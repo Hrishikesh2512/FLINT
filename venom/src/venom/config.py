@@ -74,6 +74,7 @@ class AudioConfig:
     output: str = "auto"
     bluetooth_mac: str = ""
     bluetooth_name: str = ""
+    noise_suppression: bool = True   # high-pass + gentle expander on the mic
 
     def __post_init__(self) -> None:
         if self.output not in ("auto", "bluetooth", "usb"):
@@ -118,6 +119,7 @@ class VenomConfig:
     internet_port: int = 53
     web_enabled: bool = True   # browser console on the LAN
     web_port: int = 8787
+    web_token: str = ""        # console access PIN; empty = open (dev only)
     gemini_api_key: str = ""
     brains: tuple[BrainCandidate, ...] = field(default=DEFAULT_CLOUD_CANDIDATES)
     voice: VoiceConfig = field(default_factory=VoiceConfig)
@@ -135,6 +137,18 @@ class VenomConfig:
     def voice_ready(self) -> bool:
         return self.voice.enabled and bool(self.gemini_api_key)
 
+    @property
+    def internet_targets(self) -> tuple[tuple[str, int], ...]:
+        """Reachability targets for the online check: the configured probe
+        plus HTTPS fallbacks, so a network that blocks port 53 (common on
+        hotspots) is still correctly seen as online."""
+        return (
+            (self.internet_host, self.internet_port),
+            ("1.1.1.1", 443),
+            ("8.8.8.8", 443),
+            ("google.com", 443),
+        )
+
 
 def _parse_brains(raw: list[dict]) -> tuple[BrainCandidate, ...]:
     brains = [
@@ -147,6 +161,15 @@ def _parse_brains(raw: list[dict]) -> tuple[BrainCandidate, ...]:
         for entry in raw
     ]
     return tuple(sorted(brains, key=lambda b: b.priority))
+
+
+def _read_token_file() -> str:
+    """The console PIN provisioning drops in the state dir (survives config
+    rewrites and is readable over SSH: `cat /var/lib/venom/web_token`)."""
+    try:
+        return Path("/var/lib/venom/web_token").read_text().strip()
+    except OSError:
+        return ""
 
 
 def load_config(path: Path | None = None) -> VenomConfig:
@@ -193,6 +216,11 @@ def load_config(path: Path | None = None) -> VenomConfig:
         internet_port=int(internet.get("port", 53)),
         web_enabled=bool(data.get("web", {}).get("enabled", True)),
         web_port=int(data.get("web", {}).get("port", 8787)),
+        web_token=str(
+            os.environ.get("VENOM_WEB_TOKEN", "").strip()
+            or data.get("web", {}).get("token", "")
+            or _read_token_file()
+        ).strip(),
         gemini_api_key=(
             os.environ.get("GEMINI_API_KEY", "").strip()
             or str(gemini.get("api_key", "")).strip()
@@ -213,5 +241,6 @@ def load_config(path: Path | None = None) -> VenomConfig:
             output=str(audio.get("output", "auto")),
             bluetooth_mac=str(audio.get("bluetooth_mac", "")).strip(),
             bluetooth_name=str(audio.get("bluetooth_name", "")).strip(),
+            noise_suppression=bool(audio.get("noise_suppression", True)),
         ),
     )

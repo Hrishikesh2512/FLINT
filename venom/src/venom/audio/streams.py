@@ -27,16 +27,19 @@ class MicStream:
     """16 kHz mono int16 capture; frames arrive on an asyncio.Queue."""
 
     def __init__(self, pick: DevicePick, loop: asyncio.AbstractEventLoop,
-                 max_queued_blocks: int = 32):
+                 max_queued_blocks: int = 32, suppressor=None):
         self._pick = pick
         self._loop = loop
         self.frames: asyncio.Queue[bytes] = asyncio.Queue(maxsize=max_queued_blocks)
         self._stream = None
         self._drops = 0
         self.muted = False
+        self._suppressor = suppressor  # optional NoiseSuppressor
 
     def _enqueue(self, data: bytes) -> None:
         # runs on the event loop via call_soon_threadsafe
+        if self._suppressor is not None:
+            data = self._suppressor.process(data)
         if self.frames.full():
             try:
                 self.frames.get_nowait()
