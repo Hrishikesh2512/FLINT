@@ -122,9 +122,10 @@ async function loadSettings(){const s=await(await api('/api/settings')).json();
 $('settings').innerHTML=Object.entries(s).map(([k,v])=>
 `<div class=row><label style=min-width:140px>${k}</label>
 <input data-k=${k} value="${v}"></div>`).join('')}
-function saveSettings(){const b={};document.querySelectorAll('#settings input')
+async function saveSettings(){const b={};document.querySelectorAll('#settings input')
 .forEach(i=>b[i.dataset.k]=i.value);
-if(confirm('Save settings and restart Venom?'))api('/api/settings',b)}
+if(!confirm('Save settings and restart Venom?'))return;
+const r=await(await api('/api/settings',b)).json();alert(r.result)}
 async function loadLogs(){const l=await(await api('/api/logs')).json();
 $('logs').textContent=l.text}
 loadSettings();
@@ -233,6 +234,12 @@ class WebConsole:
         for key in ("wake_threshold", "inactivity_timeout"):
             if key in clean:
                 clean[key] = float(clean[key])
+        # Only openWakeWord's pretrained models exist on the device; anything
+        # else crash-loops the voice stack (seen live with "hey_venom").
+        allowed = ("hey_jarvis", "alexa", "hey_mycroft")
+        if clean.get("wake_word") and clean["wake_word"] not in allowed:
+            return (f"wake_word must be one of {', '.join(allowed)} — "
+                    "not saved")
         if not clean:
             return "nothing to change"
         write_override("voice", clean)
