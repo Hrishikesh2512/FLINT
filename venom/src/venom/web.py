@@ -50,94 +50,168 @@ def write_override(section: str, values: dict,
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines))
 
+BANNER = (
+    " ██╗   ██╗███████╗███╗   ██╗ ██████╗ ███╗   ███╗\n"
+    " ██║   ██║██╔════╝████╗  ██║██╔═══██╗████╗ ████║\n"
+    " ██║   ██║█████╗  ██╔██╗ ██║██║   ██║██╔████╔██║\n"
+    " ╚██╗ ██╔╝██╔══╝  ██║╚██╗██║██║   ██║██║╚██╔╝██║\n"
+    "  ╚████╔╝ ███████╗██║ ╚████║╚██████╔╝██║ ╚═╝ ██║\n"
+    "   ╚═══╝  ╚══════╝╚═╝  ╚═══╝ ╚═════╝ ╚═╝     ╚═╝"
+)
+
 PAGE = """<!doctype html><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
-<title>Venom Console</title><style>
-body{font:15px/1.5 system-ui;background:#0d1117;color:#e6edf3;max-width:640px;
-margin:0 auto;padding:16px}h1{font-size:18px}.row{display:flex;gap:8px;
-flex-wrap:wrap;margin:8px 0}.pill{background:#161b22;border:1px solid #30363d;
-border-radius:20px;padding:4px 12px;font-size:13px}.ok{border-color:#2ea043}
-.bad{border-color:#f85149}#log{background:#161b22;border:1px solid #30363d;
-border-radius:8px;padding:10px;height:280px;overflow-y:auto;font-size:14px}
-#log .you{color:#79c0ff}#log .venom{color:#e6edf3}#log .sys{color:#8b949e}
-input,button{font:inherit;border-radius:8px;border:1px solid #30363d;
-background:#161b22;color:#e6edf3;padding:8px 12px}input{flex:1}
-button{cursor:pointer}button:hover{background:#21262d}</style>
-<h1>&#128225; Venom Console</h1>
-<div class=row id=status></div>
-<div id=log></div>
-<form class=row id=say><input id=text placeholder="Talk to Venom..." autocomplete=off>
-<button>Send</button></form>
-<div class=row>
-<input id=song placeholder="Song..." style=max-width:180px>
-<button onclick="music('play',song.value)">&#9654; Play</button>
-<button onclick="music('pause')">&#9208;</button>
+<title>VENOM // console</title><style>
+:root{--g:#00ff9c;--dim:#0b4433;--amber:#ffb000;--red:#ff2e4d;--bg:#020604}
+*{box-sizing:border-box}
+::selection{background:var(--g);color:#000}
+body{margin:0 auto;max-width:780px;padding:14px;background:var(--bg);color:var(--g);
+font:13px/1.5 'Courier New',ui-monospace,monospace;text-shadow:0 0 4px currentColor}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:9;
+background:repeating-linear-gradient(0deg,rgba(0,0,0,.16) 0 1px,transparent 1px 3px);
+animation:flick .12s infinite}
+body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:8;
+background:radial-gradient(ellipse at center,transparent 60%,rgba(0,0,0,.5))}
+@keyframes flick{50%{opacity:.9}}
+.wrap{overflow-x:auto}
+.banner{white-space:pre;margin:0;font-size:9px;line-height:1.05;color:var(--g);
+filter:drop-shadow(0 0 6px var(--g))}
+.lbl{color:#3fae86;font-size:10px;letter-spacing:2px;text-transform:uppercase}
+.bar{border:1px solid var(--dim);padding:9px 11px;margin:9px 0;
+background:linear-gradient(180deg,rgba(0,255,156,.03),transparent)}
+.led{display:inline-block;padding:2px 8px;border:1px solid var(--dim);margin:3px 5px 3px 0}
+.on{color:var(--g);border-color:var(--g);box-shadow:0 0 9px rgba(0,255,156,.4)}
+.off{color:var(--red);border-color:var(--red);text-shadow:0 0 4px var(--red)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:7px 14px;margin-top:6px}
+.v{display:flex;align-items:center;gap:8px}.v span:first-child{min-width:52px}
+.meter{height:9px;flex:1;background:#04160f;border:1px solid var(--dim);overflow:hidden}
+.meter i{display:block;height:100%;width:0;background:var(--g);box-shadow:0 0 8px var(--g);
+transition:width .5s}.hot i{background:var(--amber)}.crit i{background:var(--red)}
+#log{background:#03100b;border:1px solid var(--dim);height:240px;overflow-y:auto;padding:8px;
+font-size:12.5px}#log div{white-space:pre-wrap;word-break:break-word;margin:1px 0}
+.you{color:#7fffd4}.venom{color:var(--g)}.sys{color:var(--amber);opacity:.9}
+input,button,select{font:inherit;background:#03100b;color:var(--g);border:1px solid var(--dim);
+padding:7px 10px;text-shadow:inherit;outline:none}
+button{cursor:pointer}button:hover{background:var(--dim);box-shadow:0 0 8px rgba(0,255,156,.3)}
+button:active{transform:translateY(1px)}
+.row{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:6px 0}
+input:focus{border-color:var(--g);box-shadow:0 0 8px rgba(0,255,156,.3)}
+#say input{flex:1;min-width:120px}#say span{color:var(--g)}
+details{border:1px solid var(--dim);margin:7px 0;padding:5px 10px}
+summary{cursor:pointer;user-select:none;letter-spacing:1px}
+pre{white-space:pre-wrap;font-size:11px;background:#03100b;border:1px solid var(--dim);
+padding:8px;overflow-x:auto}
+.np{color:var(--g);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+</style>
+<div class=wrap><pre class=banner>__BANNER__</pre></div>
+<div class=lbl>personal voice node // <span id=clock>--:--:--</span> //
+build <span id=ver>?</span></div>
+<div class=bar id=status></div>
+<div class=bar><div class=lbl>system vitals</div><div class=grid id=vitals></div></div>
+<div class=bar><div class=lbl>uplink log</div><div id=log></div>
+<form class=row id=say><span>&gt;</span>
+<input id=text placeholder="transmit to venom..." autocomplete=off>
+<button>SEND</button></form></div>
+<div class=bar><div class=lbl>audio</div>
+<div class=row><span class=np id=np>— idle —</span></div>
+<div class=row><input id=song placeholder="track / artist" style=max-width:220px>
+<button onclick="music('play',song.value)">&#9654; PLAY</button>
+<button onclick="music('pause')">&#10074;&#10074;</button>
 <button onclick="music('resume')">&#9654;</button>
-<button onclick="music('stop')">&#9632; Stop</button>
-<button onclick="vol(-10)">Vol-</button><button onclick="vol(10)">Vol+</button>
-</div>
-<details><summary>&#128266; Bluetooth</summary><div class=row>
-<button onclick="bt(0)">Paired devices</button>
-<button onclick="bt(1)">Scan nearby (8s)</button></div>
+<button onclick="music('stop')">&#9632; STOP</button></div>
+<div class=v><span class=lbl>vol</span><div class=meter><i id=volbar></i></div>
+<button onclick="vol(-10)">&minus;</button><button onclick="vol(10)">+</button></div></div>
+<details><summary>[+] BLUETOOTH</summary><div class=row>
+<button onclick="bt(0)">paired</button><button onclick="bt(1)">scan 8s</button></div>
 <div id=btlist></div></details>
-<details><summary>&#9881;&#65039; Settings</summary><div id=settings></div>
-<div class=row><button onclick="saveSettings()">Save &amp; restart</button></div></details>
-<details><summary>&#128203; Logs</summary>
-<div class=row><button onclick="loadLogs()">Refresh</button></div>
-<pre id=logs style="font-size:11px;overflow-x:auto;background:#161b22;
-border:1px solid #30363d;border-radius:8px;padding:8px"></pre></details>
-<details><summary>&#128295; System</summary><div class=row>
-<button onclick="sys('update')">&#11015; Update from GitHub</button>
-<button onclick="sys('restart')">&#8635; Restart Venom</button>
-<button onclick="sys('reboot')">&#9888; Reboot Pi</button></div></details>
+<details><summary>[+] TIMERS</summary><div id=timers class=lbl>—</div></details>
+<details ontoggle="if(this.open)loadSettings()"><summary>[+] SETTINGS</summary>
+<div id=settings></div>
+<div class=row><button onclick="saveSettings()">save &amp; restart</button></div></details>
+<details ontoggle="if(this.open)loadMem()"><summary>[+] MEMORY</summary>
+<pre id=mem>...</pre></details>
+<details ontoggle="if(this.open)loadLogs()"><summary>[+] LOGS</summary>
+<div class=row><button onclick="loadLogs()">refresh</button></div><pre id=logs></pre></details>
+<details><summary>[+] SYSTEM</summary><div class=row>
+<button onclick="sys('update')">&#11015; update</button>
+<button onclick="sys('restart')">&#8635; restart</button>
+<button onclick="sys('reboot')">&#9888; reboot</button>
+<button onclick="localStorage.removeItem('vtok');location.reload()">lock</button></div></details>
 <script>
-const $=id=>document.getElementById(id);let n=0;
+const $=id=>document.getElementById(id),H=s=>(s+'').replace(/[<&]/g,c=>c=='<'?'&lt;':'&amp;');
+let n=0;
 function tok(){return localStorage.getItem('vtok')||''}
 async function api(p,b){
 const o=b?{method:'POST',body:JSON.stringify(b)}:{};
 o.headers={'Authorization':'Bearer '+tok()};
 const r=await fetch(p,o);
-if(r.status==401){const t=prompt('Enter Venom console PIN:');
+if(r.status==401){const t=prompt('ACCESS PIN:');
 if(t){localStorage.setItem('vtok',t.trim());return api(p,b)}}
 return r}
+function led(k,v,ok){return `<span class="led ${ok?'on':'off'}">${k}:${H(v)}</span>`}
 async function tick(){try{const s=await(await api('/api/state')).json();
-$('status').innerHTML=[['voice',s.voice,1],['internet',s.internet?'up':'down',s.internet],
-['headset',s.headset||'none',!!s.headset],['brain',s.brain||'-',!!s.brain],
-['music',s.now_playing||'idle',1]].map(([k,v,ok])=>
-`<span class="pill ${ok?'ok':'bad'}">${k}: ${v}</span>`).join('');
+$('ver').textContent=s.version||'?';
+$('status').innerHTML=led('VOX',s.voice,s.voice!='reconnecting')
++led('NET',s.internet?'online':'offline',s.internet)
++led('MIC',s.headset?'linked':'none',!!s.headset)
++led('CPU',s.brain||'none',!!s.brain);
+$('np').textContent=s.now_playing?'♪ '+s.now_playing:'— idle —';
+if(s.volume!=null){const i=$('volbar');i.style.width=Math.round(s.volume*100)+'%';
+i.parentNode.parentNode.className='v'}
+$('timers').innerHTML=(s.timers&&s.timers.length)?s.timers.map(t=>
+`&#9202; ${H(t.label)} &mdash; ${t.mins}m`).join('<br>'):'no active timers';
 if(s.transcript.length!=n){n=s.transcript.length;
 $('log').innerHTML=s.transcript.map(([w,t])=>{
 const c=w.startsWith('you')?'you':w=='venom'?'venom':'sys';
-return `<div class=${c}><b>${w}</b>: ${t}</div>`}).join('');
+const p=c=='you'?'&gt; ':c=='venom'?'venom&#9002; ':'&#9679; ';
+return `<div class=${c}>${p}${H(t)}</div>`}).join('');
 $('log').scrollTop=1e9}}catch(e){}}
-$('say').onsubmit=e=>{e.preventDefault();if($('text').value.trim())
-api('/api/prompt',{text:$('text').value.trim()});$('text').value=''};
+function meter(lbl,pct,txt,warn,crit){
+let cls=pct>=crit?'crit':pct>=warn?'hot':'';
+return `<div class="v ${cls}"><span class=lbl>${lbl}</span>`+
+(pct==null?`<span>${H(txt)}</span>`:
+`<div class=meter><i style=width:${Math.max(0,Math.min(100,pct))}%></i></div>`+
+`<span style=min-width:44px>${H(txt)}</span>`)+`</div>`}
+async function vtick(){try{const v=await(await api('/api/vitals')).json();
+const w=v.wifi||{},sig=w.dbm!=null?Math.max(0,Math.min(100,(w.dbm+90)*2.5)):null;
+$('vitals').innerHTML=[
+meter('cpu',v.cpu_pct,(v.cpu_pct??'?')+'%',70,90),
+meter('temp',v.temp_c,(v.temp_c??'?')+'°C',65,80),
+meter('ram',v.mem_pct,(v.mem_pct??'?')+'%',75,90),
+meter('disk',v.disk_pct,(v.disk_pct??'?')+'%',80,92),
+meter('wifi',sig,w.dbm!=null?w.dbm+'dBm':'n/a',-1,-1),
+meter('up',null,v.uptime||'?')
+].join('')}catch(e){}}
+$('say').onsubmit=e=>{e.preventDefault();const t=$('text').value.trim();
+if(t)api('/api/prompt',{text:t});$('text').value=''};
 function music(a,q){api('/api/music',{action:a,query:q||''})}
-function vol(d){api('/api/volume',{delta:d})}
-function sys(a){if(a=='reboot'&&!confirm('Reboot the Pi?'))return;
-if(a=='update'&&!confirm('Pull latest code from GitHub and reinstall?'))return;
+function vol(d){api('/api/volume',{delta:d}).then(()=>setTimeout(tick,400))}
+function sys(a){if(a=='reboot'&&!confirm('REBOOT the Pi?'))return;
+if(a=='update'&&!confirm('Pull latest from GitHub and reinstall?'))return;
 api('/api/system',{action:a})}
-async function bt(scan){$('btlist').innerHTML='<i>looking...</i>';
+async function bt(scan){$('btlist').innerHTML='<div class=lbl>scanning...</div>';
 const d=await(await api('/api/bluetooth'+(scan?'/scan':''))).json();
-$('btlist').innerHTML=d.map(x=>`<div class=row><span class="pill ${
-x.connected?'ok':''}">${x.name} ${x.connected?'&#10003;':''}</span>
-<button onclick="btUse('${x.mac}','${x.name.replace(/'/g,'')}')">Use</button>
-</div>`).join('')||'<i>none found</i>'}
+$('btlist').innerHTML=d.map(x=>`<div class=row><span class="led ${x.connected?'on':''}">`+
+`${H(x.name)} ${x.connected?'&#10003;':''}</span>`+
+`<button onclick="btUse('${x.mac}','${H(x.name).replace(/'/g,'')}')">use</button></div>`
+).join('')||'<div class=lbl>none found</div>'}
 function btUse(m,n){if(confirm('Switch headset to '+n+'? Venom restarts.'))
 api('/api/bluetooth',{mac:m,name:n})}
 async function loadSettings(){const s=await(await api('/api/settings')).json();
 $('settings').innerHTML=Object.entries(s).map(([k,v])=>
-`<div class=row><label style=min-width:140px>${k}</label>
-<input data-k=${k} value="${v}"></div>`).join('')}
+`<div class=row><span class=lbl style=min-width:150px>${k}</span>`+
+`<input data-k=${k} value="${H(v)}"></div>`).join('')}
 async function saveSettings(){const b={};document.querySelectorAll('#settings input')
 .forEach(i=>b[i.dataset.k]=i.value);
-if(!confirm('Save settings and restart Venom?'))return;
-const r=await(await api('/api/settings',b)).json();alert(r.result)}
-async function loadLogs(){const l=await(await api('/api/logs')).json();
-$('logs').textContent=l.text}
-loadSettings();
-setInterval(tick,1500);tick();
-</script>"""
+if(!confirm('Save and restart Venom?'))return;
+alert((await(await api('/api/settings',b)).json()).result)}
+async function loadLogs(){$('logs').textContent='loading...';
+$('logs').textContent=(await(await api('/api/logs')).json()).text}
+async function loadMem(){$('mem').textContent='loading...';
+$('mem').textContent=(await(await api('/api/memory')).json()).text}
+setInterval(()=>$('clock').textContent=new Date().toLocaleTimeString(),1000);
+setInterval(tick,1500);setInterval(vtick,3000);tick();vtick();
+</script>""".replace("__BANNER__", BANNER)
 
 
 class WebConsole:
@@ -148,6 +222,7 @@ class WebConsole:
         self.token = token
         self.orchestrator = None  # set by attach(); may be replaced on restart
         self.loop = None
+        self._prev_cpu = None  # (idle, total) for %-usage deltas
 
     def authorized(self, headers) -> bool:
         """A request is allowed when no token is set, or it presents it."""
@@ -164,19 +239,116 @@ class WebConsole:
     def state(self) -> dict:
         orch = self.orchestrator
         base = {"voice": "starting", "transcript": [], "now_playing": "",
-                "internet": True, "headset": None, "brain": None}
+                "internet": True, "headset": None, "brain": None,
+                "version": "", "timers": [], "volume": None}
         try:
             from venom.config import load_config
 
             status = json.loads(load_config().status_path.read_text())
-            base.update({k: status.get(k) for k in ("internet", "headset", "brain")})
+            base.update({k: status.get(k)
+                         for k in ("internet", "headset", "brain", "version")})
         except Exception:
             pass
         if orch is not None:
             base["voice"] = orch.state
             base["transcript"] = list(orch.transcript)
             base["now_playing"] = orch.music.now_playing
+            base["timers"] = [
+                {"label": label, "mins": round(mins, 1)}
+                for label, mins in orch.timers.pending()
+            ]
+        base["volume"] = self._volume_level()
         return base
+
+    # ── telemetry ────────────────────────────────────────────────────────────
+    @staticmethod
+    def _read(path: str, default: str = "") -> str:
+        try:
+            return Path(path).read_text()
+        except OSError:
+            return default
+
+    @staticmethod
+    def _volume_level() -> float | None:
+        try:
+            out = subprocess.run(["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"],
+                                 capture_output=True, text=True, timeout=3).stdout
+            return float(out.split()[1])  # "Volume: 0.70 [MUTED]"
+        except (OSError, ValueError, IndexError, subprocess.SubprocessError):
+            return None
+
+    def vitals(self) -> dict:
+        """Live system health for the dashboard — all from /proc and /sys."""
+        v: dict = {}
+
+        temp = self._read("/sys/class/thermal/thermal_zone0/temp").strip()
+        v["temp_c"] = round(int(temp) / 1000, 1) if temp.isdigit() else None
+
+        # CPU %: delta of idle vs total jiffies between polls.
+        fields = self._read("/proc/stat").split("\n")[0].split()[1:]
+        if fields:
+            nums = [int(x) for x in fields]
+            idle, total = nums[3] + nums[4], sum(nums)
+            if self._prev_cpu:
+                di, dt = idle - self._prev_cpu[0], total - self._prev_cpu[1]
+                v["cpu_pct"] = round(100 * (1 - di / dt), 1) if dt > 0 else None
+            self._prev_cpu = (idle, total)
+
+        mem = {k.split(":")[0]: int(k.split()[1])
+               for k in self._read("/proc/meminfo").splitlines()[:5] if ":" in k}
+        if "MemTotal" in mem and "MemAvailable" in mem:
+            v["mem_pct"] = round(
+                100 * (1 - mem["MemAvailable"] / mem["MemTotal"]), 1)
+            v["mem_total_mb"] = round(mem["MemTotal"] / 1024)
+
+        up = self._read("/proc/uptime").split()
+        if up:
+            secs = int(float(up[0]))
+            v["uptime"] = f"{secs // 3600}h {secs % 3600 // 60}m"
+
+        try:
+            import os
+
+            st = os.statvfs("/")  # Linux-only; absent on dev boxes
+            v["disk_pct"] = round(100 * (1 - st.f_bavail / st.f_blocks), 1)
+        except (OSError, AttributeError):
+            pass
+
+        v["wifi"] = self._wifi()
+        return v
+
+    @staticmethod
+    def _wifi() -> dict:
+        """SSID + signal dBm from iw, else /proc/net/wireless."""
+        for iw in ("/usr/sbin/iw", "iw"):
+            try:
+                out = subprocess.run([iw, "dev", "wlan0", "link"],
+                                     capture_output=True, text=True, timeout=4).stdout
+            except (OSError, subprocess.SubprocessError):
+                continue
+            info: dict = {}
+            for line in out.splitlines():
+                line = line.strip()
+                if line.startswith("SSID:"):
+                    info["ssid"] = line[5:].strip()
+                elif line.startswith("signal:"):
+                    try:
+                        info["dbm"] = int(line.split()[1])
+                    except (ValueError, IndexError):
+                        pass
+            if info:
+                return info
+        return {}
+
+    def memory_dump(self) -> str:
+        try:
+            from flint_core.memory import MemoryStore
+            from venom.config import load_config
+
+            text = MemoryStore(load_config().memory_path).render_for_prompt()
+            return text or "(nothing remembered yet)"
+        except Exception as exc:
+            return f"(memory unavailable: {exc})"
 
     def prompt(self, text: str) -> bool:
         orch, loop = self.orchestrator, self.loop
@@ -309,6 +481,10 @@ class WebConsole:
                     self._send(json.dumps(console.settings_get()).encode())
                 elif self.path == "/api/logs":
                     self._send(json.dumps({"text": console.logs()}).encode())
+                elif self.path == "/api/vitals":
+                    self._send(json.dumps(console.vitals()).encode())
+                elif self.path == "/api/memory":
+                    self._send(json.dumps({"text": console.memory_dump()}).encode())
                 else:
                     self._send(PAGE.encode(), "text/html; charset=utf-8")
 
