@@ -14,14 +14,12 @@ import logging
 
 log = logging.getLogger("venom.buttons")
 
-# Key codes for play/pause across headset firmwares (linux/input-event-codes.h)
-PLAY_PAUSE_CODES = {
-    200,  # KEY_PLAYCD
-    201,  # KEY_PAUSECD
-    164,  # KEY_PLAYPAUSE
-    207,  # KEY_PLAY
-}
+# Key codes across headset firmwares (linux/input-event-codes.h)
+TOGGLE_CODES = {164}          # KEY_PLAYPAUSE
+PLAY_CODES = {200, 207}       # KEY_PLAYCD, KEY_PLAY
+PAUSE_CODES = {201, 209}      # KEY_PAUSECD, KEY_STOPCD-adjacent variants
 RESCAN_SECONDS = 10
+DEBOUNCE_SECONDS = 0.5        # one press can emit several events — act once
 
 
 def find_avrcp_devices() -> list:
@@ -54,14 +52,33 @@ async def watch_buttons(music) -> None:
 
     watched: dict[str, asyncio.Task] = {}
 
+    import time
+
+    last_action = 0.0
+
     async def listen(device) -> None:
+        nonlocal last_action
         log.info("headset buttons attached: %s", device.name)
         try:
             async for event in device.async_read_loop():
-                if (event.type == evdev.ecodes.EV_KEY and event.value == 1
-                        and event.code in PLAY_PAUSE_CODES):
+                if event.type != evdev.ecodes.EV_KEY or event.value != 1:
+                    continue
+                now = time.monotonic()
+                if now - last_action < DEBOUNCE_SECONDS:
+                    continue
+                if event.code in TOGGLE_CODES:
+                    last_action = now
                     result = await asyncio.to_thread(music.toggle_pause)
-                    log.info("headset button: %s", result)
+                elif event.code in PAUSE_CODES:
+                    last_action = now
+                    result = await asyncio.to_thread(music.set_paused, True)
+                elif event.code in PLAY_CODES:
+                    last_action = now
+                    result = await asyncio.to_thread(music.set_paused, False)
+                else:
+                    log.info("headset button: unmapped key code %d", event.code)
+                    continue
+                log.info("headset button (%d): %s", event.code, result)
         except OSError:
             log.info("headset buttons detached: %s", device.name)
         finally:
