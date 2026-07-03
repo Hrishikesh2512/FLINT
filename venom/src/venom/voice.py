@@ -48,10 +48,13 @@ class VoiceOrchestrator:
         self._detector: WakeWordDetector | None = None
 
     async def run(self) -> None:
-        # The wake model loads once — it survives audio lifecycle rebuilds.
+        # The wake model takes minutes to load from slow flash — load it in
+        # parallel with the (equally slow) first headset hunt. It loads once
+        # and survives audio lifecycle rebuilds.
         self._detector = WakeWordDetector(self.config.voice.wake_word,
                                           self.config.voice.wake_threshold)
-        await asyncio.to_thread(self._detector.load)
+        self._detector_ready = asyncio.create_task(
+            asyncio.to_thread(self._detector.load))
 
         first_cycle = True
         while True:
@@ -87,6 +90,10 @@ class VoiceOrchestrator:
             self.state = "activating headset microphone"
             if not await asyncio.to_thread(pin_bluetooth_audio, 3.0, 6):
                 raise StreamsDied("headset connected but no microphone appeared")
+
+        # Streams only make sense once the wake model can consume them.
+        self.state = "loading wake model"
+        await self._detector_ready
 
         pick = current_devices(bluetooth=self.config.audio.use_bluetooth)
         log.info("audio devices — mic: %s, speaker: %s", pick.input_name, pick.output_name)
