@@ -57,11 +57,14 @@ class LiveSession:
     def __init__(self, config: VenomConfig, registry: ToolRegistry,
                  memory: MemoryStore, timers: TimerBoard,
                  mic_frames: asyncio.Queue, speaker: SpeakerStream,
-                 inbox: asyncio.Queue | None = None, transcript=None):
+                 inbox: asyncio.Queue | None = None, transcript=None,
+                 reminders=None, pending_reminders=None):
         self.config = config
         self.registry = registry
         self.memory = memory
         self.timers = timers
+        self.reminders = reminders            # persistent wall-clock reminders
+        self._pending_reminders = pending_reminders  # fired while asleep
         self.mic_frames = mic_frames
         self.speaker = speaker
         self._inbox = inbox          # console prompts (text turns)
@@ -182,6 +185,15 @@ class LiveSession:
                 id=call.id, name=call.name, response={"result": str(result)}))
         await self._session.send_tool_response(function_responses=responses)
 
+    async def _announce_reminder(self, text: str) -> None:
+        await self._session.send_client_content(
+            turns={"parts": [{"text":
+                f"[SYSTEM] Reminder for {self.config.voice.user_name}: "
+                f"'{text}'. Tell them now, briefly and warmly."}]},
+            turn_complete=True,
+        )
+        self._idle.touch()
+
     async def _housekeeping(self) -> None:
         """Fire due timers into the conversation; end the session on silence."""
         while not self._ended.is_set():
@@ -201,6 +213,17 @@ class LiveSession:
                     turn_complete=True,
                 )
                 self._idle.touch()
+            # Reminders that fired while asleep, announced now that we're live.
+            if self._pending_reminders:
+                while self._pending_reminders:
+                    text = self._pending_reminders.pop(0)
+                    await self._announce_reminder(text)
+            # Reminders coming due during this conversation.
+            if self.reminders is not None:
+                for reminder in self.reminders.pop_due():
+                    chime(self.speaker)
+                    chime(self.speaker, frequency=880.0)
+                    await self._announce_reminder(reminder["text"])
             if self._idle.expired and not self.speaker.playing:
                 log.info("session idle %.0fs — closing", self._idle.idle_for)
                 self._ended.set()

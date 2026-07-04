@@ -72,11 +72,22 @@ class VoiceOrchestrator:
         self.transcript = deque(maxlen=60)
         self.memory = MemoryStore(config.memory_path)
         self.timers = TimerBoard()
+        # Persistent productivity stores live beside memory in the state dir.
+        from venom.stores import ListStore, NoteStore, ReminderStore
+
+        state_dir = config.memory_path.parent
+        self.reminders = ReminderStore(state_dir / "reminders.json")
+        self.notes = NoteStore(state_dir / "notes.json")
+        self.lists = ListStore(state_dir / "lists.json")
+        # Reminders that fired while asleep, awaiting spoken announcement.
+        self.pending_reminders: list[str] = []
         from venom.music import MusicPlayer
 
         self.music = MusicPlayer()
         self.registry = build_pi_registry(config, self.memory, self.timers,
-                                          music=self.music)
+                                          music=self.music,
+                                          reminders=self.reminders,
+                                          notes=self.notes, lists=self.lists)
         self._detector: WakeWordDetector | None = None
 
     async def run(self) -> None:
@@ -169,6 +180,11 @@ class VoiceOrchestrator:
                 chime(speaker, frequency=1100.0)
                 self.timers.add(0, f"(already finished) {timer.label}")
                 log.info("timer fired while asleep: %s", timer.label)
+            for reminder in self.reminders.pop_due():
+                chime(speaker)
+                chime(speaker, frequency=880.0)
+                self.pending_reminders.append(reminder["text"])
+                log.info("reminder fired while asleep: %s", reminder["text"])
             if not self.inbox.empty():
                 log.info("console prompt while asleep — starting a session")
                 self._drain(mic)
@@ -196,7 +212,9 @@ class VoiceOrchestrator:
     async def _conversation_phase(self, mic: MicStream, speaker: SpeakerStream) -> None:
         session = LiveSession(self.config, self.registry, self.memory,
                               self.timers, mic.frames, speaker,
-                              inbox=self.inbox, transcript=self.transcript)
+                              inbox=self.inbox, transcript=self.transcript,
+                              reminders=self.reminders,
+                              pending_reminders=self.pending_reminders)
         try:
             await session.run()
         except Exception:

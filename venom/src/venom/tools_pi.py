@@ -94,6 +94,42 @@ def fetch_weather(city: str, get=requests.get) -> str:
     )
 
 
+# ── personalization ───────────────────────────────────────────────────────────
+def home_city(memory: MemoryStore) -> str:
+    """The user's city, pulled from whatever they've told Venom to remember."""
+    data = memory.load()
+    for category in ("identity", "preferences", "notes"):
+        for key, entry in (data.get(category) or {}).items():
+            if any(word in key.lower()
+                   for word in ("home_city", "city", "location", "town", "live")):
+                value = entry.get("value") if isinstance(entry, dict) else entry
+                if value:
+                    return str(value)
+    return ""
+
+
+def build_briefing(memory: MemoryStore, timers: TimerBoard,
+                   now: str | None = None) -> str:
+    """Facts for a spoken daily update — the model turns these into speech."""
+    now = now or time.strftime("%A, %B %d, %Y, and it's %I:%M %p")
+    parts = [f"Today is {now}."]
+    city = home_city(memory)
+    if city:
+        try:
+            parts.append("Weather — " + fetch_weather(city))
+        except Exception:  # network hiccup shouldn't sink the whole briefing
+            parts.append(f"(Couldn't fetch the weather for {city} right now.)")
+    else:
+        parts.append("(You don't know their city yet — ask where they are, "
+                     "then save it with save_memory as identity/home_city.)")
+    pending = timers.pending()
+    if pending:
+        parts.append("Running timers: " + "; ".join(
+            f"{label} ({remaining:.0f} min left)" for label, remaining in pending))
+    parts.append("Deliver this as a brief, warm spoken update — not a list.")
+    return "\n".join(parts)
+
+
 # ── volume (ALSA) ─────────────────────────────────────────────────────────────
 def set_alsa_volume(percent: int, card_index: int | None = None) -> str:
     percent = max(0, min(100, int(percent)))
@@ -116,9 +152,52 @@ def set_alsa_volume(percent: int, card_index: int | None = None) -> str:
     return f"Volume set to {percent}%."
 
 
+# ── reminder time parsing ──────────────────────────────────────────────────
+def parse_reminder_time(minutes_from_now: float | None = None,
+                        at_time: str | None = None,
+                        now: float | None = None) -> tuple[float, str]:
+    """Resolve a reminder's absolute epoch + a human phrase. Accepts either a
+    relative `minutes_from_now`, or an absolute `at_time` string the model
+    computed from the current time ("YYYY-MM-DD HH:MM", 24h local). Raises
+    ValueError if neither is usable."""
+    now = time.time() if now is None else now
+    if minutes_from_now is not None:
+        try:
+            mins = float(minutes_from_now)
+        except (TypeError, ValueError):
+            raise ValueError("minutes_from_now must be a number") from None
+        if mins <= 0:
+            raise ValueError("minutes_from_now must be positive")
+        due = now + mins * 60
+        return due, f"in {mins:g} minute(s)"
+    if at_time:
+        stamp = str(at_time).strip().replace("T", " ")
+        for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S", "%H:%M"):
+            try:
+                parsed = time.strptime(stamp, fmt)
+            except ValueError:
+                continue
+            if fmt == "%H:%M":  # time only → today, or tomorrow if already past
+                lt = time.localtime(now)
+                cand = time.struct_time((lt.tm_year, lt.tm_mon, lt.tm_mday,
+                                         parsed.tm_hour, parsed.tm_min, 0,
+                                         0, 0, -1))
+                due = time.mktime(cand)
+                if due <= now:
+                    due += 86400
+            else:
+                due = time.mktime(parsed)
+            if due <= now:
+                raise ValueError("that time is in the past")
+            return due, time.strftime("%A %I:%M %p", time.localtime(due))
+        raise ValueError("couldn't understand the time")
+    raise ValueError("need minutes_from_now or at_time")
+
+
 # ── registry ─────────────────────────────────────────────────────────────────
 def build_pi_registry(config: VenomConfig, memory: MemoryStore,
-                      timers: TimerBoard, music=None) -> ToolRegistry:
+                      timers: TimerBoard, music=None,
+                      reminders=None, notes=None, lists=None) -> ToolRegistry:
     reg = ToolRegistry(platform="linux")
 
     if music is not None:
@@ -255,6 +334,149 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
     )
     def save_memory(category: str, key: str, value: str) -> str:
         return memory.remember(category, key, value)
+
+    if reminders is not None:
+        @reg.tool(
+            description=(
+                "Sets a persistent reminder that survives reboots and fires at "
+                "a wall-clock time (unlike set_timer, which is a short relative "
+                "countdown). Use for 'remind me...' at a date/time or later "
+                "today/tomorrow. When it's due, a chime plays and you announce "
+                "it. Pass EITHER minutes_from_now for short delays, OR at_time "
+                "as 'YYYY-MM-DD HH:MM' (24-hour, local) computed from the "
+                "current date/time you were given."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string",
+                             "description": "What to remind about, e.g. 'call mom'"},
+                    "minutes_from_now": {"type": "number",
+                                         "description": "Delay in minutes (for soon)"},
+                    "at_time": {"type": "string",
+                                "description": "Absolute 'YYYY-MM-DD HH:MM' local"},
+                },
+                "required": ["text"],
+            },
+        )
+        def set_reminder(text: str, minutes_from_now: float | None = None,
+                         at_time: str | None = None) -> str:
+            try:
+                due, phrase = parse_reminder_time(minutes_from_now, at_time)
+            except ValueError as exc:
+                return f"I couldn't set that reminder: {exc}."
+            reminders.add(text, due)
+            return f"Reminder set: '{text.strip()}' {phrase}."
+
+        @reg.tool(description="Lists all upcoming persistent reminders.")
+        def list_reminders() -> str:
+            pending = reminders.pending()
+            if not pending:
+                return "No reminders are set."
+            return "; ".join(
+                f"'{r['text']}' at "
+                f"{time.strftime('%a %I:%M %p', time.localtime(r['due']))}"
+                for r in pending)
+
+        @reg.tool(
+            description="Cancels reminders matching some text.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string", "description": "Text to match"},
+                },
+                "required": ["text"],
+            },
+        )
+        def cancel_reminder(text: str) -> str:
+            n = reminders.cancel(text)
+            return f"Cancelled {n} reminder(s)." if n else "No matching reminder."
+
+    if notes is not None:
+        @reg.tool(
+            description=("Saves a quick voice note for the user to review later. "
+                         "Use for 'note that...', 'take a note', 'jot down...'."),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string", "description": "The note content"},
+                },
+                "required": ["text"],
+            },
+        )
+        def add_note(text: str) -> str:
+            notes.add(text)
+            return "Noted."
+
+        @reg.tool(description="Reads back all saved voice notes.")
+        def read_notes() -> str:
+            items = notes.all()
+            if not items:
+                return "You have no notes."
+            return " • ".join(n["text"] for n in items if n.get("text"))
+
+        @reg.tool(description="Deletes all saved voice notes.")
+        def clear_notes() -> str:
+            return f"Cleared {notes.clear()} note(s)."
+
+    if lists is not None:
+        @reg.tool(
+            description=("Adds an item to a named list (default 'shopping'). "
+                         "Use for 'add milk to my shopping list', 'add X to "
+                         "todo'."),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "item": {"type": "string", "description": "Item to add"},
+                    "list_name": {"type": "string",
+                                  "description": "List name, e.g. shopping, todo"},
+                },
+                "required": ["item"],
+            },
+        )
+        def add_to_list(item: str, list_name: str = "shopping") -> str:
+            return lists.add_item(item, list_name)
+
+        @reg.tool(
+            description="Removes an item from a named list (default 'shopping').",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "item": {"type": "string", "description": "Item to remove"},
+                    "list_name": {"type": "string", "description": "List name"},
+                },
+                "required": ["item"],
+            },
+        )
+        def remove_from_list(item: str, list_name: str = "shopping") -> str:
+            return lists.remove_item(item, list_name)
+
+        @reg.tool(
+            description="Reads back a named list (default 'shopping').",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "list_name": {"type": "string", "description": "List name"},
+                },
+            },
+        )
+        def show_list(list_name: str = "shopping") -> str:
+            items = lists.show(list_name)
+            if not items:
+                return f"The {list_name} list is empty."
+            return f"{list_name}: " + ", ".join(items)
+
+        @reg.tool(
+            description="Empties a named list (default 'shopping').",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "list_name": {"type": "string", "description": "List name"},
+                },
+            },
+        )
+        def clear_list(list_name: str = "shopping") -> str:
+            return f"Cleared {lists.clear(list_name)} item(s) from {list_name}."
 
     @reg.tool(
         description=(
