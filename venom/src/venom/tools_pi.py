@@ -197,7 +197,8 @@ def parse_reminder_time(minutes_from_now: float | None = None,
 # ── registry ─────────────────────────────────────────────────────────────────
 def build_pi_registry(config: VenomConfig, memory: MemoryStore,
                       timers: TimerBoard, music=None,
-                      reminders=None, notes=None, lists=None) -> ToolRegistry:
+                      reminders=None, notes=None, lists=None,
+                      location=None) -> ToolRegistry:
     reg = ToolRegistry(platform="linux")
 
     if music is not None:
@@ -257,17 +258,40 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
         return provider.grounded_search(query)
 
     @reg.tool(
-        description="Gets the current weather for a city.",
+        description=("Gets the current weather. If no city is given, uses the "
+                     "user's current location."),
         parameters={
             "type": "object",
             "properties": {
-                "city": {"type": "string", "description": "City name"},
+                "city": {"type": "string",
+                         "description": "City name; omit for current location"},
             },
-            "required": ["city"],
         },
     )
-    def weather_report(city: str) -> str:
+    def weather_report(city: str = "") -> str:
+        city = (city or "").strip()
+        if not city and location is not None:
+            loc = location.get()
+            city = (loc or {}).get("city") or ""
+        if not city:
+            city = home_city(memory)
+        if not city:
+            return "Which city? I couldn't tell where you are right now."
         return fetch_weather(city)
+
+    if location is not None:
+        @reg.tool(
+            description=("Gets the user's current approximate location (city, "
+                         "region, country) from network geolocation. Use for "
+                         "'where am I' and to ground local questions."),
+        )
+        def where_am_i() -> str:
+            loc = location.get()
+            if not loc:
+                return "I can't determine your location right now."
+            desc = ", ".join(p for p in (loc.get("city"), loc.get("region"),
+                                         loc.get("country")) if p)
+            return f"You appear to be in {desc}."
 
     @reg.tool(description="Gets the current date and time.")
     def current_time() -> str:

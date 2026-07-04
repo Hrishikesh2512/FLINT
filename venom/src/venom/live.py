@@ -42,9 +42,15 @@ def is_normal_closure(exc: BaseException) -> bool:
         return False
 
 
-def build_system_instruction(config: VenomConfig, memory: MemoryStore) -> str:
+def build_system_instruction(config: VenomConfig, memory: MemoryStore,
+                             location=None) -> str:
     parts = [PERSONA.replace("{user_name}", config.voice.user_name)]
     parts.append("[CURRENT DATE & TIME]\n" + time.strftime("%A, %B %d, %Y — %I:%M %p") + "\n")
+    if location is not None:
+        where = location.describe_cached()  # non-blocking: warmed cache only
+        if where:
+            parts.append(f"[APPROXIMATE LOCATION — from network, city-level]\n"
+                         f"{where}\n")
     rendered = memory.render_for_prompt()
     if rendered:
         parts.append(rendered)
@@ -58,13 +64,14 @@ class LiveSession:
                  memory: MemoryStore, timers: TimerBoard,
                  mic_frames: asyncio.Queue, speaker: SpeakerStream,
                  inbox: asyncio.Queue | None = None, transcript=None,
-                 reminders=None, pending_reminders=None):
+                 reminders=None, pending_reminders=None, location=None):
         self.config = config
         self.registry = registry
         self.memory = memory
         self.timers = timers
         self.reminders = reminders            # persistent wall-clock reminders
         self._pending_reminders = pending_reminders  # fired while asleep
+        self.location = location              # approximate network location
         self.mic_frames = mic_frames
         self.speaker = speaker
         self._inbox = inbox          # console prompts (text turns)
@@ -86,7 +93,8 @@ class LiveSession:
             response_modalities=["AUDIO"],
             output_audio_transcription={},
             input_audio_transcription={},
-            system_instruction=build_system_instruction(self.config, self.memory),
+            system_instruction=build_system_instruction(
+                self.config, self.memory, self.location),
             tools=[{"function_declarations":
                     self.registry.gemini_declarations(uppercase_types=True)}],
             speech_config=types.SpeechConfig(

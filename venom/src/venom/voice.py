@@ -81,13 +81,20 @@ class VoiceOrchestrator:
         self.lists = ListStore(state_dir / "lists.json")
         # Reminders that fired while asleep, awaiting spoken announcement.
         self.pending_reminders: list[str] = []
+        # Approximate location (network geo) — warm the cache off-thread so the
+        # first conversation has it without blocking on the lookup.
+        from venom.location import LocationProvider
+
+        self.location = LocationProvider()
+        self.location.warm()
         from venom.music import MusicPlayer
 
         self.music = MusicPlayer()
         self.registry = build_pi_registry(config, self.memory, self.timers,
                                           music=self.music,
                                           reminders=self.reminders,
-                                          notes=self.notes, lists=self.lists)
+                                          notes=self.notes, lists=self.lists,
+                                          location=self.location)
         self._detector: WakeWordDetector | None = None
 
     async def run(self) -> None:
@@ -214,7 +221,8 @@ class VoiceOrchestrator:
                               self.timers, mic.frames, speaker,
                               inbox=self.inbox, transcript=self.transcript,
                               reminders=self.reminders,
-                              pending_reminders=self.pending_reminders)
+                              pending_reminders=self.pending_reminders,
+                              location=self.location)
         try:
             await session.run()
         except Exception:
