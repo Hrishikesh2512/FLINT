@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import socket
 import subprocess
 import threading
 import tomllib
@@ -20,6 +22,11 @@ from pathlib import Path
 log = logging.getLogger("venom.web")
 
 CONTROL_REQUEST = Path("/run/venom/control.request")
+# Root shell daemon (venom-shell.service). When its socket is present the
+# console terminal proxies commands there for a full-privilege shell; when
+# it's absent (dev boxes) we fall back to the in-process sandboxed shell.
+SHELL_SOCK = "/run/venom-shell/shell.sock"
+CMD_TIMEOUT = 300  # must match venom.shell_server; console waits this long
 OVERRIDE_PATH = Path("/var/lib/venom/override.toml")
 VOICE_KEYS = ("wake_word", "wake_threshold", "voice_name", "user_name",
               "inactivity_timeout")
@@ -224,7 +231,7 @@ $('term').textContent+=$('cwd').textContent+'$ '+c+'\\n'+(r.out||'')+'\\n';
 $('cwd').textContent=r.cwd;$('term').scrollTop=1e9}
 function termInit(){setTimeout(()=>$('termin').focus(),60);
 if(!$('term').textContent){$('term').textContent=
-'venom shell // runs as venomd (unprivileged, read-mostly). \\u2191/\\u2193 = history\\n';
+'venom root shell // full privileges \\u2014 mkdir/apt/sudo all work. \\u2191/\\u2193 = history\\n';
 runTerm('whoami; pwd')}}
 $('termform').onsubmit=e=>{e.preventDefault();const c=$('termin').value;
 if(c.trim()){hist.push(c);hp=hist.length;runTerm(c)}$('termin').value=''};
@@ -459,12 +466,39 @@ class WebConsole:
         self.system("restart")
         return "Saved — restarting Venom to apply."
 
+    def _root_shell(self, cmd: str) -> dict | None:
+        """Proxy the command to the root shell daemon (venom-shell.service)
+        over its Unix socket. Returns None when the daemon isn't reachable so
+        the caller can fall back to the in-process sandboxed shell."""
+        if not os.path.exists(SHELL_SOCK):
+            return None
+        try:
+            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            s.settimeout(CMD_TIMEOUT + 10)
+            s.connect(SHELL_SOCK)
+        except OSError:
+            return None  # daemon down / stale socket → fall back
+        try:
+            with s:
+                s.sendall((json.dumps({"cmd": cmd}) + "\n").encode())
+                buf = b""
+                while not buf.endswith(b"\n"):
+                    chunk = s.recv(65536)
+                    if not chunk:
+                        break
+                    buf += chunk
+            return json.loads(buf)
+        except (OSError, ValueError) as exc:
+            return {"out": f"[root shell error: {exc}]", "cwd": "?"}
+
     def terminal(self, cmd: str) -> dict:
-        """Run a shell command on the Pi and return combined output. Tracks
-        the working directory across calls so `cd` behaves. Runs as the
-        (unprivileged, ProtectSystem=strict) venomd user — a read-mostly
-        exploration shell, not root."""
-        import os
+        """Run a shell command on the Pi and return combined output, tracking
+        the working directory across calls so `cd` behaves. Prefers the root
+        shell daemon (full privileges); falls back to the in-process shell,
+        which runs as the unprivileged, ProtectSystem=strict venom user."""
+        root = self._root_shell((cmd or "").strip())
+        if root is not None:
+            return root
 
         if self._cwd is None:
             self._cwd = "/opt/venom/app" if os.path.isdir("/opt/venom/app") else "/"

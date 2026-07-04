@@ -1,0 +1,19 @@
+[Unit]
+Description=Venom privileged shell server (root terminal for the web console)
+After=venom.service
+
+[Service]
+Type=simple
+ExecStart=/opt/venom/venv/bin/python -m venom.shell_server
+# Full root, deliberately unsandboxed: this IS the escape hatch from the
+# venom daemon's ProtectSystem=strict jail. Group=venom + RuntimeDirectory
+# 0750 let only the console daemon reach the socket it drops here.
+User=root
+Group=venom
+RuntimeDirectory=venom-shell
+RuntimeDirectoryMode=0750
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

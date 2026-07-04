@@ -238,8 +238,17 @@ install -m 0644 "$APP_DIR/venom/provisioning/venom-control.path" \
     /etc/systemd/system/venom-control.path
 install -m 0644 "$APP_DIR/venom/provisioning/venom-control.service" \
     /etc/systemd/system/venom-control.service
+# Root shell daemon: gives the web console terminal a full-privilege shell
+# (the daemon's own terminal is sealed by ProtectSystem=strict). Runs as
+# root outside the sandbox; socket is group-venom so only the console reaches it.
+install -m 0644 "$APP_DIR/venom/provisioning/venom-shell.service" \
+    /etc/systemd/system/venom-shell.service
 systemctl daemon-reload
 systemctl enable --now venom-control.path
+# Non-critical add-on: never let a shell-daemon hiccup abort provisioning and
+# leave the voice service un-restarted. On failure the console just falls back
+# to its sandboxed in-process shell.
+systemctl enable --now venom-shell.service || true
 systemctl enable bluetooth.service pipewire-system.service wireplumber-system.service
 systemctl restart bluetooth.service pipewire-system.service wireplumber-system.service
 systemctl enable venom.service
