@@ -71,39 +71,3 @@ def test_invalid_config_rejected():
         VenomConfig(poll_interval=0)
     with pytest.raises(ValueError):
         VenomConfig(brains=())
-
-
-def test_cloud_config_defaults_off(tmp_path):
-    config = load_config(tmp_path / "nope.toml")
-    assert config.cloud.configured is False
-
-
-def test_cloud_config_parsed(tmp_path):
-    path = tmp_path / "venom.toml"
-    path.write_text(
-        """
-[cloud]
-supabase_url = "https://proj.supabase.co"
-supabase_anon_key = "anon-key-123"
-memory_passphrase = "chai-samosa-42"
-""",
-        encoding="utf-8",
-    )
-    config = load_config(path)
-    assert config.cloud.supabase_url == "https://proj.supabase.co"
-    assert config.cloud.memory_passphrase == "chai-samosa-42"
-    assert config.cloud.configured is True
-
-
-def test_cloud_config_placeholder_not_configured(tmp_path):
-    path = tmp_path / "venom.toml"
-    path.write_text(
-        """
-[cloud]
-supabase_url = "https://YOUR-PROJECT-ref.supabase.co"
-supabase_anon_key = "YOUR-PUBLISHABLE-ANON-KEY"
-memory_passphrase = "x"
-""",
-        encoding="utf-8",
-    )
-    assert load_config(path).cloud.configured is False

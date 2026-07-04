@@ -39,13 +39,6 @@ param(
     # Optional laptop brain (additive, never required).
     [string]$LaptopHost,
     [int]$LaptopPort = 8765,
-    # Optional cloud memory backup (Supabase). Bake in all three to have Venom
-    # mirror its long-term memory to the cloud so a re-flash / lost Pi doesn't
-    # lose it. Re-flash a fresh device with the SAME -MemoryPassphrase to
-    # restore. Only the PUBLISHABLE (anon) key belongs here.
-    [string]$SupabaseUrl,
-    [string]$SupabaseAnonKey,
-    [string]$MemoryPassphrase,
     # Git branch the Pi will install Venom from.
     [string]$Branch = "v2/rebuild"
 )
@@ -153,18 +146,6 @@ if ($BluetoothMac -or $BluetoothName) {
     Write-Host "BT headset     : baked in - put it in PAIRING MODE near the Pi on first boot (once)"
 } else {
     Write-Host "BT headset     : none configured; Venom will use a USB headset if present" -ForegroundColor Yellow
-}
-
-# Cloud memory backup: all three needed, else the feature stays off.
-if ($SupabaseUrl -and $SupabaseAnonKey -and $MemoryPassphrase) {
-    $toml = $toml -replace 'supabase_url = ""',      ('supabase_url = "' + $SupabaseUrl + '"')
-    $toml = $toml -replace 'supabase_anon_key = ""', ('supabase_anon_key = "' + $SupabaseAnonKey + '"')
-    $toml = $toml -replace 'memory_passphrase = ""', ('memory_passphrase = "' + $MemoryPassphrase + '"')
-    Write-Host "Cloud memory   : backup ENABLED - re-flash with the same -MemoryPassphrase to restore"
-} elseif ($SupabaseUrl -or $SupabaseAnonKey -or $MemoryPassphrase) {
-    Write-Host "Cloud memory   : incomplete - need -SupabaseUrl, -SupabaseAnonKey AND -MemoryPassphrase. Left OFF." -ForegroundColor Yellow
-} else {
-    Write-Host "Cloud memory   : local-only (no cloud backup configured)"
 }
 # Shell scripts on the Pi read this file - write it with Unix endings, no BOM.
 [IO.File]::WriteAllText((Join-Path $dest "venom.toml"), ($toml -replace "`r`n", "`n"))

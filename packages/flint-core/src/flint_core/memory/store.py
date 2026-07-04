@@ -13,7 +13,6 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 from threading import Lock
-from typing import Callable
 
 CATEGORIES = ("identity", "preferences", "projects", "relationships", "wishes", "notes")
 
@@ -22,14 +21,9 @@ DEFAULT_MAX_CHARS = 2200
 
 
 class MemoryStore:
-    def __init__(self, path: Path, max_chars: int = DEFAULT_MAX_CHARS,
-                 on_change: Callable[[], None] | None = None):
+    def __init__(self, path: Path, max_chars: int = DEFAULT_MAX_CHARS):
         self._path = Path(path)
         self._max_chars = max_chars
-        # Fired (best-effort) after any successful mutation — a runtime can hook
-        # this to mirror memory elsewhere (e.g. Venom's cloud backup) without
-        # this store knowing anything about the destination.
-        self._on_change = on_change
         self._lock = Lock()
 
     @property
@@ -97,7 +91,6 @@ class MemoryStore:
                 "updated": datetime.now().strftime("%Y-%m-%d"),
             }
             self._save(memory)
-        self._notify()
         return f"remembered {category}/{key}"
 
     def forget(self, category: str, key: str) -> str:
@@ -106,22 +99,8 @@ class MemoryStore:
             if key in memory.get(category, {}):
                 del memory[category][key]
                 self._save(memory)
-                changed = True
-            else:
-                changed = False
-        if changed:
-            self._notify()
-            return f"forgot {category}/{key}"
+                return f"forgot {category}/{key}"
         return f"not found: {category}/{key}"
-
-    def _notify(self) -> None:
-        """Run the on_change hook, never letting it break a memory write."""
-        if self._on_change is None:
-            return
-        try:
-            self._on_change()
-        except Exception:  # noqa: BLE001 — a backup hiccup must not lose the save
-            pass
 
     # ── prompt rendering ─────────────────────────────────────────────────────
     def render_for_prompt(self) -> str:

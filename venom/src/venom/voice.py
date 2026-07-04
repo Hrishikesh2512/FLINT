@@ -62,7 +62,7 @@ class SilenceTracker:
 
 
 class VoiceOrchestrator:
-    def __init__(self, config: VenomConfig, memory_on_change=None):
+    def __init__(self, config: VenomConfig):
         from collections import deque
 
         self.config = config
@@ -70,7 +70,7 @@ class VoiceOrchestrator:
         # Web console: prompts in, transcript out (thread-safe via event loop).
         self.inbox: asyncio.Queue[str] = asyncio.Queue()
         self.transcript = deque(maxlen=60)
-        self.memory = MemoryStore(config.memory_path, on_change=memory_on_change)
+        self.memory = MemoryStore(config.memory_path)
         self.timers = TimerBoard()
         from venom.music import MusicPlayer
 
@@ -219,23 +219,6 @@ class VoiceOrchestrator:
 async def run_voice_forever(config: VenomConfig, set_state) -> None:
     """Supervisor entry: keep the voice loop alive across crashes."""
     backoff = 2.0
-
-    # Cloud memory backup (optional): restore this device's memory once at
-    # startup if it's a fresh/empty box, then mirror every future change.
-    from venom.cloud_memory import (CloudMemory, MemoryBackupWorker,
-                                    restore_if_empty)
-
-    cloud = CloudMemory(config.cloud.supabase_url, config.cloud.supabase_anon_key,
-                        config.cloud.memory_passphrase, table=config.cloud.table)
-    backup = MemoryBackupWorker(cloud, config.memory_path)
-    if cloud.configured:
-        try:
-            if restore_if_empty(cloud, config.memory_path):
-                log.info("memory restored from cloud backup")
-        except Exception:
-            log.exception("cloud memory restore failed — continuing")
-        backup.start()
-
     console = None
     if config.web_enabled:
         try:
@@ -248,7 +231,7 @@ async def run_voice_forever(config: VenomConfig, set_state) -> None:
         except Exception:
             log.exception("web console failed to start — continuing without it")
     while True:
-        orchestrator = VoiceOrchestrator(config, memory_on_change=backup.trigger)
+        orchestrator = VoiceOrchestrator(config)
         if console is not None:
             console.attach(orchestrator, asyncio.get_event_loop())
         try:

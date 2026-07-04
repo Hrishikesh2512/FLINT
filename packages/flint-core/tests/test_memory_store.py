@@ -21,27 +21,6 @@ def test_remember_and_reload(tmp_path):
     assert "updated" in s.load()["identity"]["name"]
 
 
-def test_on_change_fires_on_mutation(tmp_path):
-    calls = []
-    s = store(tmp_path, on_change=lambda: calls.append(1))
-    s.remember("identity", "name", "Tushar")
-    assert len(calls) == 1
-    s.forget("identity", "name")
-    assert len(calls) == 2
-    # A no-op forget must not fire the hook.
-    s.forget("identity", "missing")
-    assert len(calls) == 2
-
-
-def test_on_change_error_never_breaks_write(tmp_path):
-    def boom():
-        raise RuntimeError("backup down")
-
-    s = store(tmp_path, on_change=boom)
-    assert s.remember("identity", "name", "Tushar") == "remembered identity/name"
-    assert s.load()["identity"]["name"]["value"] == "Tushar"
-
-
 def test_invalid_category_goes_to_notes(tmp_path):
     s = store(tmp_path)
     s.remember("bogus", "thing", "stuff")
