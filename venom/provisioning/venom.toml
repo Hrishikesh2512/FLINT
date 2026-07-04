@@ -11,6 +11,18 @@ memory_path = "/var/lib/venom/memory.json"
 # Baked in by prepare-pendrive.ps1 -GeminiApiKey. Required for voice.
 api_key = ""
 
+[cloud]
+# Optional: back Venom's long-term memory up to Supabase so it survives a
+# re-flash or a lost Pi. Baked in by prepare-pendrive.ps1 -SupabaseUrl /
+# -SupabaseAnonKey / -MemoryPassphrase. Leave blank to keep memory local-only.
+# The passphrase derives both the (opaque) cloud row id and the encryption
+# key — the cloud only ever stores ciphertext. Re-flash with the SAME
+# passphrase to restore your memory onto a fresh device.
+supabase_url = ""
+supabase_anon_key = ""       # PUBLISHABLE (anon) key only — never service-role
+memory_passphrase = ""
+backup_enabled = true
+
 [audio]
 # "auto" uses bluetooth when a headset is configured below, else USB.
 output = "auto"

@@ -92,6 +92,26 @@ class AudioConfig:
 
 
 @dataclass(frozen=True)
+class CloudConfig:
+    """Optional Supabase-backed memory backup — survives re-flash/device loss.
+    A single passphrase derives the (opaque) cloud row id and the encryption
+    key; the cloud only ever holds ciphertext. Empty = feature off."""
+
+    supabase_url: str = ""
+    supabase_anon_key: str = ""
+    memory_passphrase: str = ""
+    backup_enabled: bool = True
+    table: str = "venom_memory"
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.backup_enabled and self.supabase_url
+                    and self.supabase_anon_key and self.memory_passphrase
+                    and "YOUR-" not in self.supabase_url
+                    and "YOUR-" not in self.supabase_anon_key)
+
+
+@dataclass(frozen=True)
 class VoiceConfig:
     enabled: bool = True
     wake_word: str = "hey_jarvis"      # openWakeWord pretrained model name
@@ -124,6 +144,7 @@ class VenomConfig:
     brains: tuple[BrainCandidate, ...] = field(default=DEFAULT_CLOUD_CANDIDATES)
     voice: VoiceConfig = field(default_factory=VoiceConfig)
     audio: AudioConfig = field(default_factory=AudioConfig)
+    cloud: CloudConfig = field(default_factory=CloudConfig)
 
     def __post_init__(self) -> None:
         if self.poll_interval <= 0:
@@ -202,6 +223,7 @@ def load_config(path: Path | None = None) -> VenomConfig:
     gemini = data.get("gemini", {})
     voice = data.get("voice", {})
     audio = data.get("audio", {})
+    cloud = data.get("cloud", {})
     raw_brains = data.get("brain", [])
 
     brains = _parse_brains(raw_brains) if raw_brains else DEFAULT_CLOUD_CANDIDATES
@@ -242,5 +264,15 @@ def load_config(path: Path | None = None) -> VenomConfig:
             bluetooth_mac=str(audio.get("bluetooth_mac", "")).strip(),
             bluetooth_name=str(audio.get("bluetooth_name", "")).strip(),
             noise_suppression=bool(audio.get("noise_suppression", True)),
+        ),
+        cloud=CloudConfig(
+            supabase_url=str(cloud.get("supabase_url", "")).strip(),
+            supabase_anon_key=str(cloud.get("supabase_anon_key", "")).strip(),
+            memory_passphrase=(
+                os.environ.get("VENOM_MEMORY_PASSPHRASE", "").strip()
+                or str(cloud.get("memory_passphrase", "")).strip()
+            ),
+            backup_enabled=bool(cloud.get("backup_enabled", True)),
+            table=str(cloud.get("table", "venom_memory")).strip() or "venom_memory",
         ),
     )
