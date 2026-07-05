@@ -105,6 +105,11 @@ class VoiceConfig:
     # done and replies. Lower = snappier, but too low can cut you off during
     # a natural pause. Gemini's default is conservative (~1s+); 500 feels live.
     endpoint_silence_ms: int = 500
+    # Model "thinking" budget in tokens. 0 = OFF — the native-audio model
+    # otherwise reasons (emits 'thought' parts) before every spoken reply,
+    # adding seconds of latency. Off = it just talks. -1 = dynamic (let the
+    # model decide); a positive number caps the reasoning.
+    thinking_budget: int = 0
 
     def __post_init__(self) -> None:
         if not (0.0 < self.wake_threshold <= 1.0):
@@ -240,6 +245,8 @@ def load_config(path: Path | None = None) -> VenomConfig:
                 voice.get("inactivity_timeout", voice_defaults.inactivity_timeout)),
             endpoint_silence_ms=int(
                 voice.get("endpoint_silence_ms", voice_defaults.endpoint_silence_ms)),
+            thinking_budget=int(
+                voice.get("thinking_budget", voice_defaults.thinking_budget)),
             live_model=str(voice.get("live_model", voice_defaults.live_model)),
             voice_name=str(voice.get("voice_name", voice_defaults.voice_name)),
             user_name=str(voice.get("user_name", voice_defaults.user_name)),

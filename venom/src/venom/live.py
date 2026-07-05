@@ -154,6 +154,10 @@ class LiveSession:
                     end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_HIGH,
                     silence_duration_ms=self.config.voice.endpoint_silence_ms,
                 )),
+            # Off by default: the native-audio model otherwise "thinks" before
+            # every reply, costing seconds. Straight to speaking = far snappier.
+            thinking_config=types.ThinkingConfig(
+                thinking_budget=self.config.voice.thinking_budget),
             system_instruction=build_system_instruction(
                 self.config, self.memory, self.location),
             tools=[{"function_declarations":
