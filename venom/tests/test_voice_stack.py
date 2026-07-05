@@ -37,6 +37,33 @@ def test_pick_empty_table():
     assert pick.input_name == "(none found)"
 
 
+def test_pick_usb_prefers_pipewire_bridge():
+    # With PipeWire present, USB mode routes through it (resampling), not the
+    # raw hw device that rejects our sample rates.
+    table = [
+        {"name": "USB PnP Sound Device", "max_input_channels": 1, "max_output_channels": 2},
+        {"name": "pipewire", "max_input_channels": 1, "max_output_channels": 2},
+    ]
+    pick = pick_devices(table)  # bluetooth=False → USB tiers
+    assert "pipewire" in pick.input_name.lower()
+    assert "pipewire" in pick.output_name.lower()
+
+
+def test_find_usb_nodes_picks_usb_over_bluetooth():
+    from venom.audio.routing import find_usb_nodes
+
+    objects = [
+        {"id": 54, "info": {"props": {
+            "media.class": "Audio/Sink",
+            "node.description": "USB-Audio-1.0 Analog Stereo"}}},
+        {"id": 55, "info": {"props": {
+            "media.class": "Audio/Source", "node.name": "alsa_input.usb-xyz"}}},
+        {"id": 73, "info": {"props": {
+            "media.class": "Audio/Sink", "node.description": "AirBass Headphone"}}},
+    ]
+    assert find_usb_nodes(objects) == {"sink": 54, "source": 55}
+
+
 # ── wake word framing + endpointing ──────────────────────────────────────────
 class FakeOwwModel:
     def __init__(self, hot_on_call: int):

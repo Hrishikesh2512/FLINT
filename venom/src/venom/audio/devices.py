@@ -23,12 +23,14 @@ class DevicePick:
     output_name: str
 
 
-# Hint tiers tried in order. Bluetooth audio flows through PipeWire, whose
-# ALSA plugin shows up as a "pipewire" (or "pulse"-compat) device; picking it
-# routes to whatever headset PipeWire currently holds. For USB, an explicit
-# USB device always beats the Pi's built-in "bcm2835 Headphones" jack.
+# Hint tiers tried in order. Both Bluetooth and USB headsets flow through
+# PipeWire, whose ALSA plugin shows up as a "pipewire" (or "pulse"-compat)
+# device; picking it lets PipeWire resample to whatever the hardware wants
+# (many cheap USB DACs reject our 16/24 kHz rates on a direct hw open). We
+# pin the right node as PipeWire's default separately (see audio/routing.py).
+# A raw "usb"/"headset" device is the fallback on a PipeWire-less box.
 _TIERS_BLUETOOTH = (("pipewire",), ("pulse",), ("default",))
-_TIERS_USB = (("usb",), ("headset",))
+_TIERS_USB = (("pipewire",), ("pulse",), ("usb",), ("headset",))
 
 
 def pick_devices(devices: list[dict], bluetooth: bool = False) -> DevicePick:

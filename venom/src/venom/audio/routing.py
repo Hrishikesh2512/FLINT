@@ -75,7 +75,42 @@ def find_bluez_nodes(objects: list[dict], card_id: int) -> dict[str, int]:
     return nodes
 
 
+def find_usb_nodes(objects: list[dict]) -> dict[str, int]:
+    """{'sink': id, 'source': id} for the USB audio card's nodes."""
+    nodes: dict[str, int] = {}
+    for obj in objects:
+        props = (obj.get("info", {}) or {}).get("props", {}) or {}
+        blob = (str(props.get("node.name", "")) + " "
+                + str(props.get("node.description", ""))).lower()
+        if "usb" not in blob:
+            continue
+        media_class = props.get("media.class", "")
+        if media_class == "Audio/Sink":
+            nodes["sink"] = obj["id"]
+        elif media_class == "Audio/Source":
+            nodes["source"] = obj["id"]
+    return nodes
+
+
 # ── the operation ─────────────────────────────────────────────────────────────
+def pin_usb_audio(wait: float = 1.0, attempts: int = 4) -> bool:
+    """Make the USB headset's sink/source PipeWire's defaults, so the
+    resampling 'pipewire' device Venom opens routes to the USB earphone
+    (and not a Bluetooth headset that reconnected and grabbed default).
+    True when a USB microphone source exists."""
+    for attempt in range(1, attempts + 1):
+        nodes = find_usb_nodes(pw_dump())
+        if nodes:
+            for node_id in nodes.values():
+                _run(["wpctl", "set-default", str(node_id)])
+            log.info("pinned USB audio (sink=%s source=%s)",
+                     nodes.get("sink"), nodes.get("source"))
+            return "source" in nodes
+        log.info("no USB audio node yet (attempt %d/%d)", attempt, attempts)
+        time.sleep(wait)
+    return False
+
+
 def pin_bluetooth_audio(wait: float = 2.0, attempts: int = 3) -> bool:
     """Switch the connected headset to its mic-capable profile and make its
     nodes the defaults. True when a Bluetooth microphone source exists."""

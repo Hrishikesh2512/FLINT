@@ -205,5 +205,7 @@ def test_device_pick_bluetooth_prefers_pipewire():
     ]
     bt = pick_devices(table, bluetooth=True)
     assert bt.input_index == 1 and bt.output_index == 1
+    # USB mode also routes through PipeWire now (it resamples our rates that a
+    # raw USB DAC open rejects); the USB node is pinned as default separately.
     usb = pick_devices(table, bluetooth=False)
-    assert usb.input_index == 2
+    assert usb.input_index == 1

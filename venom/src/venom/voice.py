@@ -149,6 +149,14 @@ class VoiceOrchestrator:
             self.state = "activating headset microphone"
             if not await asyncio.to_thread(pin_bluetooth_audio, 3.0, 6):
                 raise StreamsDied("headset connected but no microphone appeared")
+        else:
+            # USB (or default) path: make the USB earphone PipeWire's default
+            # so the resampling 'pipewire' device routes to it — re-asserted
+            # every lifecycle, so a reconnecting Bluetooth device can't keep it.
+            from venom.audio.routing import pin_usb_audio
+
+            self.state = "selecting usb audio"
+            await asyncio.to_thread(pin_usb_audio)
 
         # Streams only make sense once the wake model can consume them.
         self.state = "loading wake model"
