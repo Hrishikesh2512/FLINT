@@ -96,11 +96,12 @@ def test_turn_detection_types_build():
     assert cfg.automatic_activity_detection.silence_duration_ms == 500
 
 
-def test_thinking_budget_default_off_and_parse(tmp_path):
-    assert load_config(tmp_path / "nope.toml").voice.thinking_budget == 0
+def test_thinking_budget_default_and_parse(tmp_path):
+    # Default: leave the model's own thinking alone (-1), not forced off.
+    assert load_config(tmp_path / "nope.toml").voice.thinking_budget == -1
     path = tmp_path / "venom.toml"
-    path.write_text("[voice]\nthinking_budget = -1\n", encoding="utf-8")
-    assert load_config(path).voice.thinking_budget == -1
+    path.write_text("[voice]\nthinking_budget = 0\n", encoding="utf-8")
+    assert load_config(path).voice.thinking_budget == 0
 
 
 def test_thinking_config_type_builds():

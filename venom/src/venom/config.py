@@ -105,11 +105,10 @@ class VoiceConfig:
     # done and replies. Lower = snappier, but too low can cut you off during
     # a natural pause. Gemini's default is conservative (~1s+); 500 feels live.
     endpoint_silence_ms: int = 500
-    # Model "thinking" budget in tokens. 0 = OFF — the native-audio model
-    # otherwise reasons (emits 'thought' parts) before every spoken reply,
-    # adding seconds of latency. Off = it just talks. -1 = dynamic (let the
-    # model decide); a positive number caps the reasoning.
-    thinking_budget: int = 0
+    # Model "thinking" budget in tokens. -1 = leave the model's default alone
+    # (native-audio actually replies *worse* with thinking forced off). 0 =
+    # force thinking off; a positive number caps it. Only applied when >= 0.
+    thinking_budget: int = -1
 
     def __post_init__(self) -> None:
         if not (0.0 < self.wake_threshold <= 1.0):

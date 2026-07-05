@@ -142,6 +142,14 @@ class LiveSession:
     def _connect_config(self):
         from google.genai import types
 
+        # thinking_budget < 0 means "leave the model's own default alone" —
+        # forcing it off actually made the native-audio model reply *worse*.
+        # Only pass a ThinkingConfig when a budget is explicitly requested.
+        thinking_config = None
+        if self.config.voice.thinking_budget >= 0:
+            thinking_config = types.ThinkingConfig(
+                thinking_budget=self.config.voice.thinking_budget)
+
         return types.LiveConnectConfig(
             response_modalities=["AUDIO"],
             output_audio_transcription={},
@@ -154,10 +162,7 @@ class LiveSession:
                     end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_HIGH,
                     silence_duration_ms=self.config.voice.endpoint_silence_ms,
                 )),
-            # Off by default: the native-audio model otherwise "thinks" before
-            # every reply, costing seconds. Straight to speaking = far snappier.
-            thinking_config=types.ThinkingConfig(
-                thinking_budget=self.config.voice.thinking_budget),
+            thinking_config=thinking_config,
             system_instruction=build_system_instruction(
                 self.config, self.memory, self.location),
             tools=[{"function_declarations":
