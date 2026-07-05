@@ -337,6 +337,25 @@ def test_noise_suppressor_passthrough_on_expander_open():
     assert float(np.abs(out).max()) > 5000  # loud speech is not gated away
 
 
+def test_noise_gate_emits_silence_after_hangover_but_passes_speech():
+    import numpy as np
+
+    from venom.audio.denoise import NoiseSuppressor
+
+    ns = NoiseSuppressor(highpass_hz=20.0)
+    rng = np.random.default_rng(0)
+    quiet = (rng.standard_normal(1024) * 120).astype(np.int16)  # noise floor
+    # Sustained quiet longer than the hangover (0.3s ≈ 5 frames of 64ms).
+    outs = [np.frombuffer(ns.process(quiet.tobytes()), dtype=np.int16)
+            for _ in range(12)]
+    assert float(np.abs(outs[-1]).max()) == 0        # gate closed → true silence
+
+    # A loud speech frame breaks the gate open again immediately.
+    loud = (np.sin(np.linspace(0, 200 * np.pi, 1024)) * 12000).astype(np.int16)
+    spoken = np.frombuffer(ns.process(loud.tobytes()), dtype=np.int16)
+    assert float(np.abs(spoken).max()) > 5000        # not clipped by the gate
+
+
 # ── multi-target internet probe ───────────────────────────────────────────────
 def test_probe_any_succeeds_if_any_target_up():
     import asyncio
