@@ -101,12 +101,18 @@ class VoiceConfig:
     voice_name: str = "Leda"
     user_name: str = "Boss"
     language: str = "en"
+    # Silence (ms) after you stop talking before Venom treats your turn as
+    # done and replies. Lower = snappier, but too low can cut you off during
+    # a natural pause. Gemini's default is conservative (~1s+); 500 feels live.
+    endpoint_silence_ms: int = 500
 
     def __post_init__(self) -> None:
         if not (0.0 < self.wake_threshold <= 1.0):
             raise ValueError("wake_threshold must be in (0, 1]")
         if self.inactivity_timeout <= 0:
             raise ValueError("inactivity_timeout must be positive")
+        if self.endpoint_silence_ms < 100:
+            raise ValueError("endpoint_silence_ms must be at least 100")
 
 
 @dataclass(frozen=True)
@@ -232,6 +238,8 @@ def load_config(path: Path | None = None) -> VenomConfig:
             wake_threshold=float(voice.get("wake_threshold", voice_defaults.wake_threshold)),
             inactivity_timeout=float(
                 voice.get("inactivity_timeout", voice_defaults.inactivity_timeout)),
+            endpoint_silence_ms=int(
+                voice.get("endpoint_silence_ms", voice_defaults.endpoint_silence_ms)),
             live_model=str(voice.get("live_model", voice_defaults.live_model)),
             voice_name=str(voice.get("voice_name", voice_defaults.voice_name)),
             user_name=str(voice.get("user_name", voice_defaults.user_name)),

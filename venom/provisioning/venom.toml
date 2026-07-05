@@ -25,6 +25,7 @@ enabled = true
 wake_word = "hey_jarvis"       # say "Hey Jarvis" to wake Venom
 wake_threshold = 0.30
 inactivity_timeout = 45.0      # seconds of silence before going back to sleep
+endpoint_silence_ms = 500      # silence after you speak before Venom replies (lower = snappier)
 live_model = "models/gemini-2.5-flash-native-audio-preview-12-2025"
 voice_name = "Leda"
 user_name = "Boss"

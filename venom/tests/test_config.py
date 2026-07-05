@@ -71,3 +71,26 @@ def test_invalid_config_rejected():
         VenomConfig(poll_interval=0)
     with pytest.raises(ValueError):
         VenomConfig(brains=())
+
+
+def test_endpoint_silence_default_and_parse(tmp_path):
+    assert load_config(tmp_path / "nope.toml").voice.endpoint_silence_ms == 500
+    path = tmp_path / "venom.toml"
+    path.write_text("[voice]\nendpoint_silence_ms = 350\n", encoding="utf-8")
+    assert load_config(path).voice.endpoint_silence_ms == 350
+
+
+def test_endpoint_silence_rejects_too_low():
+    from venom.config import VoiceConfig
+    with pytest.raises(ValueError):
+        VoiceConfig(endpoint_silence_ms=50)
+
+
+def test_turn_detection_types_build():
+    # Guards against google-genai API drift for the latency lever.
+    from google.genai import types
+    cfg = types.RealtimeInputConfig(
+        automatic_activity_detection=types.AutomaticActivityDetection(
+            end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_HIGH,
+            silence_duration_ms=500))
+    assert cfg.automatic_activity_detection.silence_duration_ms == 500
