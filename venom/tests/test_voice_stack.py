@@ -342,7 +342,7 @@ def test_noise_gate_emits_silence_after_hangover_but_passes_speech():
 
     from venom.audio.denoise import NoiseSuppressor
 
-    ns = NoiseSuppressor(highpass_hz=20.0, gate=True)  # opt-in; off by default
+    ns = NoiseSuppressor(highpass_hz=20.0, gate=True)  # enabled only mid-conversation
     rng = np.random.default_rng(0)
     quiet = (rng.standard_normal(1024) * 120).astype(np.int16)  # noise floor
     # Sustained quiet longer than the hangover (0.3s ≈ 5 frames of 64ms).

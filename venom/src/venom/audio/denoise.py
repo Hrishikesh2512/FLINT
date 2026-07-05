@@ -34,7 +34,7 @@ class NoiseSuppressor:
     def __init__(self, sample_rate: int = 16000, highpass_hz: float = 100.0,
                  expander: bool = True, min_gain: float = 0.5,
                  open_ratio: float = 4.0, gate: bool = False,
-                 gate_ratio: float = 2.2, gate_hangover_s: float = 0.30):
+                 gate_ratio: float = 2.2, gate_hangover_s: float = 0.25):
         self.sample_rate = sample_rate
         self.highpass_hz = highpass_hz
         self.expander = expander

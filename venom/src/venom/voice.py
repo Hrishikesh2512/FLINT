@@ -192,6 +192,14 @@ class VoiceOrchestrator:
                 chime(speaker)
                 chime(speaker, frequency=1320.0)
                 session.activate()
+                # Gate the mic to true silence between/after words *only* while
+                # talking, so Gemini's own turn detector hears a clean end-of-
+                # speech and replies promptly (a body-mic's noise floor otherwise
+                # reads as "still talking" and it waits). Off during wake, where
+                # pure zeros would look like a dead capture path (see
+                # SilenceTracker) and trigger needless stream rebuilds.
+                if suppressor is not None:
+                    suppressor.gate = True
                 try:
                     await warm_task
                 except Exception:
@@ -199,6 +207,8 @@ class VoiceOrchestrator:
                     chime(speaker, frequency=330.0, duration=0.4)
                     await asyncio.sleep(2)
                 finally:
+                    if suppressor is not None:
+                        suppressor.gate = False
                     self._drain(mic)
                 self._detector.reset()
                 log.info("back to wake listening")
