@@ -133,6 +133,7 @@ class LiveSession:
         self._turn_out = ""
         self._idle = InactivityTimer(config.voice.inactivity_timeout)
         self._ended = asyncio.Event()
+        self._reply_clock: float | None = None  # set when a turn is committed
 
     def _record(self, who: str, text: str) -> None:
         if self._transcript is not None and text.strip():
@@ -218,6 +219,10 @@ class LiveSession:
             while not self._ended.is_set():
                 async for response in self._session.receive():
                     if response.data:
+                        if self._reply_clock is not None:
+                            log.info("first-audio %.2fs",
+                                     time.monotonic() - self._reply_clock)
+                            self._reply_clock = None
                         self.speaker.play(response.data)
                         self._idle.touch()
 
@@ -289,6 +294,7 @@ class LiveSession:
         while not self._ended.is_set():
             while self._inbox is not None and not self._inbox.empty():
                 text = self._inbox.get_nowait()
+                self._reply_clock = time.monotonic()
                 await self._session.send_client_content(
                     turns={"role": "user", "parts": [{"text": text}]},
                     turn_complete=True)
