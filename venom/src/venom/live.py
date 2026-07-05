@@ -187,6 +187,11 @@ class LiveSession:
             group.create_task(self._housekeeping())
 
     async def _uplink(self) -> None:
+        from google.genai import types
+
+        # Newer Live models reject the legacy media_chunks path ("realtime_input.
+        # media_chunks is deprecated"); the current audio=Blob form works across
+        # native-audio and flash-live models alike.
         while not self._ended.is_set():
             try:
                 frame = await asyncio.wait_for(self.mic_frames.get(), timeout=0.5)
@@ -194,7 +199,8 @@ class LiveSession:
                 continue
             try:
                 await self._session.send_realtime_input(
-                    media={"data": frame, "mime_type": "audio/pcm"})
+                    audio=types.Blob(data=frame,
+                                     mime_type="audio/pcm;rate=16000"))
             except Exception as exc:
                 # The socket closing under an in-flight send is part of every
                 # intentional session end — not an error, no error chime.
