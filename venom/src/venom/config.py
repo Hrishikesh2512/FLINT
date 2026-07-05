@@ -98,7 +98,7 @@ class VoiceConfig:
     wake_threshold: float = 0.6        # detection score 0..1
     inactivity_timeout: float = 45.0   # seconds of silence before session closes
     live_model: str = "models/gemini-2.5-flash-native-audio-preview-12-2025"
-    voice_name: str = "Charon"   # warm male voice (Hinglish); Gemini prebuilt set
+    voice_name: str = "Leda"     # warm female voice (Hinglish); Gemini prebuilt set
     user_name: str = "Boss"
     language: str = "en"
     # Silence (ms) after you stop talking before Venom treats your turn as
@@ -109,6 +109,18 @@ class VoiceConfig:
     # (native-audio actually replies *worse* with thinking forced off). 0 =
     # force thinking off; a positive number caps it. Only applied when >= 0.
     thinking_budget: int = -1
+    # Native-audio human-realism knobs (Gemini native-audio only).
+    # affective_dialog: she hears the *emotion* in your voice (tone, pace,
+    #   mood) and adapts how she speaks, not just the words. Biggest single
+    #   win for sounding human; negligible latency cost.
+    affective_dialog: bool = True
+    # proactive_audio: she decides when NOT to reply — ignores stray noise and
+    #   talk not aimed at her instead of dutifully answering everything. More
+    #   human, but adds a decision beat, so off by default (snappiness).
+    proactive_audio: bool = False
+    # Sampling temperature. None = leave the model default. A mild bump adds
+    # natural variety so she doesn't say things the same way twice.
+    temperature: float | None = None
 
     def __post_init__(self) -> None:
         if not (0.0 < self.wake_threshold <= 1.0):
@@ -246,6 +258,14 @@ def load_config(path: Path | None = None) -> VenomConfig:
                 voice.get("endpoint_silence_ms", voice_defaults.endpoint_silence_ms)),
             thinking_budget=int(
                 voice.get("thinking_budget", voice_defaults.thinking_budget)),
+            affective_dialog=bool(
+                voice.get("affective_dialog", voice_defaults.affective_dialog)),
+            proactive_audio=bool(
+                voice.get("proactive_audio", voice_defaults.proactive_audio)),
+            temperature=(
+                float(voice["temperature"])
+                if voice.get("temperature") is not None
+                else voice_defaults.temperature),
             live_model=str(voice.get("live_model", voice_defaults.live_model)),
             voice_name=str(voice.get("voice_name", voice_defaults.voice_name)),
             user_name=str(voice.get("user_name", voice_defaults.user_name)),

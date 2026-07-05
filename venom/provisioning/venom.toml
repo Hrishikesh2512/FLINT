@@ -27,8 +27,11 @@ wake_threshold = 0.30
 inactivity_timeout = 45.0      # seconds of silence before going back to sleep
 endpoint_silence_ms = 500      # silence after you speak before Venom replies (lower = snappier)
 thinking_budget = -1           # -1 = model's own default (native-audio replies worse with it off); 0 = force off
+affective_dialog = true        # she hears the emotion in your voice and adapts tone (native-audio; big human-ness win)
+proactive_audio = false        # let her decide when NOT to reply (more human, adds a decision beat -> less snappy)
+# temperature = 1.1            # uncomment to add natural variety; leave unset for the model default
 live_model = "models/gemini-2.5-flash-native-audio-preview-12-2025"
-voice_name = "Charon"          # warm male voice for Hinglish (Gemini prebuilt set)
+voice_name = "Leda"            # warm female voice for Hinglish (Gemini prebuilt set)
 user_name = "Boss"
 language = "en"
 
