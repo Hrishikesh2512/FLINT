@@ -464,7 +464,7 @@ def test_build_system_instruction(tmp_path):
     memory = MemoryStore(config.memory_path)
     memory.remember("identity", "name", "Tushar")
     text = build_system_instruction(config, memory)
-    assert "You are Venom" in text
+    assert "You are Jarvis" in text
     assert "Tushar" in text
     assert "CURRENT DATE" in text
     assert "WHAT YOU KNOW ABOUT THIS PERSON" in text

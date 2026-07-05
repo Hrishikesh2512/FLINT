@@ -98,7 +98,7 @@ class VoiceConfig:
     wake_threshold: float = 0.6        # detection score 0..1
     inactivity_timeout: float = 45.0   # seconds of silence before session closes
     live_model: str = "models/gemini-2.5-flash-native-audio-preview-12-2025"
-    voice_name: str = "Leda"
+    voice_name: str = "Charon"   # warm male voice (Hinglish); Gemini prebuilt set
     user_name: str = "Boss"
     language: str = "en"
     # Silence (ms) after you stop talking before Venom treats your turn as

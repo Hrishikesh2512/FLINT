@@ -96,7 +96,7 @@ background:linear-gradient(180deg,rgba(0,255,156,.03),transparent)}
 transition:width .5s}.hot i{background:var(--amber)}.crit i{background:var(--red)}
 #log{background:#03100b;border:1px solid var(--dim);height:240px;overflow-y:auto;padding:8px;
 font-size:12.5px}#log div{white-space:pre-wrap;word-break:break-word;margin:1px 0}
-.you{color:#7fffd4}.venom{color:var(--g)}.sys{color:var(--amber);opacity:.9}
+.you{color:#7fffd4}.jarvis{color:var(--g)}.sys{color:var(--amber);opacity:.9}
 input,button,select{font:inherit;background:#03100b;color:var(--g);border:1px solid var(--dim);
 padding:7px 10px;text-shadow:inherit;outline:none}
 button{cursor:pointer}button:hover{background:var(--dim);box-shadow:0 0 8px rgba(0,255,156,.3)}
@@ -177,8 +177,8 @@ $('timers').innerHTML=(s.timers&&s.timers.length)?s.timers.map(t=>
 `&#9202; ${H(t.label)} &mdash; ${t.mins}m`).join('<br>'):'no active timers';
 if(s.transcript.length!=n){n=s.transcript.length;
 $('log').innerHTML=s.transcript.map(([w,t])=>{
-const c=w.startsWith('you')?'you':w=='venom'?'venom':'sys';
-const p=c=='you'?'&gt; ':c=='venom'?'venom&#9002; ':'&#9679; ';
+const c=w.startsWith('you')?'you':w=='jarvis'?'jarvis':'sys';
+const p=c=='you'?'&gt; ':c=='jarvis'?'jarvis&#9002; ':'&#9679; ';
 return `<div class=${c}>${p}${H(t)}</div>`}).join('');
 $('log').scrollTop=1e9}}catch(e){}}
 function meter(lbl,pct,txt,warn,crit){

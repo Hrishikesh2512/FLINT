@@ -28,7 +28,7 @@ inactivity_timeout = 45.0      # seconds of silence before going back to sleep
 endpoint_silence_ms = 500      # silence after you speak before Venom replies (lower = snappier)
 thinking_budget = -1           # -1 = model's own default (native-audio replies worse with it off); 0 = force off
 live_model = "models/gemini-2.5-flash-native-audio-preview-12-2025"
-voice_name = "Leda"
+voice_name = "Charon"          # warm male voice for Hinglish (Gemini prebuilt set)
 user_name = "Boss"
 language = "en"
 
