@@ -233,8 +233,14 @@ class LiveSession:
     async def run(self) -> None:
         from google import genai
 
+        # Affective dialog and proactive audio are v1alpha-only — v1beta rejects
+        # the setup ("Unknown name enableAffectiveDialog"). Use v1alpha when
+        # either is on; otherwise keep the known-good v1beta path.
+        voice = self.config.voice
+        api_version = ("v1alpha" if (voice.affective_dialog or voice.proactive_audio)
+                       else "v1beta")
         client = genai.Client(api_key=self.config.gemini_api_key,
-                              http_options={"api_version": "v1beta"})
+                              http_options={"api_version": api_version})
         log.info("live session connecting (%s)", self.config.voice.live_model)
         async with (
             client.aio.live.connect(model=self.config.voice.live_model,
