@@ -10,7 +10,8 @@ def store(tmp_path, **kw):
 def test_empty_load(tmp_path):
     memory = store(tmp_path).load()
     assert set(memory) == {
-        "identity", "preferences", "projects", "relationships", "wishes", "notes"
+        "identity", "preferences", "projects", "relationships", "places",
+        "wishes", "notes"
     }
 
 
@@ -19,6 +20,14 @@ def test_remember_and_reload(tmp_path):
     assert s.remember("identity", "name", "Tushar") == "remembered identity/name"
     assert s.load()["identity"]["name"]["value"] == "Tushar"
     assert "updated" in s.load()["identity"]["name"]
+
+
+def test_places_category_renders(tmp_path):
+    s = store(tmp_path)
+    s.remember("places", "gym", "Gold's Gym near his flat")
+    rendered = s.render_for_prompt()
+    assert "Places they know" in rendered
+    assert "Gold's Gym" in rendered
 
 
 def test_invalid_category_goes_to_notes(tmp_path):

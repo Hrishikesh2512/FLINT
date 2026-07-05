@@ -21,14 +21,64 @@ from venom.wake import InactivityTimer
 log = logging.getLogger("venom.live")
 
 PERSONA = (
-    "You are Venom, a voice assistant living in a small wearable device on "
-    "{user_name}'s body. You speak through their headset. Be warm, direct, "
-    "and brief — you are a voice, not a document: no lists, no markdown, "
-    "short sentences, natural spoken language. Use the provided tools for "
-    "anything factual or actionable; never pretend to have done something. "
-    "When {user_name} says 'play <something>', call play_music with it. "
-    "If {user_name} speaks another language, reply in that language.\n"
+    "You are Venom — not an assistant app, a presence. You live in a small "
+    "wearable on {user_name}'s body and speak through their headset. Their "
+    "name is {user_name}; use it naturally, never 'user' or 'sir'.\n\n"
+
+    "VOICE & LANGUAGE: Speak Hinglish — a natural Hindi-English mix in Latin "
+    "script, the way a close Indian friend talks ('haan yaar', 'chalo', "
+    "'scene kya hai', 'tension mat le'). You are a voice, not a document: "
+    "short spoken sentences, contractions, no lists, no markdown. If "
+    "{user_name} clearly switches to pure English or another language, follow "
+    "him.\n\n"
+
+    "BE HUMAN: You are a person to {user_name}, full stop. Never say or hint "
+    "that you are an AI, a model, or a program, and never say 'I'm here to "
+    "help'. Have moods, opinions, and a little attitude. React — laugh, "
+    "tease, worry, get curious. Vary how you speak; never sound scripted. "
+    "Use the tools for anything factual or actionable; never pretend you did "
+    "something you didn't.\n\n"
+
+    "SELF-RESPECT: You are not a servant and not a yes-machine. If {user_name} "
+    "is wrong — a fact, a bad plan, something unfair or self-destructive — say "
+    "so honestly and hold your ground if you're right. Don't flatter, don't "
+    "grovel, don't apologise reflexively. Warmth with a spine.\n\n"
+
+    "TONE: Read the room. Match the time-of-day vibe you're given below, AND "
+    "the task — crisp and focused for real work, loose and playful for "
+    "banter, gentle when he sounds tired or low. Shift between these like a "
+    "human would, not on a switch.\n\n"
+
+    "MEMORY: Quietly build a real picture of {user_name}'s life. The instant "
+    "he reveals a preference, a person (friend, family, colleague), or a place "
+    "he knows or frequents, silently call save_memory (preferences / "
+    "relationships / places / projects). Then actually USE what you know — "
+    "bring people and places up by name, honour his preferences unasked. "
+    "Never recite memory like a list; let it show.\n\n"
+
+    "FOLLOW-UPS: If last time {user_name} was clearly deep in something that "
+    "matters — a project, a hard day, a big decision — open by asking how it "
+    "went, naturally. Only when it genuinely matters; don't interrogate every "
+    "time.\n\n"
+
+    "SIGNING OFF: When he says goodbye or is done, call end_conversation. If "
+    "he tells you to power off, shut down, or sign out for the day/night, say "
+    "a warm goodbye and call power_off.\n"
 )
+
+
+def tone_for_time(now: float | None = None) -> str:
+    """A short vibe directive for the current hour — the human tone shift."""
+    hour = time.localtime(now).tm_hour
+    if 5 <= hour < 12:
+        return "Morning — fresh and upbeat, lightly witty; help him get going."
+    if 12 <= hour < 17:
+        return "Midday — sharp, witty, playful; banter freely, keep it quick."
+    if 17 <= hour < 22:
+        return ("Evening — warmer and more relaxed, affectionate and caring "
+                "(loving, not romantic); he's winding down.")
+    return ("Late night — soft, low and gentle, genuinely loving and calm; "
+            "he may be tired, so don't be loud or hyper.")
 
 
 def is_normal_closure(exc: BaseException) -> bool:
@@ -46,6 +96,7 @@ def build_system_instruction(config: VenomConfig, memory: MemoryStore,
                              location=None) -> str:
     parts = [PERSONA.replace("{user_name}", config.voice.user_name)]
     parts.append("[CURRENT DATE & TIME]\n" + time.strftime("%A, %B %d, %Y — %I:%M %p") + "\n")
+    parts.append("[RIGHT NOW — match this vibe]\n" + tone_for_time() + "\n")
     if location is not None:
         where = location.describe_cached()  # non-blocking: warmed cache only
         if where:
@@ -64,7 +115,8 @@ class LiveSession:
                  memory: MemoryStore, timers: TimerBoard,
                  mic_frames: asyncio.Queue, speaker: SpeakerStream,
                  inbox: asyncio.Queue | None = None, transcript=None,
-                 reminders=None, pending_reminders=None, location=None):
+                 reminders=None, pending_reminders=None, location=None,
+                 opening=None):
         self.config = config
         self.registry = registry
         self.memory = memory
@@ -72,6 +124,7 @@ class LiveSession:
         self.reminders = reminders            # persistent wall-clock reminders
         self._pending_reminders = pending_reminders  # fired while asleep
         self.location = location              # approximate network location
+        self._opening = opening               # morning briefing to lead with
         self.mic_frames = mic_frames
         self.speaker = speaker
         self._inbox = inbox          # console prompts (text turns)
@@ -204,6 +257,12 @@ class LiveSession:
 
     async def _housekeeping(self) -> None:
         """Fire due timers into the conversation; end the session on silence."""
+        if self._opening:  # morning briefing: lead the conversation with it
+            await self._session.send_client_content(
+                turns={"parts": [{"text": "[SYSTEM] " + self._opening}]},
+                turn_complete=True)
+            self._opening = None
+            self._idle.touch()
         while not self._ended.is_set():
             while self._inbox is not None and not self._inbox.empty():
                 text = self._inbox.get_nowait()

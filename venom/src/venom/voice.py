@@ -79,6 +79,9 @@ class VoiceOrchestrator:
         self.reminders = ReminderStore(state_dir / "reminders.json")
         self.notes = NoteStore(state_dir / "notes.json")
         self.lists = ListStore(state_dir / "lists.json")
+        from venom.session import SessionState
+
+        self.session = SessionState(state_dir / "session.json")
         # Reminders that fired while asleep, awaiting spoken announcement.
         self.pending_reminders: list[str] = []
         # Approximate location (network geo) — warm the cache off-thread so the
@@ -217,12 +220,25 @@ class VoiceOrchestrator:
                 return
 
     async def _conversation_phase(self, mic: MicStream, speaker: SpeakerStream) -> None:
+        # First real conversation of the morning → lead with a briefing.
+        opening = None
+        if self.session.should_brief():
+            from venom.tools_pi import build_briefing
+
+            opening = build_briefing(self.memory, self.timers,
+                                     location=self.location,
+                                     reminders=self.reminders)
+            self.session.mark_briefed()
+            log.info("delivering morning briefing")
+        else:
+            self.session.mark_interaction()
+
         session = LiveSession(self.config, self.registry, self.memory,
                               self.timers, mic.frames, speaker,
                               inbox=self.inbox, transcript=self.transcript,
                               reminders=self.reminders,
                               pending_reminders=self.pending_reminders,
-                              location=self.location)
+                              location=self.location, opening=opening)
         try:
             await session.run()
         except Exception:

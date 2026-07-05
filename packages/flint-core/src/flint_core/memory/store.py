@@ -14,7 +14,8 @@ from datetime import datetime
 from pathlib import Path
 from threading import Lock
 
-CATEGORIES = ("identity", "preferences", "projects", "relationships", "wishes", "notes")
+CATEGORIES = ("identity", "preferences", "projects", "relationships",
+              "places", "wishes", "notes")
 
 MAX_VALUE_LENGTH = 380
 DEFAULT_MAX_CHARS = 2200
@@ -111,6 +112,7 @@ class MemoryStore:
             "preferences": "Preferences:",
             "projects": "Active Projects / Goals:",
             "relationships": "People in their life:",
+            "places": "Places they know / frequent:",
             "wishes": "Wishes / Plans:",
             "notes": "Other notes:",
         }

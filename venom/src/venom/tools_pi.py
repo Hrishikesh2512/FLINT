@@ -14,6 +14,7 @@ import subprocess
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import requests
 
@@ -23,6 +24,10 @@ from flint_core.tools import ToolRegistry
 from venom.config import VenomConfig
 
 log = logging.getLogger("venom.tools")
+
+# The root control channel the console also uses: writing a keyword here makes
+# the privileged venom-control unit run it as root (see provisioning/control.sh).
+CONTROL_REQUEST = Path("/run/venom/control.request")
 
 
 # ── timers ────────────────────────────────────────────────────────────────────
@@ -109,11 +114,14 @@ def home_city(memory: MemoryStore) -> str:
 
 
 def build_briefing(memory: MemoryStore, timers: TimerBoard,
-                   now: str | None = None) -> str:
-    """Facts for a spoken daily update — the model turns these into speech."""
+                   now: str | None = None, location=None, reminders=None) -> str:
+    """Facts for a spoken morning update — the model turns these into speech."""
     now = now or time.strftime("%A, %B %d, %Y, and it's %I:%M %p")
     parts = [f"Today is {now}."]
-    city = home_city(memory)
+    city = ""
+    if location is not None:
+        city = (location.get() or {}).get("city") or ""
+    city = city or home_city(memory)
     if city:
         try:
             parts.append("Weather — " + fetch_weather(city))
@@ -122,11 +130,20 @@ def build_briefing(memory: MemoryStore, timers: TimerBoard,
     else:
         parts.append("(You don't know their city yet — ask where they are, "
                      "then save it with save_memory as identity/home_city.)")
+    if reminders is not None:
+        upcoming = reminders.pending()
+        if upcoming:
+            parts.append("Today's reminders: " + "; ".join(
+                f"{r['text']} at "
+                f"{time.strftime('%I:%M %p', time.localtime(r['due']))}"
+                for r in upcoming[:5]))
     pending = timers.pending()
     if pending:
         parts.append("Running timers: " + "; ".join(
             f"{label} ({remaining:.0f} min left)" for label, remaining in pending))
-    parts.append("Deliver this as a brief, warm spoken update — not a list.")
+    parts.append("This is the first hello of his morning. Open with it in your "
+                 "usual Hinglish — warm, brief, human. Not a list, not a "
+                 "weather report; just how a friend would catch him up.")
     return "\n".join(parts)
 
 
@@ -348,7 +365,7 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
                 "category": {
                     "type": "string",
                     "description": ("identity | preferences | projects | "
-                                    "relationships | wishes | notes"),
+                                    "relationships | places | wishes | notes"),
                 },
                 "key":      {"type": "string", "description": "Short snake_case key"},
                 "value":    {"type": "string", "description": "Concise value in English"},
@@ -511,5 +528,21 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
     )
     def end_conversation() -> str:
         return "Ending conversation."
+
+    @reg.tool(
+        description=(
+            "Cleanly powers OFF the whole device (not just the conversation). "
+            "Call ONLY when the user explicitly says to power off, shut down, "
+            "switch you off, or sign out for the day/night. Say a warm goodbye "
+            "in your reply before this — the device shuts down right after."
+        ),
+    )
+    def power_off() -> str:
+        try:
+            CONTROL_REQUEST.parent.mkdir(parents=True, exist_ok=True)
+            CONTROL_REQUEST.write_text("poweroff")
+        except OSError as exc:
+            return f"I couldn't shut down: {exc}"
+        return "Powering off. Good night, take care."
 
     return reg
