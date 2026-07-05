@@ -178,13 +178,30 @@ class VoiceOrchestrator:
         try:
             chime(speaker)  # audible on every (re)connect: "Venom hears you"
             while True:
+                # Pre-warm: open the Gemini Live session (socket + big-prompt
+                # prefill, the ~4-5s cold cost) NOW, while we listen for the wake
+                # word. It sits idle, off the mic, until we activate it — so the
+                # first reply after "Hey Jarvis" is the warm ~1s path every time.
+                session = self._build_session(mic, speaker)
+                warm_task = asyncio.create_task(session.run())
                 self.state = "wake"
-                await self._wake_phase(mic, speaker)
+                if not await self._wait_for_wake(mic, speaker, warm_task):
+                    continue  # warm session dropped before wake — spin a new one
                 self.state = "conversation"
+                self._prepare_opening(session)
                 chime(speaker)
                 chime(speaker, frequency=1320.0)
-                await self._conversation_phase(mic, speaker)
+                session.activate()
+                try:
+                    await warm_task
+                except Exception:
+                    log.exception("live session ended with error")
+                    chime(speaker, frequency=330.0, duration=0.4)
+                    await asyncio.sleep(2)
+                finally:
+                    self._drain(mic)
                 self._detector.reset()
+                log.info("back to wake listening")
         finally:
             mic.stop()
             speaker.stop()
@@ -227,35 +244,55 @@ class VoiceOrchestrator:
                 self._drain(mic)
                 return
 
-    async def _conversation_phase(self, mic: MicStream, speaker: SpeakerStream) -> None:
-        # First real conversation of the morning → lead with a briefing.
-        opening = None
+    def _build_session(self, mic: MicStream, speaker: SpeakerStream) -> LiveSession:
+        """A pre-warmable session; the opening briefing is decided at wake."""
+        return LiveSession(self.config, self.registry, self.memory,
+                           self.timers, mic.frames, speaker,
+                           inbox=self.inbox, transcript=self.transcript,
+                           reminders=self.reminders,
+                           pending_reminders=self.pending_reminders,
+                           location=self.location, opening=None)
+
+    def _prepare_opening(self, session: LiveSession) -> None:
+        """At the moment of waking, decide whether to lead with a briefing."""
         if self.session.should_brief():
             from venom.tools_pi import build_briefing
 
-            opening = build_briefing(self.memory, self.timers,
-                                     location=self.location,
-                                     reminders=self.reminders)
+            session._opening = build_briefing(self.memory, self.timers,
+                                              location=self.location,
+                                              reminders=self.reminders)
             self.session.mark_briefed()
             log.info("delivering morning briefing")
         else:
             self.session.mark_interaction()
 
-        session = LiveSession(self.config, self.registry, self.memory,
-                              self.timers, mic.frames, speaker,
-                              inbox=self.inbox, transcript=self.transcript,
-                              reminders=self.reminders,
-                              pending_reminders=self.pending_reminders,
-                              location=self.location, opening=opening)
+    async def _wait_for_wake(self, mic: MicStream, speaker: SpeakerStream,
+                             warm_task: asyncio.Task) -> bool:
+        """Listen for the wake word while the session warms in the background.
+        True → woken, go converse. False → the warm session died first; the
+        caller loops to spin up a fresh one."""
+        from venom.live import is_normal_closure
+
+        wake_task = asyncio.create_task(self._wake_phase(mic, speaker))
+        done, _pending = await asyncio.wait(
+            {wake_task, warm_task}, return_when=asyncio.FIRST_COMPLETED)
+        if wake_task in done:
+            exc = wake_task.exception()
+            if exc is not None:
+                raise exc  # StreamsDied → rebuild the whole audio lifecycle
+            return True
+        # Warm session ended before the wake word (server idle-closed it, or it
+        # failed to connect). Stop listening; the caller re-warms.
+        wake_task.cancel()
         try:
-            await session.run()
-        except Exception:
-            log.exception("live session ended with error")
-            chime(speaker, frequency=330.0, duration=0.4)
+            await wake_task
+        except BaseException:
+            pass
+        exc = None if warm_task.cancelled() else warm_task.exception()
+        if exc is not None and not is_normal_closure(exc):
+            log.warning("pre-warm session failed: %s — retrying", exc)
             await asyncio.sleep(2)
-        finally:
-            self._drain(mic)
-        log.info("back to wake listening")
+        return False
 
     @staticmethod
     def _drain(mic: MicStream) -> None:

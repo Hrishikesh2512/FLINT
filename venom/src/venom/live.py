@@ -134,6 +134,24 @@ class LiveSession:
         self._idle = InactivityTimer(config.voice.inactivity_timeout)
         self._ended = asyncio.Event()
         self._reply_clock: float | None = None  # set when a turn is committed
+        # Pre-warming: the socket + big-prompt prefill are the real cold-start
+        # cost (~4-5s). We connect ahead of time and sit idle — not touching the
+        # mic, not counting idle-timeout — until the wake word activates us, so
+        # the first reply after "Hey Jarvis" is the warm ~1s path, every time.
+        self._connected = asyncio.Event()
+        self._active = asyncio.Event()
+
+    def activate(self) -> None:
+        """Wake word fired: start streaming mic audio and counting silence."""
+        self._idle.touch()
+        self._active.set()
+
+    async def wait_connected(self) -> None:
+        await self._connected.wait()
+
+    @property
+    def ended(self) -> bool:
+        return self._ended.is_set()
 
     def _record(self, who: str, text: str) -> None:
         if self._transcript is not None and text.strip():
@@ -188,12 +206,17 @@ class LiveSession:
         ):
             self._session = session
             log.info("live session open")
+            self._connected.set()   # warm and ready; waiting for activation
             group.create_task(self._uplink())
             group.create_task(self._downlink())
             group.create_task(self._housekeeping())
 
     async def _uplink(self) -> None:
         from google.genai import types
+
+        # Stay off the mic while pre-warmed: the wake detector owns the mic
+        # queue during standby, so we mustn't steal its frames until activated.
+        await self._active.wait()
 
         # Newer Live models reject the legacy media_chunks path ("realtime_input.
         # media_chunks is deprecated"); the current audio=Blob form works across
@@ -232,6 +255,10 @@ class LiveSession:
                             self.speaker.flush()
                         if content.input_transcription and content.input_transcription.text:
                             self._turn_in += content.input_transcription.text
+                            # Start the reply clock from the last speech we heard,
+                            # so first-audio measures the real spoken turn-around
+                            # (end-of-speech detection + model), not just text.
+                            self._reply_clock = time.monotonic()
                             self._idle.touch()
                         if content.output_transcription and content.output_transcription.text:
                             self._turn_out += content.output_transcription.text
@@ -285,6 +312,9 @@ class LiveSession:
 
     async def _housekeeping(self) -> None:
         """Fire due timers into the conversation; end the session on silence."""
+        # Don't drive the conversation (briefing, inbox, idle-timeout) while the
+        # session is only pre-warmed — wait until the wake word activates us.
+        await self._active.wait()
         if self._opening:  # morning briefing: lead the conversation with it
             await self._session.send_client_content(
                 turns={"parts": [{"text": "[SYSTEM] " + self._opening}]},
