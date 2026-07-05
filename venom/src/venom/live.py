@@ -173,14 +173,9 @@ class LiveSession:
             response_modalities=["AUDIO"],
             output_audio_transcription={},
             input_audio_transcription={},
-            # Reply as soon as a short silence says the turn is done, instead of
-            # Gemini's conservative default wait — the main lever on how snappy
-            # Venom feels after you stop talking.
-            realtime_input_config=types.RealtimeInputConfig(
-                automatic_activity_detection=types.AutomaticActivityDetection(
-                    end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_HIGH,
-                    silence_duration_ms=self.config.voice.endpoint_silence_ms,
-                )),
+            # Turn-taking left on Gemini's own defaults — the original, fast
+            # behaviour. Custom end-of-speech/silence tuning was slower in
+            # practice, so it's gone.
             thinking_config=thinking_config,
             system_instruction=build_system_instruction(
                 self.config, self.memory, self.location),
