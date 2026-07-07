@@ -186,8 +186,8 @@ def test_pi_registry_toolset(pi_setup):
     registry, _, _ = pi_setup
     assert set(registry.names()) == {
         "web_search", "weather_report", "current_time", "set_timer",
-        "check_timers", "set_volume", "save_memory", "end_conversation",
-        "power_off",
+        "check_timers", "set_volume", "save_memory", "translation_mode",
+        "end_conversation", "power_off",
     }
 
 
@@ -339,6 +339,18 @@ def test_dnd_toggle_and_wake_button_respect_dnd():
     assert o._dnd is False
     VoiceOrchestrator._on_wake_button(o)
     assert o._manual_wake.is_set()
+
+
+def test_translation_mode_tool(tmp_path):
+    from venom.config import VenomConfig
+
+    config = VenomConfig(gemini_api_key="k", memory_path=tmp_path / "m.json")
+    reg = build_pi_registry(config, MemoryStore(config.memory_path), TimerBoard())
+    assert "translation_mode" in reg.names()
+    on = reg.dispatch("translation_mode", {"enable": True})
+    assert "TRANSLATION MODE ON" in on and "Hindi" in on and "Kannada" in on
+    off = reg.dispatch("translation_mode", {"enable": False})
+    assert "OFF" in off and "Jarvis" in off
 
 
 def test_live_interrupt_flushes_and_suppresses():

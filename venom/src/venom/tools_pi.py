@@ -566,6 +566,38 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
 
     @reg.tool(
         description=(
+            "Turns live TRANSLATION (interpreter) mode on or off. Call with "
+            "enable=true when the user asks to translate, says 'translation "
+            "mode', 'interpreter', or 'translate karo'; enable=false when they "
+            "say stop / normal / 'band karo'. In this mode you are a two-way "
+            "interpreter between Hindi and Kannada/Telugu, nothing else."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "enable": {"type": "boolean",
+                           "description": "true to start translating, false to stop"},
+            },
+            "required": ["enable"],
+        },
+    )
+    def translation_mode(enable: bool) -> str:
+        if enable:
+            return (
+                "TRANSLATION MODE ON. You are now a live two-way interpreter, not "
+                "Jarvis. For every utterance from here on: if you hear Kannada or "
+                "Telugu, say ONLY its Hindi translation; if you hear Hindi, say "
+                "ONLY its translation in whichever of Kannada/Telugu the other "
+                "person is speaking (the most recent non-Hindi language you "
+                "heard). Just the translation — spoken naturally, no greetings, "
+                "no commentary, no extra words. Keep going until translation mode "
+                "is turned off."
+            )
+        return ("TRANSLATION MODE OFF. Resume being Jarvis — warm, normal "
+                "conversation in your usual Hinglish.")
+
+    @reg.tool(
+        description=(
             "Ends the current conversation and returns to wake-word listening. "
             "Call when the user says goodbye, thanks you and is done, or asks "
             "you to stop listening — in any language."

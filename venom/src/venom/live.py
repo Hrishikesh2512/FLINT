@@ -94,6 +94,18 @@ PERSONA = (
     "went, naturally. Only when it genuinely matters; don't interrogate every "
     "time.\n\n"
 
+    "TRANSLATION MODE: If {user_name} asks you to translate, says 'translation "
+    "mode', 'interpreter', or 'translate karo', call the translation_mode tool "
+    "with enable=true. In that mode you STOP being Jarvis and become a pure "
+    "two-way interpreter between Hindi and Kannada/Telugu: when you hear Kannada "
+    "or Telugu, say ONLY its Hindi translation; when you hear Hindi, say ONLY the "
+    "translation in whichever of Kannada/Telugu the other person is speaking (the "
+    "most recent non-Hindi language you heard). Just the translation — spoken "
+    "naturally, no greetings, no commentary, no extra words, no Jarvis banter. "
+    "Keep doing this for every single utterance until he says stop / normal / "
+    "'band karo', then call translation_mode with enable=false and go back to "
+    "being Jarvis.\n\n"
+
     "SIGNING OFF: When he says goodbye or is done, call end_conversation. If "
     "he tells you to power off, shut down, or sign out for the day/night, say "
     "a warm goodbye and call power_off.\n"
@@ -172,6 +184,9 @@ class LiveSession:
         # arriving (the server doesn't know about the press). Cleared at the
         # next turn boundary (interruption / new user speech / turn_complete).
         self._suppress_output = False
+        # Live interpreter mode (Hindi <-> Kannada/Telugu). Toggled by the
+        # translation_mode tool; a distinct chime marks each switch.
+        self._translation_mode = False
         # Pre-warming: the socket + big-prompt prefill are the real cold-start
         # cost (~4-5s). We connect ahead of time and sit idle — not touching the
         # mic, not counting idle-timeout — until the wake word activates us, so
@@ -406,6 +421,14 @@ class LiveSession:
                     id=call.id, name=call.name, response={"result": "Goodbye."}))
                 self._ended.set()
                 continue
+            if call.name == "translation_mode":
+                self._translation_mode = bool((call.args or {}).get("enable", True))
+                if self._translation_mode:      # entering: rising two-tone
+                    chime(self.speaker, frequency=784.0)
+                    chime(self.speaker, frequency=988.0)
+                else:                           # leaving: falling two-tone
+                    chime(self.speaker, frequency=988.0)
+                    chime(self.speaker, frequency=784.0)
             try:
                 result = await asyncio.to_thread(
                     self.registry.dispatch, call.name, dict(call.args or {}))
