@@ -370,7 +370,7 @@ def test_live_interrupt_flushes_and_suppresses():
     assert o.speaker.flushed == 1 and o._suppress_output is True
 
 
-def test_wake_button_barges_in_during_conversation():
+def test_wake_button_toggles_conversation():
     from types import SimpleNamespace
 
     from venom.voice import VoiceOrchestrator
@@ -378,10 +378,10 @@ def test_wake_button_barges_in_during_conversation():
     class FakeSession:
         def __init__(self, ended=False):
             self.ended = ended
-            self.interrupted = 0
+            self.stopped = 0
 
-        def interrupt(self):
-            self.interrupted += 1
+        def request_stop(self):
+            self.stopped += 1
 
     class FakeEvent:
         def __init__(self):
@@ -393,11 +393,11 @@ def test_wake_button_barges_in_during_conversation():
         def is_set(self):
             return self._set
 
-    # Live conversation → the wake button interrupts, does not queue a wake.
+    # Live conversation → the wake button ends it, does not queue a wake.
     live = FakeSession(ended=False)
     o = SimpleNamespace(_dnd=False, _session=live, _manual_wake=FakeEvent())
     VoiceOrchestrator._on_wake_button(o)
-    assert live.interrupted == 1 and not o._manual_wake.is_set()
+    assert live.stopped == 1 and not o._manual_wake.is_set()
 
     # No conversation → the wake button queues a wake as before.
     o2 = SimpleNamespace(_dnd=False, _session=None, _manual_wake=FakeEvent())
@@ -410,11 +410,11 @@ def test_wake_button_barges_in_during_conversation():
     VoiceOrchestrator._on_wake_button(o3)
     assert o3._manual_wake.is_set()
 
-    # DND wins over everything — no barge-in, no wake.
+    # DND wins over everything — no stop, no wake.
     live2 = FakeSession(ended=False)
     o4 = SimpleNamespace(_dnd=True, _session=live2, _manual_wake=FakeEvent())
     VoiceOrchestrator._on_wake_button(o4)
-    assert live2.interrupted == 0 and not o4._manual_wake.is_set()
+    assert live2.stopped == 0 and not o4._manual_wake.is_set()
 
 
 def test_pi_declarations_validate_against_gemini_sdk(pi_setup):

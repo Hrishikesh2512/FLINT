@@ -225,6 +225,12 @@ class LiveSession:
         self.speaker.flush()
         self._suppress_output = True
 
+    def request_stop(self) -> None:
+        """External stop (wake button pressed while a conversation is live):
+        go silent now and end the session, back to wake-word listening."""
+        self.speaker.flush()
+        self._ended.set()
+
     @property
     def ended(self) -> bool:
         return self._ended.is_set()

@@ -317,16 +317,16 @@ class VoiceOrchestrator:
 
     # ── physical button handlers (called on the event loop) ──────────────────
     def _on_wake_button(self) -> None:
-        """Wake button (headset or shutter-2). During a live conversation it
-        barges in — cuts off her reply so she listens. Otherwise it asks the
-        wake loop to start a conversation. Ignored under DND."""
+        """Wake button (headset or shutter-2) — a toggle: it wakes her when
+        she's asleep, and ends the conversation (back to sleep) when one is
+        already live. Ignored under DND."""
         if self._dnd:
             log.info("wake button ignored — DND is on")
             return
         session = self._session
         if session is not None and not session.ended:
-            log.info("barge-in — wake button")
-            session.interrupt()
+            log.info("wake button — ending conversation (sleep)")
+            session.request_stop()
             return
         self._manual_wake.set()
 
