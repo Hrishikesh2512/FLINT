@@ -262,6 +262,71 @@ def test_duck_music_pauses_for_conversation_and_resumes_only_its_own():
     assert not o._music_ducked and o.music.calls == []
 
 
+def test_button_routing():
+    from venom.buttons import WAKE_CODES, route_key
+
+    # Every headset play/pause code routes to wake.
+    for code in WAKE_CODES:
+        assert route_key(code, dnd_code=115, find_phone_code=28) == "wake"
+    # The two configured shutter codes route to their actions.
+    assert route_key(115, dnd_code=115, find_phone_code=28) == "dnd"
+    assert route_key(28, dnd_code=115, find_phone_code=28) == "find_phone"
+    # Unknown codes (and unmapped-when-zero) fall through to None for logging.
+    assert route_key(999, dnd_code=115, find_phone_code=28) is None
+    assert route_key(115, dnd_code=0, find_phone_code=0) is None
+
+
+def test_find_phone_no_topic_is_safe():
+    from venom.phone import find_phone
+
+    # No topic configured → never touches the network, returns a clear message.
+    assert find_phone("https://ntfy.sh", "") == "No phone is set up to find."
+    assert find_phone("https://ntfy.sh", "   ") == "No phone is set up to find."
+
+
+def test_dnd_toggle_and_wake_button_respect_dnd():
+    from types import SimpleNamespace
+
+    from venom.voice import VoiceOrchestrator
+
+    class FakeSpeaker:
+        def __init__(self):
+            self.plays = 0
+
+        def play(self, data):
+            self.plays += 1
+
+    class FakeEvent:
+        def __init__(self):
+            self._set = False
+
+        def set(self):
+            self._set = True
+
+        def is_set(self):
+            return self._set
+
+    o = SimpleNamespace(_dnd=False, _speaker=FakeSpeaker(),
+                        _manual_wake=FakeEvent())
+
+    # Headset button while awake → requests a wake.
+    VoiceOrchestrator._on_wake_button(o)
+    assert o._manual_wake.is_set()
+
+    # Toggle DND on → flag flips and a chime plays; headset button now ignored.
+    o._manual_wake = FakeEvent()
+    VoiceOrchestrator._on_dnd_button(o)
+    assert o._dnd is True and o._speaker.plays > 0
+    VoiceOrchestrator._on_wake_button(o)
+    assert not o._manual_wake.is_set()      # ignored under DND
+
+    # Toggle DND off again → flag clears, headset works once more.
+    VoiceOrchestrator._on_dnd_button(o)
+    assert o._dnd is False
+    VoiceOrchestrator._on_wake_button(o)
+    assert o._manual_wake.is_set()
+
+
 def test_pi_declarations_validate_against_gemini_sdk(pi_setup):
     genai_types = pytest.importorskip("google.genai.types")
     registry, _, _ = pi_setup

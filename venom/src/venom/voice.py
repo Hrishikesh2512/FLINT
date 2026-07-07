@@ -115,6 +115,15 @@ class VoiceOrchestrator:
         # True while we've paused our own music for a live conversation, so we
         # only resume what *we* paused (not a track the user paused by hand).
         self._music_ducked = False
+        # Physical buttons (set from the event loop, read by the wake loop):
+        #   _manual_wake — the headset button asks to start a conversation.
+        #   _dnd         — Do-Not-Disturb: ignore wake word + headset button and
+        #                  hold proactive timer/reminder chimes until toggled off.
+        #   _speaker     — the current lifecycle's speaker, so button handlers
+        #                  can chime; None between lifecycles.
+        self._manual_wake = asyncio.Event()
+        self._dnd = False
+        self._speaker: SpeakerStream | None = None
 
     async def run(self) -> None:
         # The wake model takes minutes to load from slow flash — load it in
@@ -128,8 +137,13 @@ class VoiceOrchestrator:
         from venom.buttons import watch_buttons
 
         # Keep a reference: asyncio only holds tasks weakly, and a
-        # garbage-collected watcher means the headset buttons silently die.
-        self._buttons_task = asyncio.create_task(watch_buttons(self.music))
+        # garbage-collected watcher means the buttons silently die.
+        self._buttons_task = asyncio.create_task(watch_buttons(
+            on_wake=self._on_wake_button,
+            on_dnd=self._on_dnd_button,
+            on_find_phone=self._on_find_phone_button,
+            dnd_code=self.config.buttons.dnd_code,
+            find_phone_code=self.config.buttons.find_phone_code))
 
         first_cycle = True
         while True:
@@ -191,6 +205,7 @@ class VoiceOrchestrator:
         mic = MicStream(pick, loop, suppressor=suppressor)
         speaker.start()
         mic.start()
+        self._speaker = speaker  # let button handlers chime this lifecycle
         try:
             chime(speaker)  # audible on every (re)connect: "Venom hears you"
             while True:
@@ -241,27 +256,40 @@ class VoiceOrchestrator:
                 self._detector.reset()
                 log.info("back to wake listening")
         finally:
+            self._speaker = None
             mic.stop()
             speaker.stop()
 
     async def _wake_phase(self, mic: MicStream, speaker: SpeakerStream) -> None:
         starved = 0.0
         silence = SilenceTracker()
+        self._manual_wake.clear()  # ignore any press queued from a past cycle
         while True:
-            for timer in self.timers.pop_due():
-                chime(speaker)
-                chime(speaker, frequency=1100.0)
-                self.timers.add(0, f"(already finished) {timer.label}")
-                log.info("timer fired while asleep: %s", timer.label)
-            for reminder in self.reminders.pop_due():
-                chime(speaker)
-                chime(speaker, frequency=880.0)
-                self.pending_reminders.append(reminder["text"])
-                log.info("reminder fired while asleep: %s", reminder["text"])
+            # Do-Not-Disturb holds proactive alerts: leave due timers/reminders
+            # unpopped so they announce the moment DND is toggled back off.
+            if not self._dnd:
+                for timer in self.timers.pop_due():
+                    chime(speaker)
+                    chime(speaker, frequency=1100.0)
+                    self.timers.add(0, f"(already finished) {timer.label}")
+                    log.info("timer fired while asleep: %s", timer.label)
+                for reminder in self.reminders.pop_due():
+                    chime(speaker)
+                    chime(speaker, frequency=880.0)
+                    self.pending_reminders.append(reminder["text"])
+                    log.info("reminder fired while asleep: %s", reminder["text"])
             if not self.inbox.empty():
                 log.info("console prompt while asleep — starting a session")
                 self._drain(mic)
                 return  # the session's housekeeping delivers the prompt
+            # Headset button: an explicit wake, checked every loop (frames arrive
+            # ~15x/s) so it feels instant. Ignored under DND.
+            if self._manual_wake.is_set():
+                self._manual_wake.clear()
+                if not self._dnd:
+                    log.info("headset button — waking")
+                    self._drain(mic)
+                    return
             try:
                 frame = await asyncio.wait_for(mic.frames.get(), timeout=1.0)
                 starved = 0.0
@@ -277,10 +305,51 @@ class VoiceOrchestrator:
                     f"mic delivered pure digital silence for "
                     f"{SILENCE_REBUILD_SECONDS}s (capture path rerouted?)"
                 )
-            if await asyncio.to_thread(self._detector.feed, frame):
+            if not self._dnd and await asyncio.to_thread(self._detector.feed, frame):
                 log.info("wake word detected")
                 self._drain(mic)
                 return
+
+    # ── physical button handlers (called on the event loop) ──────────────────
+    def _on_wake_button(self) -> None:
+        """Headset button: ask the wake loop to start a conversation. Ignored
+        under DND (the shutter toggle is the only way back)."""
+        if self._dnd:
+            log.info("headset button ignored — DND is on")
+            return
+        self._manual_wake.set()
+
+    def _on_dnd_button(self) -> None:
+        """Shutter button 1: toggle Do-Not-Disturb with a distinct two-tone
+        chime — falling when going quiet, rising when coming back."""
+        self._dnd = not self._dnd
+        log.info("DND %s (shutter button)", "on" if self._dnd else "off")
+        sp = self._speaker
+        if sp is None:
+            return
+        if self._dnd:                       # entering: high → low (falling)
+            chime(sp, frequency=587.0)
+            chime(sp, frequency=440.0)
+        else:                               # leaving: low → high (rising)
+            chime(sp, frequency=440.0)
+            chime(sp, frequency=587.0)
+
+    def _on_find_phone_button(self) -> None:
+        """Shutter button 2: ring the phone via ntfy, off the event loop so a
+        slow network never stalls audio."""
+        log.info("find-my-phone (shutter button)")
+        sp = self._speaker
+        if sp is not None:
+            chime(sp, frequency=1760.0)     # a high, distinct acknowledgement
+        phone = self.config.phone
+
+        async def _ring() -> None:
+            from venom.phone import find_phone
+            result = await asyncio.to_thread(
+                find_phone, phone.ntfy_server, phone.ntfy_topic)
+            log.info("find-my-phone: %s", result)
+
+        asyncio.create_task(_ring())
 
     def _duck_music(self) -> None:
         """Pause our own music while a conversation is live so the shared-headset

@@ -157,6 +157,31 @@ class ScreenConfig:
 
 
 @dataclass(frozen=True)
+class ButtonsConfig:
+    """Bluetooth camera-shutter remote: two buttons, identified by their evdev
+    key code. 0 = not yet mapped — press the button once and read the logged
+    `unmapped key code N`, then set it here. The headset button needs no config
+    (its play/pause code is well-known)."""
+
+    dnd_code: int = 0          # shutter button 1: toggle do-not-disturb
+    find_phone_code: int = 0   # shutter button 2: ring my phone
+
+
+@dataclass(frozen=True)
+class PhoneConfig:
+    """Find-my-phone over ntfy. Subscribe your phone's ntfy app to `ntfy_topic`
+    (give it a loud/alarm sound) and shutter button 2 rings it. Off until a
+    topic is set."""
+
+    ntfy_server: str = "https://ntfy.sh"
+    ntfy_topic: str = ""
+
+    @property
+    def ready(self) -> bool:
+        return bool(self.ntfy_topic)
+
+
+@dataclass(frozen=True)
 class VenomConfig:
     # FIXED (Fix 8): poll_interval 10 -> 30 (the brain checker was probing every
     # 10s, far too often for a stable link and the source of mid-conversation
@@ -176,6 +201,8 @@ class VenomConfig:
     voice: VoiceConfig = field(default_factory=VoiceConfig)
     audio: AudioConfig = field(default_factory=AudioConfig)
     screen: ScreenConfig = field(default_factory=ScreenConfig)
+    buttons: ButtonsConfig = field(default_factory=ButtonsConfig)
+    phone: PhoneConfig = field(default_factory=PhoneConfig)
 
     def __post_init__(self) -> None:
         if self.poll_interval <= 0:
@@ -255,6 +282,8 @@ def load_config(path: Path | None = None) -> VenomConfig:
     voice = data.get("voice", {})
     audio = data.get("audio", {})
     screen = data.get("screen", {})
+    buttons = data.get("buttons", {})
+    phone = data.get("phone", {})
     raw_brains = data.get("brain", [])
 
     brains = _parse_brains(raw_brains) if raw_brains else DEFAULT_CLOUD_CANDIDATES
@@ -316,5 +345,13 @@ def load_config(path: Path | None = None) -> VenomConfig:
             port=int(screen.get("port", 8766)),
             token=str(screen.get("token", "")).strip(),
             timeout=float(screen.get("timeout", 5.0)),
+        ),
+        buttons=ButtonsConfig(
+            dnd_code=int(buttons.get("dnd_code", 0)),
+            find_phone_code=int(buttons.get("find_phone_code", 0)),
+        ),
+        phone=PhoneConfig(
+            ntfy_server=str(phone.get("ntfy_server", "https://ntfy.sh")).strip(),
+            ntfy_topic=str(phone.get("ntfy_topic", "")).strip(),
         ),
     )

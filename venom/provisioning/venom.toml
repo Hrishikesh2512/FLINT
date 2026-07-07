@@ -39,6 +39,24 @@ language = "en"
 host = "1.1.1.1"
 port = 53
 
+# ── Physical buttons ─────────────────────────────────────────────────────────
+# Headset inline button = wake Venom (+ pauses music for the command); no config
+# needed. The Bluetooth camera-shutter remote has two buttons, identified by
+# their evdev key code. Leave 0 until you know them: press a shutter button once
+# and the journal logs `venom.buttons: button: unmapped key code N` — put N here.
+[buttons]
+dnd_code        = 0    # shutter button 1: toggle Do-Not-Disturb (distinct chime)
+find_phone_code = 0    # shutter button 2: ring my phone
+
+# ── Find my phone (ntfy) ─────────────────────────────────────────────────────
+# Shutter button 2 sends a max-priority push to this ntfy topic. Install the
+# ntfy app on your phone, subscribe to the same topic, and give it a loud/alarm
+# sound so it rings even on silent. Off until a topic is set. Use a long, random
+# topic name — anyone who knows it can ring your phone.
+[phone]
+ntfy_server = "https://ntfy.sh"
+ntfy_topic  = ""
+
 # ── Screen reading (OCR) ─────────────────────────────────────────────────────
 # Run laptop/screen_server.py on your laptop, then say "look at my screen" and
 # Jarvis reads the on-screen text (local OCR — fast, no vision API, text only).

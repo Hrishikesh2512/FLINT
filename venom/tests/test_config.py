@@ -107,3 +107,26 @@ def test_thinking_budget_default_and_parse(tmp_path):
 def test_thinking_config_type_builds():
     from google.genai import types
     assert types.ThinkingConfig(thinking_budget=0).thinking_budget == 0
+
+
+def test_buttons_and_phone_defaults(tmp_path):
+    config = load_config(tmp_path / "nope.toml")
+    assert config.buttons.dnd_code == 0
+    assert config.buttons.find_phone_code == 0
+    assert config.phone.ntfy_server == "https://ntfy.sh"
+    assert config.phone.ntfy_topic == ""
+    assert config.phone.ready is False
+
+
+def test_buttons_and_phone_parse(tmp_path):
+    path = tmp_path / "venom.toml"
+    path.write_text(
+        "[buttons]\ndnd_code = 115\nfind_phone_code = 28\n"
+        "[phone]\nntfy_topic = \"venom-abc123\"\n",
+        encoding="utf-8",
+    )
+    config = load_config(path)
+    assert config.buttons.dnd_code == 115
+    assert config.buttons.find_phone_code == 28
+    assert config.phone.ntfy_topic == "venom-abc123"
+    assert config.phone.ready is True
