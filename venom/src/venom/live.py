@@ -173,9 +173,25 @@ class LiveSession:
         # the first reply after "Hey Jarvis" is the warm ~1s path, every time.
         self._connected = asyncio.Event()
         self._active = asyncio.Event()
+        # FIXED (Fix 6): cache the rendered system instruction so a reconnect
+        # doesn't re-render memory + rebuild the whole prompt every time.
+        # Invalidated only when save_memory succeeds (see _handle_tools).
+        self._cached_instruction: str | None = None
+        # FIXED (Fix 4): serialise tool responses (tools now dispatch
+        # concurrently off the receive loop) and keep strong refs to the
+        # in-flight tool tasks so they aren't garbage-collected mid-run.
+        self._tool_lock = asyncio.Lock()
+        self._tool_tasks: set[asyncio.Task] = set()
 
     def activate(self) -> None:
         """Wake word fired: start streaming mic audio and counting silence."""
+        # FIXED (Fix 5): drop any mic frames captured during the pre-warm wait
+        # so stale pre-wake audio isn't streamed into the fresh conversation.
+        while True:
+            try:
+                self.mic_frames.get_nowait()
+            except asyncio.QueueEmpty:
+                break
         self._idle.touch()
         self._active.set()
 
@@ -189,6 +205,15 @@ class LiveSession:
     def _record(self, who: str, text: str) -> None:
         if self._transcript is not None and text.strip():
             self._transcript.append((who, text.strip()))
+
+    def _system_instruction(self) -> str:
+        # FIXED (Fix 6): render once and reuse. Rebuilding the full persona +
+        # memory prompt on every session/reconnect was pure waste; save_memory
+        # clears this cache (in _handle_tools) so a new memory still lands.
+        if self._cached_instruction is None:
+            self._cached_instruction = build_system_instruction(
+                self.config, self.memory, self.location)
+        return self._cached_instruction
 
     # ── session config ────────────────────────────────────────────────────────
     def _connect_config(self):
@@ -216,11 +241,14 @@ class LiveSession:
             # behaviour. Custom end-of-speech/silence tuning was slower in
             # practice, so it's gone.
             thinking_config=thinking_config,
+            # FIXED (Fix 1): affective_dialog is now opt-in (default False in
+            # config). When left off this stays False and the session uses the
+            # faster v1beta endpoint (see run()); set it True in venom.toml to
+            # re-enable the emotion-aware v1alpha path.
             enable_affective_dialog=voice.affective_dialog,
             proactivity=proactivity,
             temperature=voice.temperature,
-            system_instruction=build_system_instruction(
-                self.config, self.memory, self.location),
+            system_instruction=self._system_instruction(),
             tools=[{"function_declarations":
                     self.registry.gemini_declarations(uppercase_types=True)}],
             speech_config=types.SpeechConfig(
@@ -234,8 +262,10 @@ class LiveSession:
         from google import genai
 
         # Affective dialog and proactive audio are v1alpha-only — v1beta rejects
-        # the setup ("Unknown name enableAffectiveDialog"). Use v1alpha when
-        # either is on; otherwise keep the known-good v1beta path.
+        # the setup ("Unknown name enableAffectiveDialog"). Use v1alpha only when
+        # one is explicitly opted in; otherwise stay on the faster v1beta path.
+        # FIXED (Fix 1): with affective_dialog now defaulting False, the common
+        # case is v1beta — the low-latency endpoint — instead of always v1alpha.
         voice = self.config.voice
         api_version = ("v1alpha" if (voice.affective_dialog or voice.proactive_audio)
                        else "v1beta")
@@ -313,13 +343,30 @@ class LiveSession:
                             self._turn_in = self._turn_out = ""
 
                     if response.tool_call:
-                        await self._handle_tools(response.tool_call)
+                        # FIXED (Fix 4): dispatch tools on their own task instead
+                        # of awaiting here — a slow tool used to freeze the whole
+                        # receive loop, so incoming audio stalled until it
+                        # finished. The downlink now keeps flowing while tools run.
+                        task = asyncio.ensure_future(
+                            self._handle_tools(response.tool_call))
+                        self._tool_tasks.add(task)
+                        task.add_done_callback(self._on_tool_done)
         except Exception as exc:
             if not (self._ended.is_set() or is_normal_closure(exc)):
                 raise
             log.info("live session closed (%s)", type(exc).__name__)
         finally:
             self._ended.set()
+
+    def _on_tool_done(self, task: asyncio.Task) -> None:
+        # FIXED (Fix 4): drop the strong ref and surface any real failure — a
+        # backgrounded tool task must not swallow errors silently.
+        self._tool_tasks.discard(task)
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None and not is_normal_closure(exc):
+            log.warning("tool task failed: %s", exc)
 
     async def _handle_tools(self, tool_call) -> None:
         from google.genai import types
@@ -337,12 +384,26 @@ class LiveSession:
                 result = await asyncio.to_thread(
                     self.registry.dispatch, call.name, dict(call.args or {}))
                 result = result or "Done."
+                # FIXED (Fix 6): a successful save_memory changed the memory the
+                # system prompt renders — drop the cache so the next build picks
+                # it up. Only on success (an exception skips this).
+                if call.name == "save_memory":
+                    self._cached_instruction = None
             except Exception as exc:
                 log.warning("tool %s failed: %s", call.name, exc)
                 result = f"Tool failed: {exc}"
             responses.append(types.FunctionResponse(
                 id=call.id, name=call.name, response={"result": str(result)}))
-        await self._session.send_tool_response(function_responses=responses)
+        # FIXED (Fix 4): serialise the reply — tools now run concurrently, so two
+        # tool batches finishing together must not interleave on the socket.
+        async with self._tool_lock:
+            try:
+                await self._session.send_tool_response(function_responses=responses)
+            except Exception as exc:
+                # The socket closing under an in-flight tool reply is part of a
+                # normal session end, not an error.
+                if not (self._ended.is_set() or is_normal_closure(exc)):
+                    raise
 
     async def _announce_reminder(self, text: str) -> None:
         await self._session.send_client_content(
@@ -397,7 +458,10 @@ class LiveSession:
                 log.info("session idle %.0fs — closing", self._idle.idle_for)
                 self._ended.set()
                 break
-            await asyncio.sleep(0.5)
+            # FIXED (Fix 7): 0.5s -> 0.1s. This poll gates timer firing, reminder
+            # delivery, console prompts and the idle-timeout, so half a second
+            # added up to 500ms of lag on each — 0.1s keeps them snappy.
+            await asyncio.sleep(0.1)
         # unblock the TaskGroup: cancel siblings by raising in one task is
         # messy — instead close the session, which ends receive()/uplink.
         try:

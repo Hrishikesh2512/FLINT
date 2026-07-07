@@ -10,7 +10,7 @@ from venom.config import (
 
 def test_defaults_when_file_missing(tmp_path):
     config = load_config(tmp_path / "nope.toml")
-    assert config.poll_interval == 10.0
+    assert config.poll_interval == 30.0  # FIXED (Fix 8): default raised 10 -> 30
     assert config.brains == DEFAULT_CLOUD_CANDIDATES
     assert config.internet_host == "1.1.1.1"
 

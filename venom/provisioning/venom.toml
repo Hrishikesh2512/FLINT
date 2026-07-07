@@ -2,8 +2,8 @@
 # provision. Edit on the Pi (or before flashing) and `systemctl restart venom`.
 
 [venom]
-poll_interval = 10.0     # seconds between health cycles
-probe_timeout = 3.0      # seconds per reachability probe
+poll_interval = 30.0     # seconds between health cycles (was 10 — too aggressive, flapped the brain)
+probe_timeout = 5.0      # seconds per reachability probe (was 3 — too tight for India->US latency)
 status_path = "/run/venom/status.json"
 memory_path = "/var/lib/venom/memory.json"
 
@@ -27,7 +27,7 @@ wake_threshold = 0.30
 inactivity_timeout = 45.0      # seconds of silence before going back to sleep
 endpoint_silence_ms = 500      # silence after you speak before Venom replies (lower = snappier)
 thinking_budget = -1           # -1 = model's own default (native-audio replies worse with it off); 0 = force off
-affective_dialog = true        # she hears the emotion in your voice and adapts tone (native-audio; big human-ness win)
+affective_dialog = false       # OFF by default: forces the slower v1alpha endpoint (latency). Set true to trade snappiness for emotion-aware tone.
 proactive_audio = false        # let her decide when NOT to reply (more human, adds a decision beat -> less snappy)
 # temperature = 1.1            # uncomment to add natural variety; leave unset for the model default
 live_model = "models/gemini-2.5-flash-native-audio-preview-12-2025"

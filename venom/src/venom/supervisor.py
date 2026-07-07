@@ -17,28 +17,54 @@ from typing import Any
 from venom import __version__, sdnotify
 from venom.config import VenomConfig
 from venom.monitors.audio import find_usb_audio
-from venom.monitors.brain import BrainResolver
+from venom.monitors.brain import BrainResolver, Resolution
 from venom.monitors.network import probe_any
 from venom.status import StatusWriter
 
 log = logging.getLogger("venom")
 
 
+class VoiceActivity:
+    """FIXED (Fix 2): shared flag between the voice loop and the supervisor.
+
+    The voice loop sets ``session_active`` True while a conversation is live
+    and speaking, and False in the gap between sessions (pre-warm/reconnect).
+    The brain switcher reads it and refuses to probe or switch while a
+    conversation is active, so a momentary blip can never interrupt a working
+    session mid-sentence.
+    """
+
+    def __init__(self) -> None:
+        self.session_active = False
+
+
 class Supervisor:
     def __init__(self, config: VenomConfig):
         self.config = config
-        self.resolver = BrainResolver(config.brains, probe_timeout=config.probe_timeout)
+        # FIXED (Fix 2): give the resolver hysteresis in production — tolerate 3
+        # consecutive failed probes before abandoning a brain, and require 2
+        # consecutive successes before a higher-priority brain pre-empts.
+        self.resolver = BrainResolver(config.brains,
+                                      probe_timeout=config.probe_timeout,
+                                      fail_threshold=3, success_threshold=2)
         self.status = StatusWriter(config.status_path)
         self._stop = asyncio.Event()
         self._last: dict[str, Any] = {}
         self.voice_state = "disabled"
+        self.activity = VoiceActivity()
 
     # ── one monitoring cycle ─────────────────────────────────────────────────
     async def cycle(self) -> dict[str, Any]:
         internet_task = asyncio.create_task(
             probe_any(self.config.internet_targets, self.config.probe_timeout)
         )
-        resolution = await self.resolver.resolve()
+        # FIXED (Fix 2): never run the brain switcher while a conversation is
+        # live — hold the last resolved brain and skip probing entirely. Brain
+        # switching is only evaluated in the gap between sessions.
+        if self.activity.session_active:
+            resolution = Resolution(self.resolver.current, switched=False)
+        else:
+            resolution = await self.resolver.resolve()
         internet = await internet_task
         headset_desc = await asyncio.to_thread(self._headset_status)
 
@@ -125,7 +151,10 @@ class Supervisor:
         def set_state(state: str) -> None:
             self.voice_state = state
 
-        return asyncio.create_task(run_voice_forever(self.config, set_state))
+        # FIXED (Fix 2): hand the shared activity flag to the voice loop so it
+        # can tell the brain switcher when a conversation is live.
+        return asyncio.create_task(
+            run_voice_forever(self.config, set_state, self.activity))
 
     async def run(self) -> None:
         self._install_signal_handlers()

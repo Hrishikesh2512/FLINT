@@ -1,8 +1,12 @@
 [Unit]
 Description=Venom — standalone voice assistant appliance
 Documentation=https://github.com/Hrishikesh2512/FLINT
-After=network-online.target sound.target bluetooth.service wireplumber-system.service
-Wants=network-online.target
+# FIXED (Fix 3): also order after nss-lookup.target so a working DNS resolver
+# (dnsmasq, installed by provision.sh) is up before Venom starts. Ordering only
+# after network-online.target still let us race ahead of DNS, which caused the
+# 40s [Errno -3] "Temporary failure in name resolution" storm at boot.
+After=network-online.target nss-lookup.target sound.target bluetooth.service wireplumber-system.service
+Wants=network-online.target nss-lookup.target
 
 [Service]
 Type=notify

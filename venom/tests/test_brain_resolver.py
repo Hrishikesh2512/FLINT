@@ -80,6 +80,49 @@ def test_switches_to_fallback_when_current_dies():
     assert result.switched
 
 
+def test_hysteresis_tolerates_transient_current_failures():
+    # fail_threshold=3: a healthy Gemini shouldn't flap to Groq on brief blips.
+    net = FakeNet(GEMINI.host)
+    resolver = BrainResolver(ALL, prober=net, fail_threshold=3)
+    assert resolve(resolver).brain == GEMINI
+
+    net.reachable = {GROQ.host}  # Gemini blips out, Groq available
+    first = resolve(resolver)
+    assert first.brain == GEMINI and not first.switched   # 1st miss tolerated
+    second = resolve(resolver)
+    assert second.brain == GEMINI and not second.switched  # 2nd miss tolerated
+    third = resolve(resolver)
+    assert third.brain == GROQ and third.switched          # 3rd miss → switch
+
+
+def test_hysteresis_recovers_when_current_returns_before_threshold():
+    net = FakeNet(GEMINI.host)
+    resolver = BrainResolver(ALL, prober=net, fail_threshold=3)
+    assert resolve(resolver).brain == GEMINI
+
+    net.reachable = set()
+    assert resolve(resolver).brain == GEMINI  # tolerated miss, streak now 1
+    net.reachable = {GEMINI.host}             # Gemini comes back
+    assert resolve(resolver).brain == GEMINI  # streak reset, still no switch
+
+    # A later isolated miss is again tolerated, proving the streak reset.
+    net.reachable = set()
+    assert resolve(resolver).brain == GEMINI
+
+
+def test_hysteresis_requires_consecutive_successes_to_promote():
+    # success_threshold=2: the laptop must be up twice in a row before it wins.
+    net = FakeNet(GEMINI.host)
+    resolver = BrainResolver(ALL, prober=net, success_threshold=2)
+    assert resolve(resolver).brain == GEMINI
+
+    net.reachable = {GEMINI.host, LAPTOP.host}
+    first = resolve(resolver)
+    assert first.brain == GEMINI and not first.switched  # 1st laptop success
+    second = resolve(resolver)
+    assert second.brain == LAPTOP and second.switched    # 2nd → promote
+
+
 def test_goes_offline_and_recovers():
     net = FakeNet(LAPTOP.host)
     resolver = BrainResolver(ALL, prober=net)

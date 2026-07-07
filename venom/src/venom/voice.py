@@ -62,10 +62,19 @@ class SilenceTracker:
 
 
 class VoiceOrchestrator:
-    def __init__(self, config: VenomConfig):
+    def __init__(self, config: VenomConfig, activity=None):
         from collections import deque
 
         self.config = config
+        # FIXED (Fix 2): shared VoiceActivity flag (from the supervisor). While
+        # a conversation is live we flip session_active True so the brain
+        # switcher won't probe or flap mid-sentence. Optional so the voice loop
+        # still runs standalone (tests, dev) with a private stand-in.
+        if activity is None:
+            from venom.supervisor import VoiceActivity
+
+            activity = VoiceActivity()
+        self.activity = activity
         self.state = "starting"
         # Web console: prompts in, transcript out (thread-safe via event loop).
         self.inbox: asyncio.Queue[str] = asyncio.Queue()
@@ -192,6 +201,9 @@ class VoiceOrchestrator:
                 chime(speaker)
                 chime(speaker, frequency=1320.0)
                 session.activate()
+                # FIXED (Fix 2): conversation is now live and speaking — freeze
+                # the brain switcher until we're back to wake/pre-warm.
+                self.activity.session_active = True
                 # Gate the mic to true silence between/after words *only* while
                 # talking, so Gemini's own turn detector hears a clean end-of-
                 # speech and replies promptly (a body-mic's noise floor otherwise
@@ -207,6 +219,9 @@ class VoiceOrchestrator:
                     chime(speaker, frequency=330.0, duration=0.4)
                     await asyncio.sleep(2)
                 finally:
+                    # FIXED (Fix 2): conversation over — let the brain switcher
+                    # resume evaluating in the gap before the next session.
+                    self.activity.session_active = False
                     if suppressor is not None:
                         suppressor.gate = False
                     self._drain(mic)
@@ -313,7 +328,7 @@ class VoiceOrchestrator:
             pass
 
 
-async def run_voice_forever(config: VenomConfig, set_state) -> None:
+async def run_voice_forever(config: VenomConfig, set_state, activity=None) -> None:
     """Supervisor entry: keep the voice loop alive across crashes."""
     backoff = 2.0
     console = None
@@ -328,7 +343,9 @@ async def run_voice_forever(config: VenomConfig, set_state) -> None:
         except Exception:
             log.exception("web console failed to start — continuing without it")
     while True:
-        orchestrator = VoiceOrchestrator(config)
+        # FIXED (Fix 2): pass the shared activity flag through to every
+        # orchestrator instance so brain-switch gating survives voice restarts.
+        orchestrator = VoiceOrchestrator(config, activity)
         if console is not None:
             console.attach(orchestrator, asyncio.get_event_loop())
         try:

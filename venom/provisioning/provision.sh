@@ -286,6 +286,55 @@ if ! grep -q '^precedence ::ffff:0:0/96  100' /etc/gai.conf 2>/dev/null; then
     echo 'precedence ::ffff:0:0/96  100' >> /etc/gai.conf
 fi
 
+# ── FIXED (Fix 3): DNS resilience — kill the boot-time [Errno -3] storm ───────
+# Venom used to start before DNS was ready and spend ~40s failing to resolve
+# generativelanguage.googleapis.com. Two defences, both idempotent:
+#
+#   1. A local caching resolver (dnsmasq, cache-size=1000, Google upstreams) so
+#      lookups are answered from RAM within milliseconds after the first hit and
+#      survive brief upstream hiccups.
+#   2. A hardcoded /etc/hosts fallback for the Gemini endpoint, refreshed each
+#      successful provision, so name resolution works even before dnsmasq/Wi-Fi
+#      DNS is fully up.
+if ! command -v dnsmasq >/dev/null 2>&1; then
+    apt-get install -y -qq --no-install-recommends dnsmasq || true
+fi
+if command -v dnsmasq >/dev/null 2>&1; then
+    mkdir -p /etc/dnsmasq.d
+    cat > /etc/dnsmasq.d/venom.conf <<'EOF'
+# Venom local DNS cache — fast, resilient name resolution for the voice loop.
+cache-size=1000
+server=8.8.8.8
+server=8.8.4.4
+# Don't read /etc/resolv.conf (it may point back at us); use the servers above.
+no-resolv
+# Bind only to loopback: this cache is for the appliance itself.
+listen-address=127.0.0.1
+bind-interfaces
+EOF
+    systemctl enable dnsmasq 2>/dev/null || true
+    systemctl restart dnsmasq 2>/dev/null || true
+    # Point the system resolver at the local cache (NetworkManager-friendly).
+    mkdir -p /etc/NetworkManager/conf.d
+    cat > /etc/NetworkManager/conf.d/venom-dns.conf <<'EOF'
+[main]
+dns=default
+[global-dns-domain-*]
+servers=127.0.0.1
+EOF
+fi
+
+# /etc/hosts fallback: resolve the Gemini endpoint now (DNS is up — we cloned
+# the repo above) and pin the IP so a cold-boot lookup never blocks Venom.
+GEMINI_HOST=generativelanguage.googleapis.com
+GEMINI_IP="$(getent ahostsv4 "$GEMINI_HOST" 2>/dev/null | awk 'NR==1{print $1}')"
+if [ -n "$GEMINI_IP" ]; then
+    # Remove any stale line we previously wrote, then append the fresh one.
+    sed -i "/[[:space:]]$GEMINI_HOST\$/d" /etc/hosts 2>/dev/null || true
+    echo "$GEMINI_IP $GEMINI_HOST" >> /etc/hosts
+    log "pinned $GEMINI_HOST -> $GEMINI_IP in /etc/hosts (DNS fallback)"
+fi
+
 date -u +"%Y-%m-%dT%H:%M:%SZ" > "$STAMP"
 echo "$HEAD_COMMIT" > "$INSTALLED_MARK"
 

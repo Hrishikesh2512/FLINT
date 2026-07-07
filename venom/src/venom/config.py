@@ -7,7 +7,7 @@ boots on a freshly provisioned Pi with no config file at all.
 Example venom.toml:
 
     [venom]
-    poll_interval = 10.0
+    poll_interval = 30.0
     status_path = "/run/venom/status.json"
 
     [internet]
@@ -111,9 +111,13 @@ class VoiceConfig:
     thinking_budget: int = -1
     # Native-audio human-realism knobs (Gemini native-audio only).
     # affective_dialog: she hears the *emotion* in your voice (tone, pace,
-    #   mood) and adapts how she speaks, not just the words. Biggest single
-    #   win for sounding human; negligible latency cost.
-    affective_dialog: bool = True
+    #   mood) and adapts how she speaks, not just the words.
+    # FIXED (Fix 1): default is now False. affective_dialog forces the whole
+    #   session onto the v1alpha preview endpoint (v1beta rejects
+    #   enableAffectiveDialog), and v1alpha is measurably higher-latency —
+    #   the confirmed 10s-reply culprit. Support is unchanged; it is now
+    #   opt-in via `affective_dialog = true` in venom.toml instead of opt-out.
+    affective_dialog: bool = False
     # proactive_audio: she decides when NOT to reply — ignores stray noise and
     #   talk not aimed at her instead of dutifully answering everything. More
     #   human, but adds a decision beat, so off by default (snappiness).
@@ -133,8 +137,12 @@ class VoiceConfig:
 
 @dataclass(frozen=True)
 class VenomConfig:
-    poll_interval: float = 10.0
-    probe_timeout: float = 3.0
+    # FIXED (Fix 8): poll_interval 10 -> 30 (the brain checker was probing every
+    # 10s, far too often for a stable link and the source of mid-conversation
+    # flaps); probe_timeout 3 -> 5 (3s is too tight for an India->US TCP
+    # handshake, so a healthy Gemini read as "down" on latency blips).
+    poll_interval: float = 30.0
+    probe_timeout: float = 5.0
     status_path: Path = Path("/run/venom/status.json")
     memory_path: Path = Path("/var/lib/venom/memory.json")
     internet_host: str = "1.1.1.1"
@@ -230,8 +238,10 @@ def load_config(path: Path | None = None) -> VenomConfig:
 
     voice_defaults = VoiceConfig()
     return VenomConfig(
-        poll_interval=float(venom.get("poll_interval", 10.0)),
-        probe_timeout=float(venom.get("probe_timeout", 3.0)),
+        # FIXED (Fix 8): keep TOML fallbacks in step with the dataclass
+        # defaults — 30s poll, 5s probe timeout.
+        poll_interval=float(venom.get("poll_interval", 30.0)),
+        probe_timeout=float(venom.get("probe_timeout", 5.0)),
         status_path=Path(venom.get("status_path", "/run/venom/status.json")),
         memory_path=Path(venom.get("memory_path", "/var/lib/venom/memory.json")),
         internet_host=str(internet.get("host", "1.1.1.1")),
