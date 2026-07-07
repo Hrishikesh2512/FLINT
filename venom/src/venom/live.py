@@ -167,6 +167,11 @@ class LiveSession:
         self._idle = InactivityTimer(config.voice.inactivity_timeout)
         self._ended = asyncio.Event()
         self._reply_clock: float | None = None  # set when a turn is committed
+        # Button barge-in: when the user cuts in with a button, we flush the
+        # queued reply AND drop the rest of this turn's audio as it keeps
+        # arriving (the server doesn't know about the press). Cleared at the
+        # next turn boundary (interruption / new user speech / turn_complete).
+        self._suppress_output = False
         # Pre-warming: the socket + big-prompt prefill are the real cold-start
         # cost (~4-5s). We connect ahead of time and sit idle — not touching the
         # mic, not counting idle-timeout — until the wake word activates us, so
@@ -197,6 +202,13 @@ class LiveSession:
 
     async def wait_connected(self) -> None:
         await self._connected.wait()
+
+    def interrupt(self) -> None:
+        """Button barge-in: silence the queued reply now and drop the rest of
+        this turn as it streams in. The continuous mic uplink carries whatever
+        the user says next, which the model picks up as a fresh turn."""
+        self.speaker.flush()
+        self._suppress_output = True
 
     @property
     def ended(self) -> bool:
@@ -320,19 +332,27 @@ class LiveSession:
             while not self._ended.is_set():
                 async for response in self._session.receive():
                     if response.data:
-                        if self._reply_clock is not None:
-                            log.info("first-audio %.2fs",
-                                     time.monotonic() - self._reply_clock)
-                            self._reply_clock = None
-                        self.speaker.play(response.data)
-                        self._idle.touch()
+                        # After a button barge-in, drop the interrupted turn's
+                        # audio as it keeps arriving so she stays silent.
+                        if not self._suppress_output:
+                            if self._reply_clock is not None:
+                                log.info("first-audio %.2fs",
+                                         time.monotonic() - self._reply_clock)
+                                self._reply_clock = None
+                            self.speaker.play(response.data)
+                            self._idle.touch()
 
                     content = response.server_content
                     if content:
                         if getattr(content, "interrupted", None):
+                            # Server-side (voice) interruption: user took the
+                            # floor — flush and resume normal playback for the
+                            # new turn.
                             self.speaker.flush()
+                            self._suppress_output = False
                         if content.input_transcription and content.input_transcription.text:
                             self._turn_in += content.input_transcription.text
+                            self._suppress_output = False  # user speaking → new turn
                             # Start the reply clock from the last speech we heard,
                             # so first-audio measures the real spoken turn-around
                             # (end-of-speech detection + model), not just text.
@@ -341,6 +361,7 @@ class LiveSession:
                         if content.output_transcription and content.output_transcription.text:
                             self._turn_out += content.output_transcription.text
                         if getattr(content, "turn_complete", None):
+                            self._suppress_output = False  # turn done → resume
                             self._record("you", self._turn_in)
                             if self._turn_out:
                                 log.info("jarvis: %s", self._turn_out.strip())

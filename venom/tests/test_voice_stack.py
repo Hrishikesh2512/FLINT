@@ -321,7 +321,7 @@ def test_dnd_toggle_and_wake_button_respect_dnd():
             return self._set
 
     o = SimpleNamespace(_dnd=False, _speaker=FakeSpeaker(),
-                        _manual_wake=FakeEvent())
+                        _manual_wake=FakeEvent(), _session=None)
 
     # Headset button while awake → requests a wake.
     VoiceOrchestrator._on_wake_button(o)
@@ -339,6 +339,70 @@ def test_dnd_toggle_and_wake_button_respect_dnd():
     assert o._dnd is False
     VoiceOrchestrator._on_wake_button(o)
     assert o._manual_wake.is_set()
+
+
+def test_live_interrupt_flushes_and_suppresses():
+    from types import SimpleNamespace
+
+    from venom.live import LiveSession
+
+    class FakeSpeaker:
+        def __init__(self):
+            self.flushed = 0
+
+        def flush(self):
+            self.flushed += 1
+
+    o = SimpleNamespace(speaker=FakeSpeaker(), _suppress_output=False)
+    LiveSession.interrupt(o)
+    assert o.speaker.flushed == 1 and o._suppress_output is True
+
+
+def test_wake_button_barges_in_during_conversation():
+    from types import SimpleNamespace
+
+    from venom.voice import VoiceOrchestrator
+
+    class FakeSession:
+        def __init__(self, ended=False):
+            self.ended = ended
+            self.interrupted = 0
+
+        def interrupt(self):
+            self.interrupted += 1
+
+    class FakeEvent:
+        def __init__(self):
+            self._set = False
+
+        def set(self):
+            self._set = True
+
+        def is_set(self):
+            return self._set
+
+    # Live conversation → the wake button interrupts, does not queue a wake.
+    live = FakeSession(ended=False)
+    o = SimpleNamespace(_dnd=False, _session=live, _manual_wake=FakeEvent())
+    VoiceOrchestrator._on_wake_button(o)
+    assert live.interrupted == 1 and not o._manual_wake.is_set()
+
+    # No conversation → the wake button queues a wake as before.
+    o2 = SimpleNamespace(_dnd=False, _session=None, _manual_wake=FakeEvent())
+    VoiceOrchestrator._on_wake_button(o2)
+    assert o2._manual_wake.is_set()
+
+    # An ended session is treated as no conversation (queues a wake).
+    o3 = SimpleNamespace(_dnd=False, _session=FakeSession(ended=True),
+                         _manual_wake=FakeEvent())
+    VoiceOrchestrator._on_wake_button(o3)
+    assert o3._manual_wake.is_set()
+
+    # DND wins over everything — no barge-in, no wake.
+    live2 = FakeSession(ended=False)
+    o4 = SimpleNamespace(_dnd=True, _session=live2, _manual_wake=FakeEvent())
+    VoiceOrchestrator._on_wake_button(o4)
+    assert live2.interrupted == 0 and not o4._manual_wake.is_set()
 
 
 def test_pi_declarations_validate_against_gemini_sdk(pi_setup):

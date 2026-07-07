@@ -124,6 +124,10 @@ class VoiceOrchestrator:
         self._manual_wake = asyncio.Event()
         self._dnd = False
         self._speaker: SpeakerStream | None = None
+        # The live conversation, set while one is active — so a wake-button
+        # press mid-reply becomes a barge-in (interrupt) instead of a queued
+        # wake. None between conversations.
+        self._session: LiveSession | None = None
 
     async def run(self) -> None:
         # The wake model takes minutes to load from slow flash — load it in
@@ -227,6 +231,7 @@ class VoiceOrchestrator:
                 chime(speaker)
                 chime(speaker, frequency=1320.0)
                 session.activate()
+                self._session = session  # a wake press now barges in, not wakes
                 # FIXED (Fix 2): conversation is now live and speaking — freeze
                 # the brain switcher until we're back to wake/pre-warm.
                 self.activity.session_active = True
@@ -247,6 +252,7 @@ class VoiceOrchestrator:
                 finally:
                     # FIXED (Fix 2): conversation over — let the brain switcher
                     # resume evaluating in the gap before the next session.
+                    self._session = None
                     self.activity.session_active = False
                     if suppressor is not None:
                         suppressor.gate = False
@@ -311,10 +317,16 @@ class VoiceOrchestrator:
 
     # ── physical button handlers (called on the event loop) ──────────────────
     def _on_wake_button(self) -> None:
-        """Headset button: ask the wake loop to start a conversation. Ignored
-        under DND (the shutter toggle is the only way back)."""
+        """Wake button (headset or shutter-2). During a live conversation it
+        barges in — cuts off her reply so she listens. Otherwise it asks the
+        wake loop to start a conversation. Ignored under DND."""
         if self._dnd:
-            log.info("headset button ignored — DND is on")
+            log.info("wake button ignored — DND is on")
+            return
+        session = self._session
+        if session is not None and not session.ended:
+            log.info("barge-in — wake button")
+            session.interrupt()
             return
         self._manual_wake.set()
 
