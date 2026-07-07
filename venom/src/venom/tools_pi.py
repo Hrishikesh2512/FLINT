@@ -519,6 +519,39 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
         def clear_list(list_name: str = "shopping") -> str:
             return f"Cleared {lists.clear(list_name)} item(s) from {list_name}."
 
+    if config.screen.ready:
+        @reg.tool(
+            description=(
+                "Reads the text currently on the user's laptop screen and returns "
+                "it. Use whenever the user asks you to look at, read, check, or "
+                "help debug what's on their screen — an error, code, a log, a "
+                "message, anything. The laptop does local OCR and sends back the "
+                "on-screen text; read it, reason over it, and answer by voice. "
+                "It captures the active window, so ask the user to focus what they "
+                "want you to see. Text only — you won't get colours or layout."
+            ),
+        )
+        def look_at_screen() -> str:
+            sc = config.screen
+            try:
+                resp = requests.get(
+                    f"http://{sc.host}:{sc.port}/screen_text",
+                    params={"token": sc.token}, timeout=sc.timeout)
+                resp.raise_for_status()
+                data = resp.json()
+            except requests.RequestException as exc:
+                log.warning("look_at_screen fetch failed: %s", exc)
+                return ("I couldn't reach your laptop screen — is the screen "
+                        "server running and on the same network?")
+            text = (data.get("text") or "").strip()
+            if not text:
+                return ("I looked, but there's no readable text on the active "
+                        "window right now.")
+            # Keep the spoken turn snappy — she doesn't need the whole essay.
+            if len(text) > 4000:
+                text = text[:4000] + " …(truncated)"
+            return "This is the text on the screen right now:\n" + text
+
     @reg.tool(
         description=(
             "Ends the current conversation and returns to wake-word listening. "

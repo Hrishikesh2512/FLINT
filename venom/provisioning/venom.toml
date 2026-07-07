@@ -39,6 +39,17 @@ language = "en"
 host = "1.1.1.1"
 port = 53
 
+# ── Screen reading (OCR) ─────────────────────────────────────────────────────
+# Run laptop/screen_server.py on your laptop, then say "look at my screen" and
+# Jarvis reads the on-screen text (local OCR — fast, no vision API, text only).
+# Off until you set host. See laptop/README.md.
+[screen]
+enabled = true
+host    = ""              # laptop LAN/Tailscale address, e.g. "192.168.1.50"
+port    = 8766
+token   = ""              # must match the screen server's --token
+timeout = 5.0             # seconds to wait for the OCR round-trip
+
 # ── Brain candidates, lowest priority number wins ────────────────────────────
 # The laptop running the FLINT brain service. Update `host` to your laptop's
 # LAN or Tailscale address. Priority 0 = always preferred when reachable.

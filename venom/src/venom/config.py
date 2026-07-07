@@ -136,6 +136,27 @@ class VoiceConfig:
 
 
 @dataclass(frozen=True)
+class ScreenConfig:
+    """The laptop screen-text server the Pi reads on demand.
+
+    Jarvis (native-audio) is blind to images but reads text, so instead of
+    streaming a picture we OCR the laptop's active window locally and pull the
+    resulting text over the LAN when the user says "look at my screen".
+    Off unless a host is configured.
+    """
+
+    enabled: bool = True
+    host: str = ""          # laptop LAN/Tailscale address; empty = feature off
+    port: int = 8766
+    token: str = ""         # must match the screen server's --token
+    timeout: float = 5.0    # seconds to wait for the OCR round-trip
+
+    @property
+    def ready(self) -> bool:
+        return self.enabled and bool(self.host)
+
+
+@dataclass(frozen=True)
 class VenomConfig:
     # FIXED (Fix 8): poll_interval 10 -> 30 (the brain checker was probing every
     # 10s, far too often for a stable link and the source of mid-conversation
@@ -154,6 +175,7 @@ class VenomConfig:
     brains: tuple[BrainCandidate, ...] = field(default=DEFAULT_CLOUD_CANDIDATES)
     voice: VoiceConfig = field(default_factory=VoiceConfig)
     audio: AudioConfig = field(default_factory=AudioConfig)
+    screen: ScreenConfig = field(default_factory=ScreenConfig)
 
     def __post_init__(self) -> None:
         if self.poll_interval <= 0:
@@ -232,6 +254,7 @@ def load_config(path: Path | None = None) -> VenomConfig:
     gemini = data.get("gemini", {})
     voice = data.get("voice", {})
     audio = data.get("audio", {})
+    screen = data.get("screen", {})
     raw_brains = data.get("brain", [])
 
     brains = _parse_brains(raw_brains) if raw_brains else DEFAULT_CLOUD_CANDIDATES
@@ -286,5 +309,12 @@ def load_config(path: Path | None = None) -> VenomConfig:
             bluetooth_mac=str(audio.get("bluetooth_mac", "")).strip(),
             bluetooth_name=str(audio.get("bluetooth_name", "")).strip(),
             noise_suppression=bool(audio.get("noise_suppression", True)),
+        ),
+        screen=ScreenConfig(
+            enabled=bool(screen.get("enabled", True)),
+            host=str(screen.get("host", "")).strip(),
+            port=int(screen.get("port", 8766)),
+            token=str(screen.get("token", "")).strip(),
+            timeout=float(screen.get("timeout", 5.0)),
         ),
     )
