@@ -45,8 +45,10 @@ port = 53
 # their evdev key code. Leave 0 until you know them: press a shutter button once
 # and the journal logs `venom.buttons: button: unmapped key code N` — put N here.
 [buttons]
-dnd_code        = 0    # shutter button 1: toggle Do-Not-Disturb (distinct chime)
-find_phone_code = 0    # shutter button 2: ring my phone
+dnd_code        = 115  # shutter button 1 (Volume-Up)   = KEY_VOLUMEUP   → DND toggle
+find_phone_code = 114  # shutter button 2 (Volume-Down) = KEY_VOLUMEDOWN → find my phone
+# NB: keep the shutter's iOS/Android switch in the position where the buttons
+# send volume up/down — flipping it changes these codes.
 
 # ── Find my phone (ntfy) ─────────────────────────────────────────────────────
 # Shutter button 2 sends a max-priority push to this ntfy topic. Install the
@@ -55,7 +57,7 @@ find_phone_code = 0    # shutter button 2: ring my phone
 # topic name — anyone who knows it can ring your phone.
 [phone]
 ntfy_server = "https://ntfy.sh"
-ntfy_topic  = ""
+ntfy_topic  = "venom-k1j2os4maw"   # subscribe your phone's ntfy app to this exact topic
 
 # ── Screen reading (OCR) ─────────────────────────────────────────────────────
 # Run laptop/screen_server.py on your laptop, then say "look at my screen" and
