@@ -162,15 +162,19 @@ class SpeakerStream:
 
 def chime(speaker: SpeakerStream, frequency: float = 880.0,
           duration: float = 0.18, volume: float = 0.3) -> None:
-    """A short sine beep — wake acknowledgment and timer alarm, no TTS needed."""
-    import math
+    """A short sine beep — wake acknowledgment and timer alarm, no TTS needed.
+
+    Vectorised with numpy: the old per-sample Python loop synthesised ~4300
+    samples on the event-loop thread, stalling the audio uplink/downlink for a
+    few ms right at wake (two chimes) and on every timer/reminder. numpy makes
+    it effectively instant; the waveform is byte-for-byte the same (int16
+    truncation toward zero matches the original int() cast).
+    """
+    import numpy as np
 
     n = int(SPEAKER_SAMPLE_RATE * duration)
     amplitude = int(32767 * volume)
-    samples = bytearray()
-    for i in range(n):
-        fade = min(1.0, (n - i) / (n * 0.3))  # quick fade-out, no click
-        value = int(amplitude * fade * math.sin(
-            2 * math.pi * frequency * i / SPEAKER_SAMPLE_RATE))
-        samples += value.to_bytes(2, "little", signed=True)
-    speaker.play(bytes(samples))
+    i = np.arange(n)
+    fade = np.minimum(1.0, (n - i) / (n * 0.3))  # quick fade-out, no click
+    wave = amplitude * fade * np.sin(2 * np.pi * frequency * i / SPEAKER_SAMPLE_RATE)
+    speaker.play(wave.astype("<i2").tobytes())

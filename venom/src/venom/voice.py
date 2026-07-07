@@ -75,6 +75,10 @@ class VoiceOrchestrator:
 
             activity = VoiceActivity()
         self.activity = activity
+        # Consecutive pre-warm failures, for a gentle retry backoff (see
+        # _wait_for_wake): a one-off blip recovers fast, a persistent outage
+        # backs off instead of hammering the socket every 2s.
+        self._prewarm_fails = 0
         self.state = "starting"
         # Web console: prompts in, transcript out (thread-safe via event loop).
         self.inbox: asyncio.Queue[str] = asyncio.Queue()
@@ -305,6 +309,7 @@ class VoiceOrchestrator:
             exc = wake_task.exception()
             if exc is not None:
                 raise exc  # StreamsDied → rebuild the whole audio lifecycle
+            self._prewarm_fails = 0  # a warm session survived to wake — healthy
             return True
         # Warm session ended before the wake word (server idle-closed it, or it
         # failed to connect). Stop listening; the caller re-warms.
@@ -315,8 +320,14 @@ class VoiceOrchestrator:
             pass
         exc = None if warm_task.cancelled() else warm_task.exception()
         if exc is not None and not is_normal_closure(exc):
-            log.warning("pre-warm session failed: %s — retrying", exc)
-            await asyncio.sleep(2)
+            # Exponential backoff, capped: 0.5 → 1 → 2 → 4 → 5s. First retry is
+            # 4x faster than the old fixed 2s (snappy recovery from a transient
+            # blip); a sustained outage settles at 5s instead of hammering.
+            delay = min(0.5 * 2 ** min(self._prewarm_fails, 4), 5.0)
+            self._prewarm_fails += 1
+            log.warning("pre-warm session failed: %s — retrying in %.1fs",
+                        exc, delay)
+            await asyncio.sleep(delay)
         return False
 
     @staticmethod
