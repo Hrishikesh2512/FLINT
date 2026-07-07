@@ -227,6 +227,41 @@ def test_music_tools_registered_and_dispatch(tmp_path):
     assert registry.dispatch("now_playing", {}) == "Nothing is playing."
 
 
+def test_duck_music_pauses_for_conversation_and_resumes_only_its_own():
+    # Music and the mic share one headset, so a live conversation pauses our
+    # own player. We must resume only what we paused — never a track the user
+    # paused by hand, and never touch anything when nothing is playing.
+    from types import SimpleNamespace
+
+    from venom.voice import VoiceOrchestrator
+
+    class FakeMusic:
+        def __init__(self, playing, paused):
+            self.playing, self.paused, self.calls = playing, paused, []
+
+        def set_paused(self, p):
+            self.calls.append(p)
+            self.paused = p
+
+    # playing and audible → paused for the turn, then resumed on the way out.
+    o = SimpleNamespace(music=FakeMusic(True, False), _music_ducked=False)
+    VoiceOrchestrator._duck_music(o)
+    assert o._music_ducked and o.music.calls == [True]
+    VoiceOrchestrator._unduck_music(o)
+    assert not o._music_ducked and o.music.calls == [True, False]
+
+    # already paused by the user → never touched, coming or going.
+    o = SimpleNamespace(music=FakeMusic(True, True), _music_ducked=False)
+    VoiceOrchestrator._duck_music(o)
+    VoiceOrchestrator._unduck_music(o)
+    assert not o._music_ducked and o.music.calls == []
+
+    # nothing playing → no-op.
+    o = SimpleNamespace(music=FakeMusic(False, False), _music_ducked=False)
+    VoiceOrchestrator._duck_music(o)
+    assert not o._music_ducked and o.music.calls == []
+
+
 def test_pi_declarations_validate_against_gemini_sdk(pi_setup):
     genai_types = pytest.importorskip("google.genai.types")
     registry, _, _ = pi_setup

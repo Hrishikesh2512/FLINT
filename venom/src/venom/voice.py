@@ -112,6 +112,9 @@ class VoiceOrchestrator:
                                           notes=self.notes, lists=self.lists,
                                           location=self.location)
         self._detector: WakeWordDetector | None = None
+        # True while we've paused our own music for a live conversation, so we
+        # only resume what *we* paused (not a track the user paused by hand).
+        self._music_ducked = False
 
     async def run(self) -> None:
         # The wake model takes minutes to load from slow flash — load it in
@@ -201,6 +204,11 @@ class VoiceOrchestrator:
                 if not await self._wait_for_wake(mic, speaker, warm_task):
                     continue  # warm session dropped before wake — spin a new one
                 self.state = "conversation"
+                # The music and the mic share one headset, so anything playing
+                # bleeds into the mic — Gemini never hears a clean end-of-speech
+                # and never replies. Pause our own player for the whole turn;
+                # the finally below resumes it when we go back to sleep.
+                self._duck_music()
                 self._prepare_opening(session)
                 chime(speaker)
                 chime(speaker, frequency=1320.0)
@@ -228,6 +236,7 @@ class VoiceOrchestrator:
                     self.activity.session_active = False
                     if suppressor is not None:
                         suppressor.gate = False
+                    self._unduck_music()
                     self._drain(mic)
                 self._detector.reset()
                 log.info("back to wake listening")
@@ -272,6 +281,29 @@ class VoiceOrchestrator:
                 log.info("wake word detected")
                 self._drain(mic)
                 return
+
+    def _duck_music(self) -> None:
+        """Pause our own music while a conversation is live so the shared-headset
+        mic hears you cleanly. No-op if nothing is playing or the user already
+        paused it (so we don't 'resume' a track they stopped by hand)."""
+        try:
+            if self.music.playing and not self.music.paused:
+                self.music.set_paused(True)
+                self._music_ducked = True
+                log.info("paused music for the conversation")
+        except Exception:
+            log.exception("could not pause music for the conversation")
+
+    def _unduck_music(self) -> None:
+        """Resume music we paused for the conversation, back to sleep."""
+        if not self._music_ducked:
+            return
+        self._music_ducked = False
+        try:
+            self.music.set_paused(False)
+            log.info("resumed music")
+        except Exception:
+            log.exception("could not resume music after the conversation")
 
     def _build_session(self, mic: MicStream, speaker: SpeakerStream) -> LiveSession:
         """A pre-warmable session; the opening briefing is decided at wake."""

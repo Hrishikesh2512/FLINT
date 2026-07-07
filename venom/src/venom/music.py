@@ -39,6 +39,13 @@ class MusicPlayer:
     def now_playing(self) -> str:
         return self._title if self.playing else ""
 
+    @property
+    def paused(self) -> bool:
+        """True when a track is loaded but mpv is paused (asks mpv directly)."""
+        if not self.playing:
+            return False
+        return bool(self._ipc(["get_property", "pause"]).get("data"))
+
     # ── control ──────────────────────────────────────────────────────────────
     def play(self, query: str) -> str:
         query = (query or "").strip()
