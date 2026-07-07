@@ -552,6 +552,18 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
                 text = text[:4000] + " …(truncated)"
             return "This is the text on the screen right now:\n" + text
 
+    if config.phone.ready:
+        @reg.tool(
+            description=(
+                "Rings the user's phone loudly to help them find it, even if "
+                "it's on silent. Use for 'find my phone', 'where's my phone', "
+                "'ring my phone', 'make my phone ring' — in any language."
+            ),
+        )
+        def find_my_phone() -> str:
+            from venom.phone import find_phone
+            return find_phone(config.phone.ntfy_server, config.phone.ntfy_topic)
+
     @reg.tool(
         description=(
             "Ends the current conversation and returns to wake-word listening. "

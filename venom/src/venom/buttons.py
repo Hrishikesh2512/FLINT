@@ -4,7 +4,7 @@ Three buttons, all seen through Linux evdev as key events:
 
   • headset inline button  → wake Venom (and its music-duck happens downstream)
   • shutter button 1        → toggle Do-Not-Disturb
-  • shutter button 2        → find my phone
+  • shutter button 2        → wake Venom (a reliable physical wake button)
 
 The headset button's key code is well-known across firmwares (the play/pause
 family). The two shutter codes vary by remote, so they live in config; until
@@ -30,17 +30,16 @@ RESCAN_SECONDS = 10
 DEBOUNCE_SECONDS = 0.5        # one press can emit several events — act once
 
 
-def route_key(code: int, dnd_code: int, find_phone_code: int) -> str | None:
+def route_key(code: int, dnd_code: int, wake_code: int) -> str | None:
     """Map a key code to an action, or None if it is not one of ours.
 
-    Kept pure (no I/O) so the routing is unit-testable and the two configurable
-    shutter codes are matched before falling through to 'unknown'."""
-    if code in WAKE_CODES:
+    Kept pure (no I/O) so the routing is unit-testable and the configurable
+    shutter codes are matched before falling through to 'unknown'. Both the
+    headset play/pause family and the configured shutter wake_code wake her."""
+    if code in WAKE_CODES or (wake_code and code == wake_code):
         return "wake"
     if dnd_code and code == dnd_code:
         return "dnd"
-    if find_phone_code and code == find_phone_code:
-        return "find_phone"
     return None
 
 
@@ -63,8 +62,8 @@ def find_key_devices() -> list:
     return devices
 
 
-async def watch_buttons(*, on_wake=None, on_dnd=None, on_find_phone=None,
-                        dnd_code: int = 0, find_phone_code: int = 0) -> None:
+async def watch_buttons(*, on_wake=None, on_dnd=None,
+                        dnd_code: int = 0, wake_code: int = 0) -> None:
     """Forever: attach to every key device and route presses to callbacks.
 
     Callbacks are plain callables invoked on the event loop (they must be quick
@@ -88,7 +87,7 @@ async def watch_buttons(*, on_wake=None, on_dnd=None, on_find_phone=None,
             async for event in device.async_read_loop():
                 if event.type != evdev.ecodes.EV_KEY or event.value != 1:
                     continue  # key-down only (press, not release/autorepeat)
-                action = route_key(event.code, dnd_code, find_phone_code)
+                action = route_key(event.code, dnd_code, wake_code)
                 if action is None:
                     # Not debounced: this is how an unknown shutter button is
                     # identified — press it once and read the code from here.
@@ -99,8 +98,7 @@ async def watch_buttons(*, on_wake=None, on_dnd=None, on_find_phone=None,
                 if now - last_action < DEBOUNCE_SECONDS:
                     continue
                 last_action = now
-                cb = {"wake": on_wake, "dnd": on_dnd,
-                      "find_phone": on_find_phone}[action]
+                cb = {"wake": on_wake, "dnd": on_dnd}[action]
                 if cb is not None:
                     log.info("button (%d): %s", event.code, action)
                     cb()

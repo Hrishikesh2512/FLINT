@@ -141,9 +141,8 @@ class VoiceOrchestrator:
         self._buttons_task = asyncio.create_task(watch_buttons(
             on_wake=self._on_wake_button,
             on_dnd=self._on_dnd_button,
-            on_find_phone=self._on_find_phone_button,
             dnd_code=self.config.buttons.dnd_code,
-            find_phone_code=self.config.buttons.find_phone_code))
+            wake_code=self.config.buttons.wake_code))
 
         first_cycle = True
         while True:
@@ -333,23 +332,6 @@ class VoiceOrchestrator:
         else:                               # leaving: low → high (rising)
             chime(sp, frequency=440.0)
             chime(sp, frequency=587.0)
-
-    def _on_find_phone_button(self) -> None:
-        """Shutter button 2: ring the phone via ntfy, off the event loop so a
-        slow network never stalls audio."""
-        log.info("find-my-phone (shutter button)")
-        sp = self._speaker
-        if sp is not None:
-            chime(sp, frequency=1760.0)     # a high, distinct acknowledgement
-        phone = self.config.phone
-
-        async def _ring() -> None:
-            from venom.phone import find_phone
-            result = await asyncio.to_thread(
-                find_phone, phone.ntfy_server, phone.ntfy_topic)
-            log.info("find-my-phone: %s", result)
-
-        asyncio.create_task(_ring())
 
     def _duck_music(self) -> None:
         """Pause our own music while a conversation is live so the shared-headset

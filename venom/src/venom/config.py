@@ -161,10 +161,10 @@ class ButtonsConfig:
     """Bluetooth camera-shutter remote: two buttons, identified by their evdev
     key code. 0 = not yet mapped — press the button once and read the logged
     `unmapped key code N`, then set it here. The headset button needs no config
-    (its play/pause code is well-known)."""
+    (its play/pause code is already a known wake code)."""
 
-    dnd_code: int = 0          # shutter button 1: toggle do-not-disturb
-    find_phone_code: int = 0   # shutter button 2: ring my phone
+    dnd_code: int = 0    # shutter button 1: toggle do-not-disturb
+    wake_code: int = 0   # shutter button 2: wake Venom (a physical wake button)
 
 
 @dataclass(frozen=True)
@@ -348,7 +348,7 @@ def load_config(path: Path | None = None) -> VenomConfig:
         ),
         buttons=ButtonsConfig(
             dnd_code=int(buttons.get("dnd_code", 0)),
-            find_phone_code=int(buttons.get("find_phone_code", 0)),
+            wake_code=int(buttons.get("wake_code", 0)),
         ),
         phone=PhoneConfig(
             ntfy_server=str(phone.get("ntfy_server", "https://ntfy.sh")).strip(),

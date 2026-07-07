@@ -40,21 +40,21 @@ host = "1.1.1.1"
 port = 53
 
 # ── Physical buttons ─────────────────────────────────────────────────────────
-# Headset inline button = wake Venom (+ pauses music for the command); no config
-# needed. The Bluetooth camera-shutter remote has two buttons, identified by
-# their evdev key code. Leave 0 until you know them: press a shutter button once
-# and the journal logs `venom.buttons: button: unmapped key code N` — put N here.
+# Both the headset inline button and shutter button 2 wake Venom (+ pause music
+# for the command). The Bluetooth camera-shutter remote's two buttons are
+# identified by their evdev key code. Leave 0 until you know them: press a button
+# once and the journal logs `venom.buttons: button: unmapped key code N`.
 [buttons]
-dnd_code        = 115  # shutter button 1 (Volume-Up)   = KEY_VOLUMEUP   → DND toggle
-find_phone_code = 114  # shutter button 2 (Volume-Down) = KEY_VOLUMEDOWN → find my phone
+dnd_code  = 115  # shutter button 1 (Volume-Up)   = KEY_VOLUMEUP   → DND toggle
+wake_code = 114  # shutter button 2 (Volume-Down) = KEY_VOLUMEDOWN → wake Venom
 # NB: keep the shutter's iOS/Android switch in the position where the buttons
 # send volume up/down — flipping it changes these codes.
 
 # ── Find my phone (ntfy) ─────────────────────────────────────────────────────
-# Shutter button 2 sends a max-priority push to this ntfy topic. Install the
-# ntfy app on your phone, subscribe to the same topic, and give it a loud/alarm
-# sound so it rings even on silent. Off until a topic is set. Use a long, random
-# topic name — anyone who knows it can ring your phone.
+# "Find my phone" / "ring my phone" (spoken) sends a max-priority push to this
+# ntfy topic. Install the ntfy app on your phone, subscribe to the same topic,
+# and give it a loud/alarm sound so it rings even on silent. Off until a topic
+# is set. Use a long, random topic name — anyone who knows it can ring your phone.
 [phone]
 ntfy_server = "https://ntfy.sh"
 ntfy_topic  = "venom-k1j2os4maw"   # subscribe your phone's ntfy app to this exact topic

@@ -267,13 +267,13 @@ def test_button_routing():
 
     # Every headset play/pause code routes to wake.
     for code in WAKE_CODES:
-        assert route_key(code, dnd_code=115, find_phone_code=28) == "wake"
-    # The two configured shutter codes route to their actions.
-    assert route_key(115, dnd_code=115, find_phone_code=28) == "dnd"
-    assert route_key(28, dnd_code=115, find_phone_code=28) == "find_phone"
+        assert route_key(code, dnd_code=115, wake_code=114) == "wake"
+    # Shutter button 1 (DND) and button 2 (a second wake) route accordingly.
+    assert route_key(115, dnd_code=115, wake_code=114) == "dnd"
+    assert route_key(114, dnd_code=115, wake_code=114) == "wake"
     # Unknown codes (and unmapped-when-zero) fall through to None for logging.
-    assert route_key(999, dnd_code=115, find_phone_code=28) is None
-    assert route_key(115, dnd_code=0, find_phone_code=0) is None
+    assert route_key(999, dnd_code=115, wake_code=114) is None
+    assert route_key(115, dnd_code=0, wake_code=0) is None
 
 
 def test_find_phone_no_topic_is_safe():
@@ -282,6 +282,20 @@ def test_find_phone_no_topic_is_safe():
     # No topic configured → never touches the network, returns a clear message.
     assert find_phone("https://ntfy.sh", "") == "No phone is set up to find."
     assert find_phone("https://ntfy.sh", "   ") == "No phone is set up to find."
+
+
+def test_find_my_phone_tool_registered_only_when_topic_set(tmp_path):
+    from venom.config import PhoneConfig, VenomConfig
+
+    base = dict(gemini_api_key="k", memory_path=tmp_path / "m.json")
+    off = build_pi_registry(VenomConfig(**base),
+                            MemoryStore(base["memory_path"]), TimerBoard())
+    assert "find_my_phone" not in off.names()
+
+    on = build_pi_registry(
+        VenomConfig(**base, phone=PhoneConfig(ntfy_topic="venom-xyz")),
+        MemoryStore(base["memory_path"]), TimerBoard())
+    assert "find_my_phone" in on.names()
 
 
 def test_dnd_toggle_and_wake_button_respect_dnd():
