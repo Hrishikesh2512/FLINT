@@ -233,6 +233,15 @@ class LiveSession:
         proactivity = (types.ProactivityConfig(proactive_audio=True)
                        if voice.proactive_audio else None)
 
+        # FIXED (Fix 1): only *include* enable_affective_dialog when it's on.
+        # Passing it as False still serialises "enableAffectiveDialog": false
+        # into the setup, and the fast v1beta endpoint rejects the field's mere
+        # presence ("Unknown name enableAffectiveDialog"). Omitting it keeps the
+        # default-off session on the clean, low-latency v1beta path.
+        extra: dict = {}
+        if voice.affective_dialog:
+            extra["enable_affective_dialog"] = True
+
         return types.LiveConnectConfig(
             response_modalities=["AUDIO"],
             output_audio_transcription={},
@@ -241,11 +250,6 @@ class LiveSession:
             # behaviour. Custom end-of-speech/silence tuning was slower in
             # practice, so it's gone.
             thinking_config=thinking_config,
-            # FIXED (Fix 1): affective_dialog is now opt-in (default False in
-            # config). When left off this stays False and the session uses the
-            # faster v1beta endpoint (see run()); set it True in venom.toml to
-            # re-enable the emotion-aware v1alpha path.
-            enable_affective_dialog=voice.affective_dialog,
             proactivity=proactivity,
             temperature=voice.temperature,
             system_instruction=self._system_instruction(),
@@ -255,6 +259,7 @@ class LiveSession:
                 voice_config=types.VoiceConfig(
                     prebuilt_voice_config=types.PrebuiltVoiceConfig(
                         voice_name=self.config.voice.voice_name))),
+            **extra,
         )
 
     # ── run ───────────────────────────────────────────────────────────────────
