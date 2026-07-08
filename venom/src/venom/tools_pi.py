@@ -256,6 +256,25 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
             title = music.now_playing
             return f"Now playing: {title}." if title else "Nothing is playing."
 
+        @reg.tool(
+            description=(
+                "Turns autoplay of similar songs on or off. When on (the "
+                "default), a new similar song plays automatically after each "
+                "one finishes. Use when the user asks to keep the music going, "
+                "play similar songs, or to stop after the current song."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "enable": {"type": "boolean",
+                               "description": "true to keep playing similar songs, false to stop after this one"},
+                },
+                "required": ["enable"],
+            },
+        )
+        def autoplay_similar(enable: bool) -> str:
+            return music.set_autoplay(enable)
+
     @reg.tool(
         description=(
             "Searches the web (Google) for current, real information. Use for "
