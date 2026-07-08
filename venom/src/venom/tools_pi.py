@@ -215,7 +215,7 @@ def parse_reminder_time(minutes_from_now: float | None = None,
 def build_pi_registry(config: VenomConfig, memory: MemoryStore,
                       timers: TimerBoard, music=None,
                       reminders=None, notes=None, lists=None,
-                      location=None, chess=None) -> ToolRegistry:
+                      location=None, chess=None, notifications=None) -> ToolRegistry:
     reg = ToolRegistry(platform="linux")
 
     if music is not None:
@@ -318,6 +318,19 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
         @reg.tool(description="Resigns/ends the current chess game.")
         def resign_chess() -> str:
             return chess.resign()
+
+    if notifications is not None and notifications.enabled:
+        @reg.tool(
+            description=(
+                "Reads out the user's new phone notifications (WhatsApp). Use "
+                "when they ask things like 'any messages?', 'kya notification "
+                "aaya?', 'read my WhatsApp', or 'what did I miss?'. A chime "
+                "already played when each one arrived; this reads them aloud and "
+                "marks them seen."
+            ),
+        )
+        def read_notifications() -> str:
+            return notifications.read_unread()
 
     @reg.tool(
         description=(

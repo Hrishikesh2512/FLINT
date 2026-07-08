@@ -109,12 +109,18 @@ class VoiceOrchestrator:
         from venom.chess_game import ChessGame
 
         self.chess = ChessGame()
+        from venom.notifications import NotificationHub
+
+        self.notifications = NotificationHub(
+            config.phone.ntfy_server, config.phone.notify_topic,
+            is_dnd=lambda: self._dnd)
         self.registry = build_pi_registry(config, self.memory, self.timers,
                                           music=self.music,
                                           reminders=self.reminders,
                                           notes=self.notes, lists=self.lists,
                                           location=self.location,
-                                          chess=self.chess)
+                                          chess=self.chess,
+                                          notifications=self.notifications)
         self._detector: WakeWordDetector | None = None
         # True while we've paused our own music for a live conversation, so we
         # only resume what *we* paused (not a track the user paused by hand).
@@ -151,6 +157,9 @@ class VoiceOrchestrator:
             on_dnd=self._on_dnd_button,
             dnd_code=self.config.buttons.dnd_code,
             wake_code=self.config.buttons.wake_code))
+
+        # Phone notifications (WhatsApp): chime on arrival, read on demand.
+        self.notifications.start()
 
         first_cycle = True
         while True:

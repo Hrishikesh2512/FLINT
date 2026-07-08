@@ -175,6 +175,10 @@ class PhoneConfig:
 
     ntfy_server: str = "https://ntfy.sh"
     ntfy_topic: str = ""
+    # A SEPARATE topic for phone→Pi notifications (WhatsApp etc.), forwarded by a
+    # MacroDroid/Tasker automation on the phone. Off until set. Keep distinct
+    # from ntfy_topic so find-my-phone alerts aren't read back as messages.
+    notify_topic: str = ""
 
     @property
     def ready(self) -> bool:
@@ -353,5 +357,6 @@ def load_config(path: Path | None = None) -> VenomConfig:
         phone=PhoneConfig(
             ntfy_server=str(phone.get("ntfy_server", "https://ntfy.sh")).strip(),
             ntfy_topic=str(phone.get("ntfy_topic", "")).strip(),
+            notify_topic=str(phone.get("notify_topic", "")).strip(),
         ),
     )
