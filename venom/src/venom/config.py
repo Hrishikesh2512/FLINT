@@ -179,6 +179,9 @@ class PhoneConfig:
     # MacroDroid/Tasker automation on the phone. Off until set. Keep distinct
     # from ntfy_topic so find-my-phone alerts aren't read back as messages.
     notify_topic: str = ""
+    # MacroDroid webhook URL that sends a WhatsApp message on the phone. Venom
+    # appends ?contact=&message= . Off until set.
+    send_webhook: str = ""
 
     @property
     def ready(self) -> bool:
@@ -358,5 +361,6 @@ def load_config(path: Path | None = None) -> VenomConfig:
             ntfy_server=str(phone.get("ntfy_server", "https://ntfy.sh")).strip(),
             ntfy_topic=str(phone.get("ntfy_topic", "")).strip(),
             notify_topic=str(phone.get("notify_topic", "")).strip(),
+            send_webhook=str(phone.get("send_webhook", "")).strip(),
         ),
     )
