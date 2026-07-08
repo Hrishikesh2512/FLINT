@@ -106,11 +106,15 @@ class VoiceOrchestrator:
         from venom.music import MusicPlayer
 
         self.music = MusicPlayer()
+        from venom.chess_game import ChessGame
+
+        self.chess = ChessGame()
         self.registry = build_pi_registry(config, self.memory, self.timers,
                                           music=self.music,
                                           reminders=self.reminders,
                                           notes=self.notes, lists=self.lists,
-                                          location=self.location)
+                                          location=self.location,
+                                          chess=self.chess)
         self._detector: WakeWordDetector | None = None
         # True while we've paused our own music for a live conversation, so we
         # only resume what *we* paused (not a track the user paused by hand).

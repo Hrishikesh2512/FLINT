@@ -215,7 +215,7 @@ def parse_reminder_time(minutes_from_now: float | None = None,
 def build_pi_registry(config: VenomConfig, memory: MemoryStore,
                       timers: TimerBoard, music=None,
                       reminders=None, notes=None, lists=None,
-                      location=None) -> ToolRegistry:
+                      location=None, chess=None) -> ToolRegistry:
     reg = ToolRegistry(platform="linux")
 
     if music is not None:
@@ -274,6 +274,50 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
         )
         def autoplay_similar(enable: bool) -> str:
             return music.set_autoplay(enable)
+
+    if chess is not None:
+        @reg.tool(
+            description=(
+                "Starts a new chess game the user plays by voice against you. "
+                "Use when they ask to play chess. The board is tracked for you; "
+                "afterwards call play_chess_move for each of their moves."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "color": {"type": "string",
+                              "description": "The colour the USER plays: 'white' or 'black'. Default white."},
+                    "difficulty": {"type": "integer",
+                                   "description": "Search depth 1 (easy) to 3 (hard). Default 2."},
+                },
+            },
+        )
+        def start_chess_game(color: str = "white", difficulty: int | None = None) -> str:
+            return chess.new_game(color, difficulty)
+
+        @reg.tool(
+            description=(
+                "Applies the user's chess move and returns your reply. Pass the "
+                "move in standard algebraic notation, converting their speech: "
+                "'knight to f3'->'Nf3', 'e4', 'bishop takes e5'->'Bxe5', "
+                "'castle kingside'->'O-O', 'e8 promote to queen'->'e8=Q'. UCI "
+                "like 'e2e4' also works. Illegal moves are rejected with a hint."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "move": {"type": "string",
+                             "description": "The user's move, e.g. 'Nf3', 'e4', 'O-O', 'exd5'"},
+                },
+                "required": ["move"],
+            },
+        )
+        def play_chess_move(move: str) -> str:
+            return chess.human_move(move)
+
+        @reg.tool(description="Resigns/ends the current chess game.")
+        def resign_chess() -> str:
+            return chess.resign()
 
     @reg.tool(
         description=(

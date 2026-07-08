@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "Venom — the Raspberry Pi wearable runtime of FLINT (appliance daemon)"
 requires-python = ">=3.11"
 # The monitoring core is stdlib-only; the voice assistant needs the extras.
-dependencies = []
+dependencies = [
+    "chess>=1.11",  # voice chess: board state, legality, SAN/UCI parsing
+]
 
 [project.optional-dependencies]
 voice = [
