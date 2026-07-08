@@ -332,31 +332,6 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
         def read_notifications() -> str:
             return notifications.read_unread()
 
-    if config.phone.send_webhook:
-        @reg.tool(
-            description=(
-                "Sends a WhatsApp message from the user's phone. Use when he "
-                "says things like 'WhatsApp Amit that I'm on my way' or 'send a "
-                "message to Mom'. ALWAYS confirm the recipient and the exact "
-                "wording with him out loud BEFORE calling this — a wrong send "
-                "can't be undone."
-            ),
-            parameters={
-                "type": "object",
-                "properties": {
-                    "contact": {"type": "string",
-                                "description": "WhatsApp contact name exactly as saved on the phone"},
-                    "message": {"type": "string",
-                                "description": "The message text to send"},
-                },
-                "required": ["contact", "message"],
-            },
-        )
-        def send_whatsapp(contact: str, message: str) -> str:
-            from venom.phone import send_whatsapp as _send
-
-            return _send(config.phone.send_webhook, contact, message)
-
     @reg.tool(
         description=(
             "Searches the web (Google) for current, real information. Use for "

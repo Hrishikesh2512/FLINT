@@ -62,45 +62,6 @@ def test_chime_suppressed_during_dnd(monkeypatch):
     assert played == [True]  # only the non-DND arrival chimed
 
 
-def test_send_whatsapp_builds_encoded_url():
-    import venom.phone as phone
-    captured = {}
-
-    def fake_urlopen(url, timeout=0):
-        captured["url"] = url
-        class R:
-            def read(self): return b""
-        return R()
-
-    orig = phone.urllib.request.urlopen
-    phone.urllib.request.urlopen = fake_urlopen
-    try:
-        out = phone.send_whatsapp("https://trigger.macrodroid.com/x/wa",
-                                  "Amit", "on my way!")
-    finally:
-        phone.urllib.request.urlopen = orig
-    assert out == "Sent to Amit."
-    assert "contact=Amit" in captured["url"]
-    assert "message=on%20my%20way%21" in captured["url"]
-
-
-def test_send_whatsapp_guards():
-    import venom.phone as phone
-    assert "isn't set up" in phone.send_whatsapp("", "Amit", "hi")
-    assert "Who should I message" in phone.send_whatsapp("http://x", "", "hi")
-    assert "What should I say" in phone.send_whatsapp("http://x", "Amit", "")
-
-
-def test_send_tool_registered_only_with_webhook():
-    from venom.config import PhoneConfig
-    off = build_pi_registry(VenomConfig(), _DummyMem(), TimerBoard())
-    assert "send_whatsapp" not in off.names()
-
-    cfg = VenomConfig(phone=PhoneConfig(send_webhook="https://trigger.macrodroid.com/x/wa"))
-    on = build_pi_registry(cfg, _DummyMem(), TimerBoard())
-    assert "send_whatsapp" in on.names()
-
-
 def test_tool_registered_only_when_enabled():
     off = build_pi_registry(VenomConfig(), _DummyMem(), TimerBoard(),
                             notifications=NotificationHub("s", ""))
