@@ -82,8 +82,12 @@ class SpeakerStream:
     has waited MAX_HOLD_MS — short tails still play), then runs gapless.
     """
 
-    PREBUFFER_MS = 120
-    MAX_HOLD_MS = 250
+    # 120/250 sounded fine on an idle box but starved mid-sentence whenever the
+    # Pi got busy (denoise + wake model + network bursts), which the user hears
+    # as stuttered syllables ("u-u-u"). A deeper buffer trades ~0.1s of onset
+    # for speech that never chops once she's started talking.
+    PREBUFFER_MS = 250
+    MAX_HOLD_MS = 450
 
     def __init__(self, pick: DevicePick):
         self._pick = pick
