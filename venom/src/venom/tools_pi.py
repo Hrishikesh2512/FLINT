@@ -628,6 +628,47 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
                 text = text[:4000] + " …(truncated)"
             return "This is the text on the screen right now:\n" + text
 
+    if config.camera.ready:
+        @reg.tool(
+            description=(
+                "Looks through the Raspberry Pi camera and tells the user what "
+                "is in front of it. Use whenever they ask what you see, what's in "
+                "front of them, to identify or read an object, count things, or "
+                "any question about the physical scene — 'what do you see?', "
+                "'kya dikh raha hai?', 'what is this?', 'read this label'. Pass "
+                "their specific question so you look for the right thing."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "question": {"type": "string",
+                                 "description": "What to look for; omit for a general description"},
+                },
+            },
+        )
+        def look_around(question: str = "") -> str:
+            from venom import camera
+            return camera.describe_scene(config, question)
+
+        @reg.tool(
+            description=(
+                "Takes a photo with the Raspberry Pi camera, sends it to the "
+                "user's phone, and describes it aloud. Use when they say 'take a "
+                "photo', 'take a shot', 'click a picture', 'photo le lo', or "
+                "similar."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "caption": {"type": "string",
+                                "description": "Optional caption to send with the photo"},
+                },
+            },
+        )
+        def take_photo(caption: str = "") -> str:
+            from venom import camera
+            return camera.take_photo(config, caption)
+
     if config.phone.ready:
         @reg.tool(
             description=(

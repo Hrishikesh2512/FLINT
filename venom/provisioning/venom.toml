@@ -70,6 +70,15 @@ port    = 8766
 token   = ""              # must match the screen server's --token
 timeout = 5.0             # seconds to wait for the OCR round-trip
 
+# ── Camera (Raspberry Pi camera module) ──────────────────────────────────────
+# Say "what do you see?" and Jarvis grabs a frame off the CSI camera and Gemini
+# describes it (she's blind to images herself). "Take a photo" snaps a shot,
+# sends it to your phone (ntfy), and describes it aloud. Needs the camera enabled
+# in raspi-config and libcamera (rpicam-still) installed — both stock on Pi OS.
+[camera]
+enabled     = true
+photo_topic = ""          # ntfy topic for photo pushes; empty = reuse [phone] ntfy_topic
+
 # ── Brain candidates, lowest priority number wins ────────────────────────────
 # The laptop running the FLINT brain service. Update `host` to your laptop's
 # LAN or Tailscale address. Priority 0 = always preferred when reachable.

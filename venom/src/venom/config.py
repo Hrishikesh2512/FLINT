@@ -157,6 +157,22 @@ class ScreenConfig:
 
 
 @dataclass(frozen=True)
+class CameraConfig:
+    """The Raspberry Pi camera (CSI ribbon module). Captured with libcamera and
+    described by Gemini, since Jarvis herself is blind to images. On by default;
+    if no camera is attached, the capture just fails gracefully and she says so.
+    Photos from `take_photo` are pushed to `photo_topic` (falling back to the
+    find-my-phone ntfy topic) as an image attachment."""
+
+    enabled: bool = True
+    photo_topic: str = ""   # ntfy topic for photo pushes; empty = reuse phone topic
+
+    @property
+    def ready(self) -> bool:
+        return self.enabled
+
+
+@dataclass(frozen=True)
 class ButtonsConfig:
     """Bluetooth camera-shutter remote: two buttons, identified by their evdev
     key code. 0 = not yet mapped — press the button once and read the logged
@@ -205,6 +221,7 @@ class VenomConfig:
     voice: VoiceConfig = field(default_factory=VoiceConfig)
     audio: AudioConfig = field(default_factory=AudioConfig)
     screen: ScreenConfig = field(default_factory=ScreenConfig)
+    camera: CameraConfig = field(default_factory=CameraConfig)
     buttons: ButtonsConfig = field(default_factory=ButtonsConfig)
     phone: PhoneConfig = field(default_factory=PhoneConfig)
 
@@ -286,6 +303,7 @@ def load_config(path: Path | None = None) -> VenomConfig:
     voice = data.get("voice", {})
     audio = data.get("audio", {})
     screen = data.get("screen", {})
+    camera = data.get("camera", {})
     buttons = data.get("buttons", {})
     phone = data.get("phone", {})
     raw_brains = data.get("brain", [])
@@ -349,6 +367,10 @@ def load_config(path: Path | None = None) -> VenomConfig:
             port=int(screen.get("port", 8766)),
             token=str(screen.get("token", "")).strip(),
             timeout=float(screen.get("timeout", 5.0)),
+        ),
+        camera=CameraConfig(
+            enabled=bool(camera.get("enabled", True)),
+            photo_topic=str(camera.get("photo_topic", "")).strip(),
         ),
         buttons=ButtonsConfig(
             dnd_code=int(buttons.get("dnd_code", 0)),
