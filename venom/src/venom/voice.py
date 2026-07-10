@@ -235,14 +235,17 @@ class VoiceOrchestrator:
                 if not await self._wait_for_wake(mic, speaker, warm_task):
                     continue  # warm session dropped before wake — spin a new one
                 self.state = "conversation"
+                # Chime FIRST — the instant "I heard you" — before the slower
+                # bookkeeping (pausing music can take a beat), so waking never
+                # feels laggy even when the rest of the setup takes a moment.
+                chime(speaker)
+                chime(speaker, frequency=1320.0)
                 # The music and the mic share one headset, so anything playing
                 # bleeds into the mic — Gemini never hears a clean end-of-speech
                 # and never replies. Pause our own player for the whole turn;
                 # the finally below resumes it when we go back to sleep.
                 self._duck_music()
                 self._prepare_opening(session)
-                chime(speaker)
-                chime(speaker, frequency=1320.0)
                 session.activate()
                 self._session = session  # a wake press now barges in, not wakes
                 # FIXED (Fix 2): conversation is now live and speaking — freeze
@@ -323,10 +326,22 @@ class VoiceOrchestrator:
                     f"mic delivered pure digital silence for "
                     f"{SILENCE_REBUILD_SECONDS}s (capture path rerouted?)"
                 )
-            if not self._dnd and await asyncio.to_thread(self._detector.feed, frame):
-                log.info("wake word detected")
-                self._drain(mic)
-                return
+            if not self._dnd:
+                # Feed the whole backlog in one predict pass. One-frame-per-
+                # loop (each with its own to_thread hop) drains slower than
+                # frames arrive whenever the CPU is busy, so the wake check
+                # fell seconds behind live audio — the classic "lagging wake
+                # word". Batching catches up to real time every iteration.
+                chunks = [frame]
+                while True:
+                    try:
+                        chunks.append(mic.frames.get_nowait())
+                    except asyncio.QueueEmpty:
+                        break
+                if await asyncio.to_thread(self._detector.feed, b"".join(chunks)):
+                    log.info("wake word detected")
+                    self._drain(mic)
+                    return
 
     # ── physical button handlers (called on the event loop) ──────────────────
     def _on_wake_button(self) -> None:
