@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 import shutil
 import subprocess
+import threading
 import urllib.request
 from pathlib import Path
 
@@ -54,22 +55,35 @@ class CameraError(RuntimeError):
     """Capture failed — no camera, ribbon unplugged, or libcamera missing."""
 
 
+# One camera, one capture at a time. The model sometimes fires look_around
+# twice in a turn; two rpicam-still processes contending for the sensor makes
+# both hang, so the second caller waits for the first instead.
+_capture_lock = threading.Lock()
+
+
 def capture_jpeg(width: int = 1280, height: int = 720,
-                 warmup_ms: int = 800, timeout: float = 15.0) -> bytes:
+                 warmup_ms: int = 500, timeout: float = 30.0) -> bytes:
     """Grab a single JPEG frame from the Pi camera, returned as raw bytes.
 
     `-n` no preview, `-t` warm-up so auto-exposure/white-balance settle before
     the shot, `-o -` writes the JPEG to stdout. Tries each known tool name and
     raises CameraError with the last failure if none work.
+
+    The shot happens mid-conversation, when the voice stack has the CPU pegged
+    and pipeline startup can crawl — so pin a small sensor mode (full-res
+    2592x1944 readout is the slow path), keep warm-up short, and allow a long
+    wall-clock timeout rather than failing a capture that would've landed.
     """
     tool = _resolve_still_tool()
     if not tool:
         raise CameraError("no libcamera stills tool found (rpicam-still)")
     cmd = [tool, "-n", "-t", str(int(warmup_ms)),
+           "--mode", "1296:972:10",
            "--width", str(int(width)), "--height", str(int(height)),
-           "-q", "90", "-o", "-"]
+           "-q", "85", "-o", "-"]
     try:
-        proc = subprocess.run(cmd, capture_output=True, timeout=timeout)
+        with _capture_lock:
+            proc = subprocess.run(cmd, capture_output=True, timeout=timeout)
     except subprocess.TimeoutExpired:
         raise CameraError(f"{tool} timed out — is the camera enabled?") from None
     if proc.returncode == 0 and proc.stdout:
