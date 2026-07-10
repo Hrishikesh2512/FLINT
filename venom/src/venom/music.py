@@ -13,24 +13,41 @@ the run; only a natural finish rolls to the next song.
 
 from __future__ import annotations
 
+import collections
 import json
 import logging
 import socket
 import subprocess
 import threading
+import time
 
 log = logging.getLogger("venom.music")
 
 # Invoke as a module: immune to console-script corruption on flaky flash.
 YTDLP = ["/opt/venom/venv/bin/python", "-m", "yt_dlp"]
+MPV = ["mpv", "--no-video", "--really-quiet", "--volume=70",
+       "--network-timeout=15"]  # a dead CDN link must fail, not hang
 DEFAULT_TIMEOUT = 25  # seconds for search/URL resolution
 MPV_SOCKET = "/run/venom/mpv.sock"
 RADIO_BATCH = 20  # how many similar tracks to pull from the mix at a time
 
 
 class MusicPlayer:
-    def __init__(self, ytdlp: list[str] | None = None, autoplay: bool = True):
+    # A song that ends this quickly never actually played — a 403 stream URL,
+    # a missing audio sink, or an mpv crash. Distinguishing it from a natural
+    # finish is what keeps autoplay from chaining dead track after dead track
+    # while the user hears nothing.
+    MIN_PLAY_SECONDS = 3.0
+    # How long play() waits before vouching that the song is really playing.
+    SPAWN_CHECK_SECONDS = 1.2
+    # Consecutive instant deaths before we stop trying — something systemic
+    # (no audio device, YouTube blocking us) that retrying won't fix.
+    MAX_FAILS = 3
+
+    def __init__(self, ytdlp: list[str] | None = None, autoplay: bool = True,
+                 mpv: list[str] | None = None):
         self._ytdlp = list(ytdlp or YTDLP)
+        self._mpv = list(mpv or MPV)
         self._proc: subprocess.Popen | None = None
         self._title = ""
         self._lock = threading.Lock()
@@ -41,6 +58,9 @@ class MusicPlayer:
         self._seed = ""              # video id the radio mix is built from
         self._queue: list[dict] = []  # upcoming similar tracks: {id, title}
         self._played: set[str] = set()  # ids already played this run (no repeats)
+        self._fail_streak = 0        # consecutive instant-death spawns
+        self._skipping = False       # a user skip: terminate ≠ failure
+        self._stderr_tail: collections.deque[str] = collections.deque(maxlen=5)
 
     # ── queries ───────────────────────────────────────────────────────────────
     @property
@@ -86,7 +106,19 @@ class MusicPlayer:
             self._seed = video_id
             self._queue = []
             self._played = {video_id}
-        self._spawn(title, url, self._gen)
+            self._fail_streak = 0  # a fresh ask gets a fresh chance
+        proc = self._spawn(title, url, self._gen)
+        if proc is None:
+            return "Something interrupted that — try again."
+        # Don't vouch for a song that died on arrival (bad stream URL, no
+        # audio device): wait a beat and check mpv is actually still playing.
+        time.sleep(self.SPAWN_CHECK_SECONDS)
+        if proc.poll() is not None:
+            err = "; ".join(self._stderr_tail)
+            log.warning("mpv died immediately (exit %s): %s",
+                        proc.returncode, err[:200])
+            return (f"I found '{title}' but playback failed on the device — "
+                    "the audio output may be down.")
         return f"Playing {title}."
 
     def stop(self) -> str:
@@ -108,36 +140,84 @@ class MusicPlayer:
         return ("I'll keep the music going with similar songs."
                 if on else "I'll stop after the current song.")
 
+    def skip(self) -> str:
+        """Jump to the next similar track — a user skip, not a failure."""
+        with self._lock:
+            proc = self._proc
+            if proc is None or proc.poll() is not None:
+                return "Nothing is playing."
+            if not self._autoplay or not self._seed:
+                return ("Autoplay is off, so there's nothing queued after "
+                        "this — say 'play something' instead.")
+            self._skipping = True  # the monitor treats this end as natural
+        proc.terminate()
+        return "Skipping — next song coming up."
+
     # ── spawning + the finish monitor ────────────────────────────────────────
-    def _spawn(self, title: str, url: str, gen: int) -> bool:
+    def _spawn(self, title: str, url: str, gen: int) -> subprocess.Popen | None:
         """Start mpv on `url` and a thread that reacts when it ends.
 
-        Returns False if the run was superseded (user stopped / played anew)
+        Returns None if the run was superseded (user stopped / played anew)
         between resolving `url` and here.
         """
         with self._lock:
             if gen != self._gen:
-                return False
+                return None
             proc = subprocess.Popen(
-                ["mpv", "--no-video", "--really-quiet", "--volume=70",
-                 "--network-timeout=15",  # a dead CDN link must fail, not hang
-                 f"--input-ipc-server={MPV_SOCKET}", url],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                [*self._mpv, f"--input-ipc-server={MPV_SOCKET}", url],
+                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
             )
             self._proc = proc
             self._title = title
+            self._stderr_tail = collections.deque(maxlen=5)
         log.info("playing: %s", title)
-        threading.Thread(target=self._monitor, args=(proc, gen),
+        threading.Thread(target=self._drain_stderr, args=(proc,),
                          daemon=True).start()
-        return True
+        threading.Thread(target=self._monitor,
+                         args=(proc, gen, time.monotonic()),
+                         daemon=True).start()
+        return proc
 
-    def _monitor(self, proc: subprocess.Popen, gen: int) -> None:
+    def _drain_stderr(self, proc: subprocess.Popen) -> None:
+        """Keep mpv's last few stderr lines so a failure can say *why*.
+        Also stops a chatty mpv from blocking on a full pipe."""
+        try:
+            for line in proc.stderr:
+                line = line.strip()
+                if line:
+                    self._stderr_tail.append(line)
+        except (OSError, ValueError):
+            pass
+
+    def _monitor(self, proc: subprocess.Popen, gen: int, started: float) -> None:
         proc.wait()  # blocks until the song ends — naturally or on terminate()
+        lifetime = time.monotonic() - started
         with self._lock:
             superseded = gen != self._gen  # stop()/play() bumped the generation
             autoplay = self._autoplay
             seed = self._seed
-        if superseded or not autoplay:
+            skipped, self._skipping = self._skipping, False
+        if superseded:
+            return
+        # An instant death is a broken stream or a dead audio path, not a
+        # finished song (even exit 0: an empty stream "finishes" instantly).
+        # Autoplaying "the next one" would just chain failures while the user
+        # hears nothing — count it, and stop after a few.
+        if not skipped and lifetime < self.MIN_PLAY_SECONDS:
+            with self._lock:
+                self._fail_streak += 1
+                streak = self._fail_streak
+            log.warning("song died after %.1fs (exit %s, failure %d/%d): %s",
+                        lifetime, proc.returncode, streak, self.MAX_FAILS,
+                        "; ".join(self._stderr_tail)[:200])
+            if streak >= self.MAX_FAILS:
+                log.error("music: %d consecutive playback failures — "
+                          "giving up until the next request", streak)
+                return
+        else:
+            with self._lock:
+                self._fail_streak = 0
+        if not autoplay:
             return
         self._autoplay_next(gen, seed)
 

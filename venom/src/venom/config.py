@@ -294,9 +294,10 @@ def load_config(path: Path | None = None) -> VenomConfig:
     except (OSError, tomllib.TOMLDecodeError):
         pass
 
-    if not data:
-        return VenomConfig()
-
+    # No early-return on empty data: even with no TOML at all, the env
+    # (GEMINI_API_KEY, VENOM_WEB_TOKEN) and the provisioned token file must
+    # still apply — a bare VenomConfig() would boot the console wide open
+    # and voice disabled despite a perfectly good key in the environment.
     venom = data.get("venom", {})
     internet = data.get("internet", {})
     gemini = data.get("gemini", {})

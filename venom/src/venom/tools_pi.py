@@ -9,6 +9,7 @@ Venom chimes through the headset and announces it on the next exchange.
 from __future__ import annotations
 
 import logging
+import os
 import platform
 import subprocess
 import time
@@ -147,7 +148,7 @@ def build_briefing(memory: MemoryStore, timers: TimerBoard,
     return "\n".join(parts)
 
 
-# ── volume (ALSA) ─────────────────────────────────────────────────────────────
+# ── volume ────────────────────────────────────────────────────────────────────
 def set_alsa_volume(percent: int, card_index: int | None = None) -> str:
     percent = max(0, min(100, int(percent)))
     if platform.system() != "Linux":
@@ -167,6 +168,90 @@ def set_alsa_volume(percent: int, card_index: int | None = None) -> str:
     if result.returncode != 0:
         return f"Could not set volume: {result.stderr.strip()[:100]}"
     return f"Volume set to {percent}%."
+
+
+def set_system_volume(percent: int) -> str:
+    """Absolute volume on PipeWire's default sink — the node every stream
+    (voice, music, chimes) actually plays through. amixer talks to a raw ALSA
+    card, which on this box is behind PipeWire and often the wrong one; wpctl
+    moves the volume the user actually hears. ALSA stays as the fallback for
+    a PipeWire-less dev box."""
+    percent = max(0, min(100, int(percent)))
+    if platform.system() != "Linux":
+        return f"Volume set to {percent}% (simulated — not on Linux)."
+    try:
+        result = subprocess.run(
+            ["wpctl", "set-volume", "-l", "1.0", "@DEFAULT_AUDIO_SINK@",
+             f"{percent / 100:.2f}"],
+            capture_output=True, text=True, timeout=10)
+        if result.returncode == 0:
+            return f"Volume set to {percent}%."
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return set_alsa_volume(percent)
+
+
+def change_system_volume(delta: int) -> str:
+    """Relative volume ('thoda tez karo') on the default sink, ±percent."""
+    delta = max(-100, min(100, int(delta)))
+    if delta == 0:
+        return "Volume unchanged."
+    if platform.system() != "Linux":
+        return f"Volume nudged by {delta:+d}% (simulated — not on Linux)."
+    sign = "+" if delta > 0 else "-"
+    try:
+        result = subprocess.run(
+            ["wpctl", "set-volume", "-l", "1.0", "@DEFAULT_AUDIO_SINK@",
+             f"{abs(delta)}%{sign}"],
+            capture_output=True, text=True, timeout=10)
+        if result.returncode == 0:
+            return ("Volume up a bit." if delta > 0 else "Volume down a bit.")
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return f"Could not change the volume."
+
+
+# ── device health ─────────────────────────────────────────────────────────────
+def _read_file(path: str) -> str:
+    try:
+        return Path(path).read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
+def device_vitals() -> str:
+    """A spoken-style health summary of the Pi — temperature, memory, disk,
+    uptime — from /proc and /sys. Anything unreadable is simply omitted, so
+    this works (as far as it can) on any box."""
+    parts: list[str] = []
+
+    temp = _read_file("/sys/class/thermal/thermal_zone0/temp").strip()
+    if temp.isdigit():
+        celsius = int(temp) / 1000
+        heat = " — running hot!" if celsius >= 75 else ""
+        parts.append(f"temperature {celsius:.0f}°C{heat}")
+
+    mem = {line.split(":")[0]: int(line.split()[1])
+           for line in _read_file("/proc/meminfo").splitlines()[:5]
+           if ":" in line}
+    if "MemTotal" in mem and "MemAvailable" in mem and mem["MemTotal"]:
+        used = 100 * (1 - mem["MemAvailable"] / mem["MemTotal"])
+        parts.append(f"memory {used:.0f}% used")
+
+    try:
+        st = os.statvfs("/")  # Linux-only; absent on dev boxes
+        parts.append(f"disk {100 * (1 - st.f_bavail / st.f_blocks):.0f}% full")
+    except (OSError, AttributeError):
+        pass
+
+    up = _read_file("/proc/uptime").split()
+    if up:
+        secs = int(float(up[0]))
+        parts.append(f"up {secs // 3600}h {secs % 3600 // 60}m")
+
+    if not parts:
+        return "I couldn't read the device's health right now."
+    return "Device health: " + ", ".join(parts) + "."
 
 
 # ── reminder time parsing ──────────────────────────────────────────────────
@@ -255,6 +340,16 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
         def now_playing() -> str:
             title = music.now_playing
             return f"Now playing: {title}." if title else "Nothing is playing."
+
+        @reg.tool(
+            description=(
+                "Skips the current song and plays the next similar one. Use "
+                "when the user says 'next', 'skip', 'agla gaana', 'change the "
+                "song', or clearly dislikes what's playing."
+            ),
+        )
+        def next_song() -> str:
+            return music.skip()
 
         @reg.tool(
             description=(
@@ -417,7 +512,7 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
                          for label, remaining in pending)
 
     @reg.tool(
-        description="Sets the headset volume.",
+        description="Sets the headset volume to an absolute level.",
         parameters={
             "type": "object",
             "properties": {
@@ -427,7 +522,34 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
         },
     )
     def set_volume(percent: int) -> str:
-        return set_alsa_volume(percent)
+        return set_system_volume(percent)
+
+    @reg.tool(
+        description=(
+            "Turns the volume up or down by a relative step. Use for 'louder', "
+            "'volume badhao', 'thoda kam karo', 'turn it down a bit'."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "delta": {"type": "integer",
+                          "description": "Signed percent change, e.g. 10 or -10"},
+            },
+            "required": ["delta"],
+        },
+    )
+    def change_volume(delta: int) -> str:
+        return change_system_volume(delta)
+
+    @reg.tool(
+        description=(
+            "Reports the wearable device's own health — temperature, memory, "
+            "disk, uptime. Use when the user asks how the device is doing, if "
+            "it's hot, or why it feels slow."
+        ),
+    )
+    def device_status() -> str:
+        return device_vitals()
 
     @reg.tool(
         description=(

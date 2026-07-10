@@ -125,6 +125,7 @@ build <span id=ver>?</span></div>
 <button onclick="music('play',song.value)">&#9654; PLAY</button>
 <button onclick="music('pause')">&#10074;&#10074;</button>
 <button onclick="music('resume')">&#9654;</button>
+<button onclick="music('next')">&#9654;&#9654; NEXT</button>
 <button onclick="music('stop')">&#9632; STOP</button></div>
 <div class=v><span class=lbl>vol</span><div class=meter><i id=volbar></i></div>
 <button onclick="vol(-10)">&minus;</button><button onclick="vol(10)">+</button></div></div>
@@ -395,7 +396,8 @@ class WebConsole:
             return "not ready"
         acts = {"play": lambda: orch.music.play(query), "stop": orch.music.stop,
                 "pause": lambda: orch.music.set_paused(True),
-                "resume": lambda: orch.music.set_paused(False)}
+                "resume": lambda: orch.music.set_paused(False),
+                "next": orch.music.skip}
         result = acts.get(action, lambda: "unknown action")()
         orch.transcript.append(("system", result))
         return result

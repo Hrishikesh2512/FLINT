@@ -166,16 +166,40 @@ class VoiceOrchestrator:
         self.notifications.start()
 
         first_cycle = True
+        died_streak = 0
         while True:
+            started = asyncio.get_event_loop().time()
             try:
                 await self._audio_lifecycle(first_cycle)
             except StreamsDied as exc:
                 log.warning("audio lifecycle ended: %s — rebuilding", exc)
+                # A lifecycle that survived a while, then died, is the normal
+                # headset-drop dance. One that dies within seconds, over and
+                # over, means the audio path is gone (earphone unplugged /
+                # fried) and Venom is deaf AND mute — the one failure it
+                # cannot announce through the headset. Tell the phone instead.
+                ran_for = asyncio.get_event_loop().time() - started
+                died_streak = died_streak + 1 if ran_for < 120 else 1
+                if died_streak == 5:
+                    self._alert_audio_dead(str(exc))
             except Exception:
                 log.exception("audio lifecycle crashed — rebuilding")
             first_cycle = False
             self.state = "reconnecting"
             await asyncio.sleep(3)
+
+    def _alert_audio_dead(self, reason: str) -> None:
+        """Push a one-time ntfy alert to the phone: the audio path is dead and
+        the user would otherwise only notice Venom by her silence."""
+        topic = self.config.phone.ntfy_topic
+        if not topic:
+            return
+        from venom.phone import push_alert
+
+        asyncio.get_event_loop().run_in_executor(
+            None, push_alert, self.config.phone.ntfy_server, topic,
+            f"Audio keeps failing ({reason}). Check the earphone — unplug "
+            f"and replug it, or reboot me.", "Venom lost its voice")
 
     # ── one full audio lifecycle: headset → streams → listen loop ────────────
     async def _audio_lifecycle(self, first_cycle: bool) -> None:
@@ -210,7 +234,15 @@ class VoiceOrchestrator:
 
         # Streams only make sense once the wake model can consume them.
         self.state = "loading wake model"
-        await self._detector_ready
+        try:
+            await self._detector_ready
+        except Exception as exc:
+            # Awaiting a failed task re-raises forever — without a fresh load
+            # task a one-off model-load hiccup would brick voice until the
+            # process restarts. Re-arm the load and let the lifecycle retry.
+            self._detector_ready = asyncio.create_task(
+                asyncio.to_thread(self._detector.load))
+            raise StreamsDied(f"wake model failed to load: {exc}") from exc
 
         pick = current_devices(bluetooth=self.config.audio.use_bluetooth)
         log.info("audio devices — mic: %s, speaker: %s", pick.input_name, pick.output_name)
@@ -325,24 +357,27 @@ class VoiceOrchestrator:
                         f"no mic audio for {STARVATION_SECONDS}s (headset gone?)"
                     ) from None
                 continue
-            if silence.update(frame):
+            # Feed the whole backlog in one pass. One-frame-per-loop (each
+            # with its own to_thread hop) drains slower than frames arrive
+            # whenever the CPU is busy, so the wake check fell seconds behind
+            # live audio — the classic "lagging wake word". Batching catches
+            # up to real time every iteration; the silence tracker must see
+            # the same batch, or it undercounts dead air by whatever the
+            # backlog swallowed.
+            chunks = [frame]
+            while True:
+                try:
+                    chunks.append(mic.frames.get_nowait())
+                except asyncio.QueueEmpty:
+                    break
+            batch = b"".join(chunks)
+            if silence.update(batch):
                 raise StreamsDied(
                     f"mic delivered pure digital silence for "
                     f"{SILENCE_REBUILD_SECONDS}s (capture path rerouted?)"
                 )
             if not self._dnd:
-                # Feed the whole backlog in one predict pass. One-frame-per-
-                # loop (each with its own to_thread hop) drains slower than
-                # frames arrive whenever the CPU is busy, so the wake check
-                # fell seconds behind live audio — the classic "lagging wake
-                # word". Batching catches up to real time every iteration.
-                chunks = [frame]
-                while True:
-                    try:
-                        chunks.append(mic.frames.get_nowait())
-                    except asyncio.QueueEmpty:
-                        break
-                if await asyncio.to_thread(self._detector.feed, b"".join(chunks)):
+                if await asyncio.to_thread(self._detector.feed, batch):
                     log.info("wake word detected")
                     self._drain(mic)
                     return
@@ -436,6 +471,14 @@ class VoiceOrchestrator:
         if wake_task in done:
             exc = wake_task.exception()
             if exc is not None:
+                # The lifecycle is being torn down — the pre-warmed session
+                # must die with it, or its open socket leaks into the next
+                # cycle (one orphan per rebuild, forever, on a dead headset).
+                warm_task.cancel()
+                try:
+                    await warm_task
+                except BaseException:
+                    pass
                 raise exc  # StreamsDied → rebuild the whole audio lifecycle
             self._prewarm_fails = 0  # a warm session survived to wake — healthy
             return True

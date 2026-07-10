@@ -15,6 +15,17 @@ def test_defaults_when_file_missing(tmp_path):
     assert config.internet_host == "1.1.1.1"
 
 
+def test_env_key_and_token_apply_without_any_config_file(tmp_path, monkeypatch):
+    # A Pi with no venom.toml at all must still pick up the environment:
+    # the old empty-file early-return booted voice disabled (key ignored)
+    # and the web console wide open (token ignored).
+    monkeypatch.setenv("GEMINI_API_KEY", "env-key")
+    monkeypatch.setenv("VENOM_WEB_TOKEN", "env-pin")
+    config = load_config(tmp_path / "nope.toml")
+    assert config.gemini_api_key == "env-key"
+    assert config.web_token == "env-pin"
+
+
 def test_full_config_round_trip(tmp_path):
     path = tmp_path / "venom.toml"
     path.write_text(

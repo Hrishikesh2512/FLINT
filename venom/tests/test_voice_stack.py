@@ -167,6 +167,26 @@ def test_fetch_weather_unknown_city():
 
 
 # ── volume (non-Linux simulation path) ────────────────────────────────────────
+def test_system_volume_simulates_off_linux():
+    from venom.tools_pi import change_system_volume, set_system_volume
+
+    import platform
+    if platform.system() == "Linux":
+        pytest.skip("simulation paths are for non-Linux dev boxes")
+    assert "150" not in set_system_volume(150)   # clamped to 100
+    assert "100" in set_system_volume(150)
+    assert "+10" in change_system_volume(10)
+    assert "-10" in change_system_volume(-10)
+    assert change_system_volume(0) == "Volume unchanged."
+
+
+def test_device_vitals_never_crashes():
+    from venom.tools_pi import device_vitals
+
+    out = device_vitals()
+    assert isinstance(out, str) and out  # graceful on any box
+
+
 def test_set_volume_clamps_and_simulates_off_linux():
     assert "100%" in set_alsa_volume(250)
     assert "0%" in set_alsa_volume(-5)
@@ -186,7 +206,8 @@ def test_pi_registry_toolset(pi_setup):
     registry, _, _ = pi_setup
     assert set(registry.names()) == {
         "web_search", "weather_report", "current_time", "set_timer",
-        "check_timers", "set_volume", "save_memory", "translation_mode",
+        "check_timers", "set_volume", "change_volume", "device_status",
+        "save_memory", "translation_mode",
         "end_conversation", "power_off", "look_around", "take_photo",
     }
 
@@ -216,13 +237,18 @@ def test_music_tools_registered_and_dispatch(tmp_path):
             self.now_playing = ""
             return "Music stopped."
 
+        def skip(self):
+            return "Skipping — next song coming up."
+
     config = VenomConfig(gemini_api_key="k", memory_path=tmp_path / "m.json")
     music = FakeMusic()
     registry = build_pi_registry(config, MemoryStore(config.memory_path),
                                  TimerBoard(), music=music)
-    assert {"play_music", "stop_music", "now_playing"} <= set(registry.names())
+    assert {"play_music", "stop_music", "now_playing",
+            "next_song"} <= set(registry.names())
     assert registry.dispatch("play_music", {"query": "Kesariya"}) == "Playing Kesariya."
     assert "Kesariya" in registry.dispatch("now_playing", {})
+    assert "next song" in registry.dispatch("next_song", {})
     assert registry.dispatch("stop_music", {}) == "Music stopped."
     assert registry.dispatch("now_playing", {}) == "Nothing is playing."
 
@@ -274,6 +300,12 @@ def test_button_routing():
     # Unknown codes (and unmapped-when-zero) fall through to None for logging.
     assert route_key(999, dnd_code=115, wake_code=114) is None
     assert route_key(115, dnd_code=0, wake_code=0) is None
+
+
+def test_push_alert_no_topic_is_safe():
+    from venom.phone import push_alert
+
+    assert push_alert("https://ntfy.sh", "", "audio died") is False
 
 
 def test_find_phone_no_topic_is_safe():

@@ -106,6 +106,10 @@ async def watch_buttons(*, on_wake=None, on_dnd=None,
             log.info("buttons detached: %s", device.name)
         finally:
             watched.pop(device.path, None)
+            try:  # release the fd — the rescan loop reopens it if it's back
+                device.close()
+            except OSError:
+                pass
 
     while True:
         for device in await asyncio.to_thread(find_key_devices):
