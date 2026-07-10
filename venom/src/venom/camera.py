@@ -17,8 +17,10 @@ their pocket instantly. Nothing is archived on the Pi.
 from __future__ import annotations
 
 import logging
+import shutil
 import subprocess
 import urllib.request
+from pathlib import Path
 
 from flint_core.llm.providers import GeminiProvider
 from venom.config import VenomConfig
@@ -28,6 +30,24 @@ log = logging.getLogger("venom.camera")
 # The libcamera stills tool, newest name first. Raspberry Pi OS renamed
 # `libcamera-still` to `rpicam-still` in late 2023; support both.
 _STILL_TOOLS = ("rpicam-still", "libcamera-still")
+# systemd runs venom.service with a minimal env, so a bare name may not resolve
+# even when the binary is installed — search these dirs explicitly too.
+_BIN_DIRS = ("/usr/bin", "/usr/local/bin", "/bin")
+
+
+def _resolve_still_tool() -> str | None:
+    """Absolute path to the first available stills binary, or None. Checks PATH
+    first (dev/laptop) then the known Pi install dirs (the service's stripped
+    PATH can miss /usr/bin at exec time)."""
+    for name in _STILL_TOOLS:
+        found = shutil.which(name)
+        if found:
+            return found
+        for d in _BIN_DIRS:
+            cand = Path(d) / name
+            if cand.exists():
+                return str(cand)
+    return None
 
 
 class CameraError(RuntimeError):
@@ -42,23 +62,21 @@ def capture_jpeg(width: int = 1280, height: int = 720,
     the shot, `-o -` writes the JPEG to stdout. Tries each known tool name and
     raises CameraError with the last failure if none work.
     """
-    last_err = ""
-    for tool in _STILL_TOOLS:
-        cmd = [tool, "-n", "-t", str(int(warmup_ms)),
-               "--width", str(int(width)), "--height", str(int(height)),
-               "-q", "90", "-o", "-"]
-        try:
-            proc = subprocess.run(cmd, capture_output=True, timeout=timeout)
-        except FileNotFoundError:
-            last_err = f"{tool} not installed"
-            continue
-        except subprocess.TimeoutExpired:
-            raise CameraError(f"{tool} timed out — is the camera enabled?") from None
-        if proc.returncode == 0 and proc.stdout:
-            return proc.stdout
-        last_err = (proc.stderr or b"").decode("utf-8", "replace").strip()[:200] \
-            or f"{tool} exited {proc.returncode}"
-    raise CameraError(last_err or "no libcamera stills tool found")
+    tool = _resolve_still_tool()
+    if not tool:
+        raise CameraError("no libcamera stills tool found (rpicam-still)")
+    cmd = [tool, "-n", "-t", str(int(warmup_ms)),
+           "--width", str(int(width)), "--height", str(int(height)),
+           "-q", "90", "-o", "-"]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        raise CameraError(f"{tool} timed out — is the camera enabled?") from None
+    if proc.returncode == 0 and proc.stdout:
+        return proc.stdout
+    err = (proc.stderr or b"").decode("utf-8", "replace").strip()[:200] \
+        or f"{tool} exited {proc.returncode}"
+    raise CameraError(err)
 
 
 def describe_scene(config: VenomConfig, question: str = "") -> str:
