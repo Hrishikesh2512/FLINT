@@ -187,7 +187,7 @@ def test_pi_registry_toolset(pi_setup):
     assert set(registry.names()) == {
         "web_search", "weather_report", "current_time", "set_timer",
         "check_timers", "set_volume", "save_memory", "translation_mode",
-        "end_conversation", "power_off",
+        "end_conversation", "power_off", "look_around", "take_photo",
     }
 
 

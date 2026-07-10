@@ -306,13 +306,22 @@ class LiveSession:
         if voice.affective_dialog:
             extra["enable_affective_dialog"] = True
 
+        # End-of-speech tuning: the spoken turn-around is dominated by how long
+        # the server VAD waits before deciding the user is done. HIGH
+        # sensitivity + a short silence window starts the reply the moment he
+        # stops, which is what makes voice feel as fast as the console (text
+        # turns skip VAD entirely — that's why typing always felt instant).
+        realtime_config = types.RealtimeInputConfig(
+            automatic_activity_detection=types.AutomaticActivityDetection(
+                end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_HIGH,
+                silence_duration_ms=voice.endpoint_silence_ms,
+            ))
+
         return types.LiveConnectConfig(
             response_modalities=["AUDIO"],
             output_audio_transcription={},
             input_audio_transcription={},
-            # Turn-taking left on Gemini's own defaults — the original, fast
-            # behaviour. Custom end-of-speech/silence tuning was slower in
-            # practice, so it's gone.
+            realtime_input_config=realtime_config,
             thinking_config=thinking_config,
             proactivity=proactivity,
             temperature=voice.temperature,
