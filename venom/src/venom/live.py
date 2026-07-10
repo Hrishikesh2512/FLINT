@@ -186,6 +186,14 @@ PERSONA = (
     "turn it is. If the tool says a move is illegal, tell him and ask again — "
     "do not proceed. When he's done, call resign_chess.\n\n"
 
+    "MUSIC CONTROL: to play, pause, resume, skip, or stop music, or change the "
+    "volume, ALWAYS call the matching tool (play_music, pause_music, "
+    "resume_music, next_song, stop_music, change_volume) — NEVER just say you "
+    "did it without calling the tool; nothing happens unless the tool runs. "
+    "And say each confirmation ONCE: if you already told him while the tool "
+    "ran ('skip kar diya'), do not repeat it after the tool result comes back "
+    "— add only new information (like what's playing now) or stay quiet.\n\n"
+
     "NOTIFICATIONS: A soft rising two-note chime (C-to-G) means a new WhatsApp "
     "message just arrived on his phone. Do NOT read it automatically. When he "
     "asks — 'any messages?', 'kya aaya?', 'read my WhatsApp', 'that sound?' — "
@@ -210,6 +218,20 @@ def tone_for_time(now: float | None = None) -> str:
                 "(loving, not romantic); he's winding down.")
     return ("Late night — soft, low and gentle, genuinely loving and calm; "
             "he may be tired, so don't be loud or hyper.")
+
+
+def collapse_doubled(text: str) -> str:
+    """'Skip kar diya.Skip kar diya.' -> 'Skip kar diya.'
+
+    When the model speaks a confirmation, receives the tool result, and then
+    repeats itself, the turn's transcript arrives as the same sentence twice
+    back-to-back. Collapse an exact doubling so the conversation journal (and
+    the prompts it feeds) stay clean; anything else passes through untouched."""
+    t = text.strip()
+    half, rem = divmod(len(t), 2)
+    if rem == 0 and half and t[:half].strip() == t[half:].strip():
+        return t[:half].strip()
+    return t
 
 
 def is_normal_closure(exc: BaseException) -> bool:
@@ -491,9 +513,10 @@ class LiveSession:
                         if getattr(content, "turn_complete", None):
                             self._suppress_output = False  # turn done → resume
                             self._record("you", self._turn_in)
-                            if self._turn_out:
-                                log.info("jarvis: %s", self._turn_out.strip())
-                            self._record("jarvis", self._turn_out)
+                            said = collapse_doubled(self._turn_out)
+                            if said:
+                                log.info("jarvis: %s", said)
+                            self._record("jarvis", said)
                             self._turn_in = self._turn_out = ""
 
                     if response.tool_call:

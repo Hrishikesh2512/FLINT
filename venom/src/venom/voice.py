@@ -414,11 +414,10 @@ class VoiceOrchestrator:
 
     def _duck_music(self) -> None:
         """Pause our own music while a conversation is live so the shared-headset
-        mic hears you cleanly. No-op if nothing is playing or the user already
-        paused it (so we don't 'resume' a track they stopped by hand)."""
+        mic hears you cleanly. The player tracks whose pause it was, so an
+        explicit user pause during the conversation is never resumed over."""
         try:
-            if self.music.playing and not self.music.paused:
-                self.music.set_paused(True)
+            if self.music.duck():
                 self._music_ducked = True
                 log.info("paused music for the conversation")
         except Exception:
@@ -430,8 +429,10 @@ class VoiceOrchestrator:
             return
         self._music_ducked = False
         try:
-            self.music.set_paused(False)
-            log.info("resumed music")
+            if self.music.unduck():
+                log.info("resumed music")
+            else:
+                log.info("music left paused (user's explicit pause wins)")
         except Exception:
             log.exception("could not resume music after the conversation")
 

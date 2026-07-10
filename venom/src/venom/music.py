@@ -61,6 +61,12 @@ class MusicPlayer:
         self._fail_streak = 0        # consecutive instant-death spawns
         self._skipping = False       # a user skip: terminate ≠ failure
         self._stderr_tail: collections.deque[str] = collections.deque(maxlen=5)
+        # Pause bookkeeping. A conversation "ducks" (pauses) the music so the
+        # shared-headset mic stays clean, then resumes it on the way out — but
+        # an explicit user pause/stop during that window must win over the
+        # resume, or "pause the music" un-pauses itself seconds later.
+        self._user_paused = False    # the user's explicit intent
+        self._ducked = False         # we paused it for a conversation
 
     # ── queries ───────────────────────────────────────────────────────────────
     @property
@@ -107,6 +113,7 @@ class MusicPlayer:
             self._queue = []
             self._played = {video_id}
             self._fail_streak = 0  # a fresh ask gets a fresh chance
+            self._user_paused = self._ducked = False
         proc = self._spawn(title, url, self._gen)
         if proc is None:
             return "Something interrupted that — try again."
@@ -125,6 +132,7 @@ class MusicPlayer:
         with self._lock:
             proc, self._proc, self._title = self._proc, None, ""
             self._gen += 1  # invalidate any monitor so it won't autoplay
+            self._user_paused = self._ducked = False
         if proc is not None and proc.poll() is None:
             proc.terminate()
             try:
@@ -150,6 +158,7 @@ class MusicPlayer:
                 return ("Autoplay is off, so there's nothing queued after "
                         "this — say 'play something' instead.")
             self._skipping = True  # the monitor treats this end as natural
+            self._user_paused = False  # skipping means they want it playing
         proc.terminate()
         return "Skipping — next song coming up."
 
@@ -307,10 +316,42 @@ class MusicPlayer:
             return "Nothing is playing."
         self._ipc(["cycle", "pause"])
         state = self._ipc(["get_property", "pause"]).get("data")
+        self._user_paused = bool(state)
+        self._ducked = False
         return "Paused." if state else "Resumed."
 
     def set_paused(self, paused: bool) -> str:
+        """An explicit user pause/resume (voice tool, console button). This is
+        intent — it out-ranks the conversation duck, so unduck() won't undo it."""
         if not self.playing:
             return "Nothing is playing."
-        self._ipc(["set_property", "pause", paused])
+        self._user_paused = bool(paused)
+        self._ducked = False
+        self._ipc(["set_property", "pause", bool(paused)])
+        # Read back instead of assuming: with the IPC socket dead this used to
+        # cheerfully answer "Paused." while the song played on.
+        state = self._ipc(["get_property", "pause"]).get("data")
+        if state is None or bool(state) != bool(paused):
+            return ("I couldn't control the player — try stopping and "
+                    "playing it again.")
         return "Paused." if paused else "Resumed."
+
+    # ── conversation ducking (the voice loop, never the user) ───────────────
+    def duck(self) -> bool:
+        """A conversation is starting: pause our own audible playback so the
+        shared-headset mic hears the user cleanly. True if we paused it."""
+        if not self.playing or self.paused:
+            return False
+        self._ipc(["set_property", "pause", True])
+        self._ducked = True
+        return True
+
+    def unduck(self) -> bool:
+        """Conversation over: resume ONLY what duck() paused — and not if the
+        user explicitly paused or stopped in the meantime (their word wins).
+        True if playback was actually resumed."""
+        ducked, self._ducked = self._ducked, False
+        if not ducked or self._user_paused or not self.playing:
+            return False
+        self._ipc(["set_property", "pause", False])
+        return True

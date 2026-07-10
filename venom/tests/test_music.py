@@ -7,7 +7,16 @@ the actual spawn/monitor paths; no network, no audio hardware.
 import sys
 import time
 
+from venom.live import collapse_doubled
 from venom.music import MusicPlayer
+
+
+def test_collapse_doubled_transcript():
+    line = "Skip kar diya maine. Aur kya chahiye?"
+    assert collapse_doubled(line + line) == line
+    assert collapse_doubled(line) == line
+    assert collapse_doubled("haan haan") == "haan haan"  # not an exact doubling
+    assert collapse_doubled("") == ""
 
 # A yt-dlp stand-in: prints title / id / url like the real search does.
 FAKE_YTDLP = [sys.executable, "-c",
@@ -130,6 +139,66 @@ def test_skip_terminates_and_flags_intent():
     assert "next song" in player.skip()
     assert proc.terminated
     assert player._skipping is True
+
+
+def make_paused_player(playing=True, paused=False):
+    """A player with a fake mpv IPC that remembers its pause state."""
+    player = MusicPlayer(ytdlp=FAKE_YTDLP)
+    if playing:
+        player._proc = FakeProc(alive=True)
+    state = {"pause": paused}
+
+    def fake_ipc(command):
+        if command[0] == "set_property" and command[1] == "pause":
+            state["pause"] = bool(command[2])
+            return {"error": "success"}
+        if command[0] == "get_property" and command[1] == "pause":
+            return {"data": state["pause"], "error": "success"}
+        return {}
+
+    player._ipc = fake_ipc
+    return player, state
+
+
+def test_unduck_resumes_what_duck_paused():
+    player, state = make_paused_player()
+    assert player.duck() is True
+    assert state["pause"] is True
+    assert player.unduck() is True
+    assert state["pause"] is False
+
+
+def test_user_pause_survives_the_conversation():
+    # The tonight-bug: duck paused it, the user said "pause the music",
+    # and unduck used to resume it anyway seconds later.
+    player, state = make_paused_player()
+    player.duck()
+    assert "Paused" in player.set_paused(True)   # explicit user pause
+    assert player.unduck() is False              # their word wins
+    assert state["pause"] is True                # still paused
+
+
+def test_user_resume_mid_conversation_sticks():
+    player, state = make_paused_player()
+    player.duck()
+    assert "Resumed" in player.set_paused(False)  # "chalao na" mid-chat
+    assert state["pause"] is False
+    assert player.unduck() is False               # nothing left to unduck
+    assert state["pause"] is False
+
+
+def test_duck_ignores_user_paused_music():
+    player, state = make_paused_player(paused=True)
+    assert player.duck() is False
+    assert player.unduck() is False
+    assert state["pause"] is True
+
+
+def test_set_paused_reports_dead_ipc_honestly():
+    player = MusicPlayer(ytdlp=FAKE_YTDLP)
+    player._proc = FakeProc(alive=True)
+    player._ipc = lambda command: {}  # socket dead
+    assert "couldn't control" in player.set_paused(True)
 
 
 def test_fresh_play_resets_fail_streak():
