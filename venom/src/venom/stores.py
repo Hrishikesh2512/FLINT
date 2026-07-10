@@ -126,6 +126,68 @@ class NoteStore(_JsonStore):
         return len(data)
 
 
+class ConversationLog(_JsonStore):
+    """A rolling journal of spoken exchanges, so she remembers what you two
+    talked about across sessions and reboots — not just saved facts.
+
+    Every completed turn is appended; the most recent window is rendered into
+    the next session's system prompt for continuity ("kal wali problem solve
+    hui?"), capped so the file and the prompt both stay small."""
+
+    MAX_TURNS = 400          # on disk
+    PROMPT_TURNS = 40        # rendered into the prompt
+    MAX_TEXT = 300           # per-turn chars kept
+
+    def __init__(self, path: Path, clock: Callable[[], float] = time.time):
+        super().__init__(path)
+        self._clock = clock
+
+    def add(self, who: str, text: str) -> None:
+        text = (text or "").strip()
+        if not text:
+            return
+        entry = {"who": who, "text": text[:self.MAX_TEXT], "ts": self._clock()}
+        with self._lock:
+            data = self._load([])
+            data.append(entry)
+            if len(data) > self.MAX_TURNS:
+                data = data[-self.MAX_TURNS:]
+            self._save(data)
+
+    def recent(self, n: int = PROMPT_TURNS) -> list[dict]:
+        return self._load([])[-n:]
+
+    def _when(self, ts: float, now: float) -> str:
+        lt, ln = time.localtime(ts), time.localtime(now)
+        clock = time.strftime("%I:%M %p", lt).lstrip("0")
+        if (lt.tm_year, lt.tm_yday) == (ln.tm_year, ln.tm_yday):
+            return clock
+        if now - ts < 172800 and abs(ln.tm_yday - lt.tm_yday) in (1, 364, 365):
+            return f"yesterday {clock}"
+        return time.strftime("%a %d %b, ", lt) + clock
+
+    def render_for_prompt(self, n: int = PROMPT_TURNS,
+                          now: float | None = None) -> str:
+        turns = self.recent(n)
+        if not turns:
+            return ""
+        now = self._clock() if now is None else now
+        lines = ["[RECENT CONVERSATIONS — what you two actually talked about "
+                 "lately. Use it: pick up threads, follow up on things he "
+                 "mentioned, honour what you told him. You have ALREADY "
+                 "greeted him at the times shown — do not restart with "
+                 "first-hello energy or repeat an observation (like the late "
+                 "hour) you already made.]"]
+        last_when = ""
+        for t in turns:
+            when = self._when(float(t.get("ts", now)), now)
+            stamp = f"({when}) " if when != last_when else ""
+            last_when = when
+            who = "him" if t.get("who") == "you" else "you"
+            lines.append(f"{stamp}{who}: {t.get('text', '')}")
+        return "\n".join(lines) + "\n"
+
+
 class ListStore(_JsonStore):
     """Named item lists — shopping, to-do, packing, etc."""
 

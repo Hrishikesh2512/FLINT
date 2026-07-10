@@ -224,7 +224,7 @@ def is_normal_closure(exc: BaseException) -> bool:
 
 
 def build_system_instruction(config: VenomConfig, memory: MemoryStore,
-                             location=None) -> str:
+                             location=None, convlog=None) -> str:
     parts = [PERSONA.replace("{user_name}", config.voice.user_name)]
     parts.append("[CURRENT DATE & TIME]\n" + time.strftime("%A, %B %d, %Y — %I:%M %p") + "\n")
     parts.append("[RIGHT NOW — match this vibe]\n" + tone_for_time() + "\n")
@@ -236,6 +236,10 @@ def build_system_instruction(config: VenomConfig, memory: MemoryStore,
     rendered = memory.render_for_prompt()
     if rendered:
         parts.append(rendered)
+    if convlog is not None:
+        recent = convlog.render_for_prompt()
+        if recent:
+            parts.append(recent)
     return "\n".join(parts)
 
 
@@ -247,7 +251,7 @@ class LiveSession:
                  mic_frames: asyncio.Queue, speaker: SpeakerStream,
                  inbox: asyncio.Queue | None = None, transcript=None,
                  reminders=None, pending_reminders=None, location=None,
-                 opening=None):
+                 opening=None, convlog=None):
         self.config = config
         self.registry = registry
         self.memory = memory
@@ -256,6 +260,7 @@ class LiveSession:
         self._pending_reminders = pending_reminders  # fired while asleep
         self.location = location              # approximate network location
         self._opening = opening               # morning briefing to lead with
+        self._convlog = convlog               # persistent conversation journal
         self.mic_frames = mic_frames
         self.speaker = speaker
         self._inbox = inbox          # console prompts (text turns)
@@ -322,8 +327,15 @@ class LiveSession:
         return self._ended.is_set()
 
     def _record(self, who: str, text: str) -> None:
-        if self._transcript is not None and text.strip():
+        if not text.strip():
+            return
+        if self._transcript is not None:
             self._transcript.append((who, text.strip()))
+        if self._convlog is not None:
+            try:  # a disk hiccup must never break the conversation
+                self._convlog.add(who, text)
+            except OSError:
+                log.warning("could not persist conversation turn")
 
     def _system_instruction(self) -> str:
         # FIXED (Fix 6): render once and reuse. Rebuilding the full persona +
@@ -331,7 +343,7 @@ class LiveSession:
         # clears this cache (in _handle_tools) so a new memory still lands.
         if self._cached_instruction is None:
             self._cached_instruction = build_system_instruction(
-                self.config, self.memory, self.location)
+                self.config, self.memory, self.location, self._convlog)
         return self._cached_instruction
 
     # ── session config ────────────────────────────────────────────────────────

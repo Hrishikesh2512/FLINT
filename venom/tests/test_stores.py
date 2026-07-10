@@ -149,3 +149,38 @@ def test_tools_absent_without_stores():
     assert "set_reminder" not in reg
     assert "add_note" not in reg
     assert "add_to_list" not in reg
+
+
+# ── ConversationLog ──────────────────────────────────────────────────────────
+def test_conversation_log_roundtrip(tmp_path):
+    from venom.stores import ConversationLog
+
+    log = ConversationLog(tmp_path / "conv.json", clock=lambda: 1000000.0)
+    log.add("you", "kal chess khelenge?")
+    log.add("jarvis", "pakka, kal raat ko!")
+    log.add("you", "")          # empty turns are dropped
+    assert [t["who"] for t in log.recent()] == ["you", "jarvis"]
+
+    rendered = log.render_for_prompt(now=1000000.0)
+    assert "RECENT CONVERSATIONS" in rendered
+    assert "him: kal chess khelenge?" in rendered
+    assert "you: pakka, kal raat ko!" in rendered
+
+
+def test_conversation_log_caps_and_persists(tmp_path):
+    from venom.stores import ConversationLog
+
+    path = tmp_path / "conv.json"
+    log = ConversationLog(path)
+    for i in range(ConversationLog.MAX_TURNS + 25):
+        log.add("you", f"turn {i}")
+    assert len(log.recent(10_000)) == ConversationLog.MAX_TURNS
+    # a fresh instance (reboot) sees the same history
+    assert ConversationLog(path).recent(1)[0]["text"] == \
+        f"turn {ConversationLog.MAX_TURNS + 24}"
+
+
+def test_conversation_log_empty_renders_nothing(tmp_path):
+    from venom.stores import ConversationLog
+
+    assert ConversationLog(tmp_path / "c.json").render_for_prompt() == ""

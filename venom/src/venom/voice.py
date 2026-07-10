@@ -86,7 +86,8 @@ class VoiceOrchestrator:
         self.memory = MemoryStore(config.memory_path)
         self.timers = TimerBoard()
         # Persistent productivity stores live beside memory in the state dir.
-        from venom.stores import ListStore, NoteStore, ReminderStore
+        from venom.stores import (ConversationLog, ListStore, NoteStore,
+                                  ReminderStore)
 
         state_dir = config.memory_path.parent
         self.reminders = ReminderStore(state_dir / "reminders.json")
@@ -95,6 +96,9 @@ class VoiceOrchestrator:
         from venom.session import SessionState
 
         self.session = SessionState(state_dir / "session.json")
+        # What you two actually said, across sessions and reboots — rendered
+        # into every new session's prompt so she picks up where you left off.
+        self.convlog = ConversationLog(state_dir / "conversations.json")
         # Reminders that fired while asleep, awaiting spoken announcement.
         self.pending_reminders: list[str] = []
         # Approximate location (network geo) — warm the cache off-thread so the
@@ -403,7 +407,8 @@ class VoiceOrchestrator:
                            inbox=self.inbox, transcript=self.transcript,
                            reminders=self.reminders,
                            pending_reminders=self.pending_reminders,
-                           location=self.location, opening=None)
+                           location=self.location, opening=None,
+                           convlog=self.convlog)
 
     def _prepare_opening(self, session: LiveSession) -> None:
         """At the moment of waking, decide whether to lead with a briefing."""
