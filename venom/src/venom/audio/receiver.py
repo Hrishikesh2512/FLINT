@@ -81,6 +81,38 @@ def _node_mac(props: dict, name: str) -> str:
     return mac
 
 
+def find_linked_nodes(objects: list[dict]) -> tuple[set[int], set[int]]:
+    """(node ids with outgoing links, node ids with incoming links)."""
+    out_linked: set[int] = set()
+    in_linked: set[int] = set()
+    for obj in objects:
+        if obj.get("type") != "PipeWire:Interface:Link":
+            continue
+        info = obj.get("info", {}) or {}
+        if info.get("output-node-id") is not None:
+            out_linked.add(info["output-node-id"])
+        if info.get("input-node-id") is not None:
+            in_linked.add(info["input-node-id"])
+    return out_linked, in_linked
+
+
+def find_default_node_names(objects: list[dict]) -> dict[str, str]:
+    """{'sink': name, 'source': name} from the 'default' metadata object."""
+    names: dict[str, str] = {}
+    for obj in objects:
+        if obj.get("type") != "PipeWire:Interface:Metadata":
+            continue
+        if (obj.get("props", {}) or {}).get("metadata.name") != "default":
+            continue
+        for entry in obj.get("metadata", []) or []:
+            value = entry.get("value") or {}
+            if entry.get("key") == "default.audio.sink":
+                names["sink"] = str(value.get("name", ""))
+            elif entry.get("key") == "default.audio.source":
+                names["source"] = str(value.get("name", ""))
+    return names
+
+
 def find_bt_streams(objects: list[dict], exclude_mac: str = "") -> list[BtStream]:
     """Bluetooth stream nodes worth bridging, both directions.
 
@@ -159,6 +191,12 @@ def _default_pw_dump() -> list[dict]:
     return pw_dump()
 
 
+def _default_linker(output_node: str, input_node: str) -> None:
+    """pw-link two nodes by name (channel ports pair up automatically)."""
+    subprocess.run(["pw-link", output_node, input_node],
+                   capture_output=True, timeout=10)
+
+
 @dataclass
 class _Bridge:
     proc: subprocess.Popen | None  # None: wireplumber links it, we only track
@@ -182,7 +220,8 @@ class BluetoothReceiver:
                  bridge_factory: Callable[[str, str], subprocess.Popen] = _default_bridge_factory,
                  pw_dump: Callable[[], list[dict]] = _default_pw_dump,
                  clock: Callable[[], float] = time.monotonic,
-                 sleep: Callable[[float], None] = time.sleep):
+                 sleep: Callable[[float], None] = time.sleep,
+                 linker: Callable[[str, str], None] = _default_linker):
         self.headset_mac = normalize_mac(headset_mac) if headset_mac else ""
         self.headset_name = headset_name.strip()
         self._repin = repin
@@ -192,6 +231,7 @@ class BluetoothReceiver:
         self._pw_dump = pw_dump
         self._clock = clock
         self._sleep = sleep
+        self._link = linker
 
         self._lock = threading.Lock()
         self._agent: subprocess.Popen | None = None
@@ -344,8 +384,9 @@ class BluetoothReceiver:
                 self._is_audio_peer(mac) for mac in connected):
             return
 
+        objects = self._pw_dump()
         streams = {node.name: node
-                   for node in find_bt_streams(self._pw_dump(), self.headset_mac)}
+                   for node in find_bt_streams(objects, self.headset_mac)}
 
         with self._lock:
             # Reap: node gone, or a loopback we own died underneath us.
@@ -379,11 +420,36 @@ class BluetoothReceiver:
                     self._trusted.add(node.mac)
                     self._run(["trust", node.mac], 10)
                 log.info("bluetooth %s (%s): %s (%s)",
-                         "bridge" if node.managed
-                         else "stream (wireplumber-linked)",
+                         "bridge" if node.managed else "stream",
                          "their audio -> earphone" if node.direction == "in"
                          else "earphone mic -> them",
                          name, self._names.get(node.mac, node.mac))
+
+        # Self-heal orphaned streams. WirePlumber links a stream node to the
+        # defaults when it appears — usually. Observed live: after the node
+        # was recreated (A2DP suspend/resume across a service restart) it
+        # came back with NO links: running, carrying audio, connected to
+        # nothing — pure silence. Every poll, wire any unlinked stream to
+        # the default sink/source ourselves; no-op when WirePlumber did
+        # its job (or a previous heal already linked it).
+        out_linked, in_linked = find_linked_nodes(objects)
+        defaults = find_default_node_names(objects)
+        for name, node in streams.items():
+            if node.managed:
+                continue  # our own pw-loopback handles those
+            try:
+                if (node.direction == "in" and defaults.get("sink")
+                        and node.node_id not in out_linked):
+                    self._link(name, defaults["sink"])
+                    log.info("re-linked orphaned stream %s -> %s",
+                             name, defaults["sink"])
+                elif (node.direction == "out" and defaults.get("source")
+                        and node.node_id not in in_linked):
+                    self._link(defaults["source"], name)
+                    log.info("re-linked orphaned mic stream %s -> %s",
+                             defaults["source"], name)
+            except Exception as exc:
+                log.warning("stream re-link failed for %s: %s", name, exc)
 
     # ── helpers ───────────────────────────────────────────────────────────────
     def _connected_devices(self) -> dict[str, str]:

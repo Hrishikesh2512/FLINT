@@ -66,6 +66,22 @@ class FakeRunner:
         return ""
 
 
+def link_obj(output_node: int, input_node: int) -> dict:
+    return {"type": "PipeWire:Interface:Link",
+            "info": {"output-node-id": output_node,
+                     "input-node-id": input_node}}
+
+
+def defaults_obj(sink: str = "alsa_output.usb-yichip.analog-stereo",
+                 source: str = "alsa_input.usb-yichip.mono-fallback") -> dict:
+    return {"type": "PipeWire:Interface:Metadata",
+            "props": {"metadata.name": "default"},
+            "metadata": [
+                {"key": "default.audio.sink", "value": {"name": sink}},
+                {"key": "default.audio.source", "value": {"name": source}},
+            ]}
+
+
 def make_receiver(runner=None, dump=None, clock=None, **kwargs):
     spawned: list[tuple[str, str, FakeProc]] = []
 
@@ -80,6 +96,8 @@ def make_receiver(runner=None, dump=None, clock=None, **kwargs):
         dumps["count"] += 1
         return list(dump or [])
 
+    links: list[tuple[str, str]] = []
+
     receiver = BluetoothReceiver(
         runner=runner or FakeRunner(),
         agent_factory=FakeProc,
@@ -87,7 +105,9 @@ def make_receiver(runner=None, dump=None, clock=None, **kwargs):
         pw_dump=pw_dump,
         clock=clock or (lambda: 0.0),
         sleep=lambda _s: None,
+        linker=lambda out_node, in_node: links.append((out_node, in_node)),
         **kwargs)
+    receiver.test_links = links
     return receiver, spawned, dumps
 
 
@@ -252,15 +272,17 @@ def test_mic_bridge_follows_the_hands_free_link():
 def test_wireplumber_streams_tracked_without_loopback():
     # The live Pi path: node is a Stream/Output/Audio that wireplumber has
     # already linked to the earphone — we track it (status, disconnect,
-    # re-pin) but must not spawn a doubling loopback.
+    # re-pin) but must not spawn a doubling loopback or a duplicate link.
     repins = []
     runner = FakeRunner(devices=DEVICES_LAPTOP, info=INFO_AUDIO)
     dump = [bt_node(76, LAPTOP_IN_NODE + ".2",
-                    media_class="Stream/Output/Audio")]
+                    media_class="Stream/Output/Audio"),
+            defaults_obj(), link_obj(76, 52)]  # already linked to the sink
     receiver, spawned, _ = make_receiver(runner=runner, dump=dump,
                                          repin=lambda: repins.append(1))
     receiver.poll_once()
     assert spawned == []                     # wireplumber owns the link
+    assert receiver.test_links == []         # and it's linked: no heal
     assert repins == [1]                     # defaults still re-asserted
     assert "HRISHI-LAPTOP" in receiver.status()
     assert "Disconnected 1 device" in receiver.disconnect_all()
@@ -269,6 +291,29 @@ def test_wireplumber_streams_tracked_without_loopback():
     dump.clear()
     receiver.poll_once()
     assert "No external device" in receiver.status()
+
+
+def test_orphaned_stream_is_relinked_to_the_defaults():
+    # Observed live: a recreated bluez stream node came back with NO links —
+    # running, carrying audio, connected to nothing (silence). The receiver
+    # must wire it to the default sink itself; mic side to default source.
+    runner = FakeRunner(devices=DEVICES_LAPTOP, info=INFO_AUDIO)
+    dump = [bt_node(76, LAPTOP_IN_NODE + ".2",
+                    media_class="Stream/Output/Audio"),
+            bt_node(77, LAPTOP_OUT_NODE, media_class="Stream/Input/Audio",
+                    profile="headset-audio-gateway"),
+            defaults_obj(sink="the-sink", source="the-mic")]
+    receiver, spawned, _ = make_receiver(runner=runner, dump=dump)
+    receiver.poll_once()
+    assert spawned == []
+    assert (LAPTOP_IN_NODE + ".2", "the-sink") in receiver.test_links
+    assert ("the-mic", LAPTOP_OUT_NODE) in receiver.test_links
+
+    # once linked (next dump shows the links), no more heal calls
+    dump += [link_obj(76, 52), link_obj(53, 77)]
+    receiver.test_links.clear()
+    receiver.poll_once()
+    assert receiver.test_links == []
 
 
 def test_non_audio_gadgets_never_trigger_pw_dump():
