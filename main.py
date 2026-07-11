@@ -234,6 +234,13 @@ class FlintLive:
     def _on_remote_command(self, text: str, reply):
         print(f"[Remote] 📱 Command: {text}")
         self.ui.write_log(f"You: {text}  (remote)")
+        # Session not up yet (booting, or Gemini reconnecting): say so NOW.
+        # _on_text_command would drop the command silently and the remote
+        # caller (Venom on the wearable) would wait out its whole timeout.
+        if not self._loop or not self.session:
+            reply("FLINT is up but its AI session isn't connected yet — "
+                  "give it a few seconds and ask again.")
+            return
         with self._reply_lock:
             self._pending_replies.append(reply)
         self._on_text_command(text)
