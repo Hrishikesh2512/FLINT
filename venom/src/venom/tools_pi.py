@@ -787,6 +787,31 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
                 text = text[:4000] + " …(truncated)"
             return "This is the text on the screen right now:\n" + text
 
+    if config.laptop.ready:
+        @reg.tool(
+            description=(
+                "Runs a task ON THE USER'S LAPTOP through FLINT, the desktop "
+                "assistant running there: open/close apps, play a video or "
+                "song on the laptop, browser searches, files, typing, system "
+                "settings — anything done at the computer. Use whenever the "
+                "user asks for something 'on the laptop / computer / PC'. "
+                "Pass ONE clear, self-contained instruction in English. The "
+                "reply is what FLINT reports back after doing it."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "command": {"type": "string",
+                                "description": "The task, e.g. 'open spotify', "
+                                               "'search cheap flights to Goa'"},
+                },
+                "required": ["command"],
+            },
+        )
+        def laptop_task(command: str) -> str:
+            from venom.laptop import run_laptop_task
+            return run_laptop_task(config.laptop, command)
+
     if config.camera.ready:
         @reg.tool(
             description=(

@@ -128,6 +128,7 @@ the model maps natural speech → the tool. Defined in
 | Tool | Say | Does |
 |------|-----|------|
 | `look_at_screen()` | "look at my screen" | laptop OCR → text (needs screen server) |
+| `laptop_task(command)` | "open spotify on my laptop" | hands the task to FLINT on the laptop (WebSocket, `[laptop]` config), speaks back its reply |
 | `find_my_phone()` | "find my phone" | ntfy push to ring phone |
 | `pair_bluetooth_device()` | "pair my laptop" | Pi discoverable ~2 min as BT headset 'venom'; laptop/phone audio → earphone, earphone mic → its calls |
 | *(automatic)* Bluetooth focus | — | while laptop audio streams, Venom goes radio-quiet: wake word off, no session pre-warm (Wi-Fi bursts = stutter); wake button breaks in; `[audio] receiver_focus = false` disables |

@@ -81,6 +81,18 @@ port    = 8766
 token   = ""              # must match the screen server's --token
 timeout = 5.0             # seconds to wait for the OCR round-trip
 
+# ── Laptop control (FLINT fusion) ────────────────────────────────────────────
+# FLINT (the desktop assistant) runs on the laptop with its remote listener
+# on ws://<host>:8765 (FLINT config: remote_port / remote_token). Say
+# "open spotify on my laptop" and Venom hands FLINT the task and speaks back
+# its reply. Use the laptop's mDNS name so IP changes don't matter.
+# Off until host is set.
+[laptop]
+host    = ""              # e.g. "EXODUS.local"
+port    = 8765
+token   = ""              # must match FLINT's remote_token (api_keys.json)
+timeout = 45.0            # seconds to wait for FLINT to finish a task
+
 # ── Camera (Raspberry Pi camera module) ──────────────────────────────────────
 # Say "what do you see?" and Jarvis grabs a frame off the CSI camera and Gemini
 # describes it (she's blind to images herself). "Take a photo" snaps a shot,

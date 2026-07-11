@@ -167,6 +167,25 @@ class ScreenConfig:
 
 
 @dataclass(frozen=True)
+class LaptopConfig:
+    """FLINT — the desktop assistant on the user's laptop. Venom hands it
+    whole tasks ('open spotify', 'search X in the browser') over FLINT's
+    remote WebSocket listener and speaks back FLINT's reply, so the
+    wearable can drive the laptop. Off until a host is configured; use the
+    laptop's mDNS name (e.g. 'EXODUS.local') so it survives IP changes."""
+
+    enabled: bool = True
+    host: str = ""          # laptop mDNS name or address; empty = feature off
+    port: int = 8765        # FLINT's remote_port (core/ws_listener.py)
+    token: str = ""         # FLINT's remote_token; empty = FLINT runs open
+    timeout: float = 45.0   # seconds to wait for FLINT's reply
+
+    @property
+    def ready(self) -> bool:
+        return self.enabled and bool(self.host)
+
+
+@dataclass(frozen=True)
 class CameraConfig:
     """The Raspberry Pi camera (CSI ribbon module). Captured with libcamera and
     described by Gemini, since Jarvis herself is blind to images. On by default;
@@ -231,6 +250,7 @@ class VenomConfig:
     voice: VoiceConfig = field(default_factory=VoiceConfig)
     audio: AudioConfig = field(default_factory=AudioConfig)
     screen: ScreenConfig = field(default_factory=ScreenConfig)
+    laptop: LaptopConfig = field(default_factory=LaptopConfig)
     camera: CameraConfig = field(default_factory=CameraConfig)
     buttons: ButtonsConfig = field(default_factory=ButtonsConfig)
     phone: PhoneConfig = field(default_factory=PhoneConfig)
@@ -314,6 +334,7 @@ def load_config(path: Path | None = None) -> VenomConfig:
     voice = data.get("voice", {})
     audio = data.get("audio", {})
     screen = data.get("screen", {})
+    laptop = data.get("laptop", {})
     camera = data.get("camera", {})
     buttons = data.get("buttons", {})
     phone = data.get("phone", {})
@@ -380,6 +401,13 @@ def load_config(path: Path | None = None) -> VenomConfig:
             port=int(screen.get("port", 8766)),
             token=str(screen.get("token", "")).strip(),
             timeout=float(screen.get("timeout", 5.0)),
+        ),
+        laptop=LaptopConfig(
+            enabled=bool(laptop.get("enabled", True)),
+            host=str(laptop.get("host", "")).strip(),
+            port=int(laptop.get("port", 8765)),
+            token=str(laptop.get("token", "")).strip(),
+            timeout=float(laptop.get("timeout", 45.0)),
         ),
         camera=CameraConfig(
             enabled=bool(camera.get("enabled", True)),
