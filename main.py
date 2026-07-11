@@ -412,7 +412,14 @@ class FlintLive:
         while True:
             async for response in self.session.receive():
                 if response.data:
-                    self.audio_in_queue.put_nowait(response.data)
+                    # A remote (Venom) turn: the answer is spoken on the
+                    # wearable from the reply text — playing it here too puts
+                    # two voices in the user's ear (the laptop's audio often
+                    # IS the earphone). Text/transcripts still flow below.
+                    with self._reply_lock:
+                        remote_turn = bool(self._pending_replies)
+                    if not remote_turn:
+                        self.audio_in_queue.put_nowait(response.data)
 
                 if response.server_content:
                     sc = response.server_content
@@ -439,14 +446,17 @@ class FlintLive:
                             self.ui.write_log(f"Flint: {full_out}")
                             self._broadcast({"type": "transcript",
                                              "role": "flint", "text": full_out})
-                            with self._reply_lock:
-                                pending = self._pending_replies
-                                self._pending_replies = []
-                            for reply in pending:
-                                try:
-                                    reply(full_out)
-                                except Exception:
-                                    pass
+                        # Release remote callers on EVERY turn end — a turn
+                        # with no transcript used to strand them (and kept
+                        # the remote-mute stuck on for following turns).
+                        with self._reply_lock:
+                            pending = self._pending_replies
+                            self._pending_replies = []
+                        for reply in pending:
+                            try:
+                                reply(full_out or "Done — task finished.")
+                            except Exception:
+                                pass
 
                         if full_in and len(full_in) > 5:
                             threading.Thread(
