@@ -81,6 +81,16 @@ def qcol(h: str, a: int = 255) -> QColor:
     return c
 
 
+# In a windowed (no-console) build, every subprocess spawn flashes a console
+# window — the GPU probe alone did it every 1.5s. Spawn all probes hidden.
+_NO_WINDOW = subprocess.CREATE_NO_WINDOW if _OS == "Windows" else 0
+
+
+def _probe(args: list[str], timeout: float):
+    return subprocess.run(args, capture_output=True, text=True,
+                          timeout=timeout, creationflags=_NO_WINDOW)
+
+
 # ── System metrics ───────────────────────────────────────────────────────────
 class _SysMetrics:
     def __init__(self):
@@ -141,11 +151,9 @@ class _SysMetrics:
 
     def _get_gpu(self) -> float:
         try:
-            r = subprocess.run(
+            r = _probe(
                 ["nvidia-smi", "--query-gpu=utilization.gpu",
-                 "--format=csv,noheader,nounits"],
-                capture_output=True, text=True, timeout=2,
-            )
+                 "--format=csv,noheader,nounits"], timeout=2)
             if r.returncode == 0:
                 vals = [float(v.strip()) for v in r.stdout.strip().split("\n") if v.strip()]
                 if vals:
@@ -154,10 +162,7 @@ class _SysMetrics:
             pass
         if _OS == "Linux":
             try:
-                r = subprocess.run(
-                    ["rocm-smi", "--showuse", "--csv"],
-                    capture_output=True, text=True, timeout=2,
-                )
+                r = _probe(["rocm-smi", "--showuse", "--csv"], timeout=2)
                 if r.returncode == 0:
                     for line in r.stdout.strip().split("\n"):
                         parts = line.split(",")
@@ -169,10 +174,7 @@ class _SysMetrics:
             except Exception:
                 pass
             try:
-                r = subprocess.run(
-                    ["intel_gpu_top", "-J", "-s", "500"],
-                    capture_output=True, text=True, timeout=1,
-                )
+                r = _probe(["intel_gpu_top", "-J", "-s", "500"], timeout=1)
                 if r.returncode == 0 and "Render/3D" in r.stdout:
                     import re
                     m = re.search(r'"busy":\s*([\d.]+)', r.stdout)
@@ -182,11 +184,9 @@ class _SysMetrics:
                 pass
         if _OS == "Darwin":
             try:
-                r = subprocess.run(
+                r = _probe(
                     ["sudo", "-n", "powermetrics", "-n", "1", "-i", "500",
-                     "--samplers", "gpu_power"],
-                    capture_output=True, text=True, timeout=2,
-                )
+                     "--samplers", "gpu_power"], timeout=2)
                 if r.returncode == 0 and "GPU" in r.stdout:
                     import re
                     m = re.search(r'GPU\s+Active:\s+([\d.]+)%', r.stdout)
@@ -213,9 +213,7 @@ class _SysMetrics:
             pass
         if _OS == "Darwin":
             try:
-                r = subprocess.run(
-                    ["osx-cpu-temp"], capture_output=True, text=True, timeout=2,
-                )
+                r = _probe(["osx-cpu-temp"], timeout=2)
                 if r.returncode == 0:
                     import re
                     m = re.search(r"([\d.]+)", r.stdout)
@@ -225,11 +223,10 @@ class _SysMetrics:
                 pass
         if _OS == "Windows":
             try:
-                r = subprocess.run(
-                    ["powershell", "-Command",
+                r = _probe(
+                    ["powershell", "-NoProfile", "-Command",
                      "(Get-WmiObject MSAcpi_ThermalZoneTemperature -Namespace root/wmi).CurrentTemperature"],
-                    capture_output=True, text=True, timeout=3,
-                )
+                    timeout=3)
                 if r.returncode == 0 and r.stdout.strip():
                     raw = float(r.stdout.strip().split("\n")[0])
                     return (raw / 10.0) - 273.15
