@@ -140,6 +140,22 @@ class VoiceOrchestrator:
                 headset_mac=config.audio.bluetooth_mac,
                 headset_name=config.audio.bluetooth_name,
                 repin=self._repin_defaults)
+        # Calendar (secret iCal URL): agenda tools + proactive lead-time
+        # chimes through the same pending-reminder path reminders use.
+        self.calwatch = None
+        if config.calendar.ready:
+            from venom.gcal import CalendarFeed, CalendarWatcher
+
+            self.calwatch = CalendarWatcher(
+                CalendarFeed(config.calendar.ical_url),
+                lead_minutes=config.calendar.lead_minutes,
+                refresh_minutes=config.calendar.refresh_minutes)
+        # Gmail over IMAP (app password), strictly read-only.
+        self.mailbox = None
+        if config.mail.ready:
+            from venom.gmail import Mailbox
+
+            self.mailbox = Mailbox(config.mail)
         self.registry = build_pi_registry(config, self.memory, self.timers,
                                           music=self.music,
                                           reminders=self.reminders,
@@ -147,7 +163,9 @@ class VoiceOrchestrator:
                                           location=self.location,
                                           chess=self.chess,
                                           notifications=self.notifications,
-                                          receiver=self.btreceiver)
+                                          receiver=self.btreceiver,
+                                          calendar=self.calwatch,
+                                          mailbox=self.mailbox)
         self._detector: WakeWordDetector | None = None
         # True while we've paused our own music for a live conversation, so we
         # only resume what *we* paused (not a track the user paused by hand).
@@ -194,6 +212,10 @@ class VoiceOrchestrator:
         # Bluetooth receive: bridge laptop/phone audio into the earphone.
         if self.btreceiver is not None:
             self.btreceiver.start()
+
+        # Calendar feed refresh + proactive event alerts.
+        if self.calwatch is not None:
+            self.calwatch.start()
 
         first_cycle = True
         died_streak = 0
@@ -412,6 +434,12 @@ class VoiceOrchestrator:
             chime(speaker, frequency=880.0)
             self.pending_reminders.append(reminder["text"])
             log.info("reminder fired while asleep: %s", reminder["text"])
+        if self.calwatch is not None:
+            for alert in self.calwatch.pop_due():
+                chime(speaker)
+                chime(speaker, frequency=740.0)
+                self.pending_reminders.append(f"Calendar: {alert}")
+                log.info("calendar alert: %s", alert)
 
     async def _focus_phase(self, mic: MicStream, speaker: SpeakerStream) -> bool:
         """Hold radio-quiet while the laptop/phone streams audio. True → the

@@ -15,6 +15,8 @@ voice = [
     "requests>=2.31",
     "sounddevice>=0.5",
     "numpy>=1.26,<2.5",
+    "icalendar>=5.0",              # calendar: parse the secret .ics feed
+    "recurring-ical-events>=2.1",  # calendar: expand RRULE recurrences
     # On Linux, openwakeword hard-requires tflite-runtime, which has no
     # wheels for modern Python — provision.sh installs it there with
     # --no-deps instead. Declared only where it resolves cleanly.

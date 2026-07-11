@@ -129,6 +129,8 @@ the model maps natural speech → the tool. Defined in
 |------|-----|------|
 | `look_at_screen()` | "look at my screen" | laptop OCR → text (needs screen server) |
 | `laptop_task(command)` | "open spotify on my laptop" | hands the task to FLINT on the laptop (WebSocket, `[laptop]` config), speaks back its reply |
+| `calendar_agenda(day)` / `next_event()` | "what's on today?" | Google Calendar via secret iCal URL (`[calendar]`); proactive chime `lead_minutes` before events |
+| `check_inbox()` / `read_latest_email(from)` | "any new mail?" | Gmail over IMAP app password (`[mail]`), strictly read-only |
 | `find_my_phone()` | "find my phone" | ntfy push to ring phone |
 | `pair_bluetooth_device()` | "pair my laptop" | Pi discoverable ~2 min as BT headset 'venom'; laptop/phone audio → earphone, earphone mic → its calls |
 | *(automatic)* Bluetooth focus | — | while laptop audio streams, Venom goes radio-quiet: wake word off, no session pre-warm (Wi-Fi bursts = stutter); wake button breaks in; `[audio] receiver_focus = false` disables |

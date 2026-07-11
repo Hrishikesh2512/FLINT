@@ -93,6 +93,20 @@ port    = 8765
 token   = ""              # must match FLINT's remote_token (api_keys.json)
 timeout = 45.0            # seconds to wait for FLINT to finish a task
 
+# ── Calendar & Gmail (zero-OAuth) ────────────────────────────────────────────
+# Calendar: Google Calendar -> Settings -> your calendar -> "Secret address in
+# iCal format". Read-only; Venom answers "what's on today?" and chimes
+# lead_minutes before events. Mail: Gmail IMAP with an app password
+# (myaccount.google.com -> Security -> App passwords; needs 2FA). Read-only —
+# nothing is ever marked read. Both off until filled in.
+[calendar]
+ical_url     = ""
+lead_minutes = 30
+
+[mail]
+address      = ""          # the Gmail address
+app_password = ""          # 16-char app password (spaces ok)
+
 # ── Camera (Raspberry Pi camera module) ──────────────────────────────────────
 # Say "what do you see?" and Jarvis grabs a frame off the CSI camera and Gemini
 # describes it (she's blind to images herself). "Take a photo" snaps a shot,

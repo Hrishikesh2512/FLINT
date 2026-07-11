@@ -167,6 +167,37 @@ class ScreenConfig:
 
 
 @dataclass(frozen=True)
+class CalendarConfig:
+    """Google Calendar via its 'secret address in iCal format' — read-only,
+    no OAuth, never expires. Venom answers 'what's on today?' and chimes
+    proactively before events (same machinery as reminders)."""
+
+    enabled: bool = True
+    ical_url: str = ""       # the secret .ics URL; empty = feature off
+    lead_minutes: int = 30   # announce upcoming events this early
+    refresh_minutes: int = 5  # background feed refresh cadence
+
+    @property
+    def ready(self) -> bool:
+        return self.enabled and bool(self.ical_url)
+
+
+@dataclass(frozen=True)
+class MailConfig:
+    """Gmail over IMAP with an app password (2FA required) — read-only, no
+    OAuth. 'Any new mail?' / 'read the latest email'."""
+
+    enabled: bool = True
+    imap_host: str = "imap.gmail.com"
+    address: str = ""        # the Gmail address; empty = feature off
+    app_password: str = ""   # Google app password (Security -> App passwords)
+
+    @property
+    def ready(self) -> bool:
+        return self.enabled and bool(self.address) and bool(self.app_password)
+
+
+@dataclass(frozen=True)
 class LaptopConfig:
     """FLINT — the desktop assistant on the user's laptop. Venom hands it
     whole tasks ('open spotify', 'search X in the browser') over FLINT's
@@ -251,6 +282,8 @@ class VenomConfig:
     audio: AudioConfig = field(default_factory=AudioConfig)
     screen: ScreenConfig = field(default_factory=ScreenConfig)
     laptop: LaptopConfig = field(default_factory=LaptopConfig)
+    calendar: CalendarConfig = field(default_factory=CalendarConfig)
+    mail: MailConfig = field(default_factory=MailConfig)
     camera: CameraConfig = field(default_factory=CameraConfig)
     buttons: ButtonsConfig = field(default_factory=ButtonsConfig)
     phone: PhoneConfig = field(default_factory=PhoneConfig)
@@ -335,6 +368,8 @@ def load_config(path: Path | None = None) -> VenomConfig:
     audio = data.get("audio", {})
     screen = data.get("screen", {})
     laptop = data.get("laptop", {})
+    calendar = data.get("calendar", {})
+    mail = data.get("mail", {})
     camera = data.get("camera", {})
     buttons = data.get("buttons", {})
     phone = data.get("phone", {})
@@ -408,6 +443,18 @@ def load_config(path: Path | None = None) -> VenomConfig:
             port=int(laptop.get("port", 8765)),
             token=str(laptop.get("token", "")).strip(),
             timeout=float(laptop.get("timeout", 45.0)),
+        ),
+        calendar=CalendarConfig(
+            enabled=bool(calendar.get("enabled", True)),
+            ical_url=str(calendar.get("ical_url", "")).strip(),
+            lead_minutes=int(calendar.get("lead_minutes", 30)),
+            refresh_minutes=int(calendar.get("refresh_minutes", 5)),
+        ),
+        mail=MailConfig(
+            enabled=bool(mail.get("enabled", True)),
+            imap_host=str(mail.get("imap_host", "imap.gmail.com")).strip(),
+            address=str(mail.get("address", "")).strip(),
+            app_password=str(mail.get("app_password", "")).replace(" ", ""),
         ),
         camera=CameraConfig(
             enabled=bool(camera.get("enabled", True)),
