@@ -53,17 +53,24 @@ _MAC_IN_NAME = re.compile(r"([0-9A-Fa-f]{2}[_:]){5}[0-9A-Fa-f]{2}")
 # ── pure parsing ──────────────────────────────────────────────────────────────
 @dataclass(frozen=True)
 class BtStream:
-    """A bridgeable Bluetooth stream node in the PipeWire graph.
+    """A Bluetooth stream node in the PipeWire graph worth tracking.
 
-    direction "in"  — audio the device sends us (bridge → earphone)
-    direction "out" — the device's hands-free return channel (bridge the
-                      earphone mic → it, so Venom's mic is its mic)
+    direction "in"  — audio the device sends us (→ earphone)
+    direction "out" — the device's hands-free return channel (earphone
+                      mic → it, so Venom's mic is its mic)
+    managed — True when WE must run a pw-loopback for it. Verified on the
+    Pi: this PipeWire classes incoming bluez nodes as Stream/Output/Audio
+    (resp. Stream/Input/Audio), which WirePlumber auto-links to the
+    default sink/source like any app stream — looping those ourselves
+    would DOUBLE the audio. Only genuine Audio/Source|Sink device nodes
+    (other stacks) need our bridge.
     """
 
     node_id: int
     name: str
     mac: str  # colon form, uppercase; "" when the props don't say
     direction: str  # "in" | "out"
+    managed: bool = False
 
 
 def _node_mac(props: dict, name: str) -> str:
@@ -90,8 +97,9 @@ def find_bt_streams(objects: list[dict], exclude_mac: str = "") -> list[BtStream
     found: list[BtStream] = []
     for obj in objects:
         props = (obj.get("info", {}) or {}).get("props", {}) or {}
-        media_class = props.get("media.class")
-        if media_class not in ("Audio/Source", "Audio/Sink"):
+        media_class = str(props.get("media.class", ""))
+        if media_class not in ("Audio/Source", "Audio/Sink",
+                               "Stream/Output/Audio", "Stream/Input/Audio"):
             continue
         name = str(props.get("node.name", ""))
         if "bluez" not in (str(props.get("device.api", "")) + " " + name):
@@ -102,12 +110,13 @@ def find_bt_streams(objects: list[dict], exclude_mac: str = "") -> list[BtStream
         mac = _node_mac(props, name)
         if exclude and mac == exclude:
             continue
-        if media_class == "Audio/Source":
-            found.append(BtStream(obj.get("id"), name, mac, "in"))
+        managed = media_class in ("Audio/Source", "Audio/Sink")
+        if media_class in ("Audio/Source", "Stream/Output/Audio"):
+            found.append(BtStream(obj.get("id"), name, mac, "in", managed))
         elif "gateway" in profile:
-            # An Audio/Sink toward a hands-free gateway = its mic channel.
+            # A playback node toward a hands-free gateway = its mic channel.
             # Plain A2DP sinks (headphones we play TO) are never bridged.
-            found.append(BtStream(obj.get("id"), name, mac, "out"))
+            found.append(BtStream(obj.get("id"), name, mac, "out", managed))
     return found
 
 
@@ -115,9 +124,16 @@ def find_bt_streams(objects: list[dict], exclude_mac: str = "") -> list[BtStream
 def _default_agent_factory() -> subprocess.Popen:
     """A persistent bluetoothctl we feed commands over stdin — a one-shot
     `bluetoothctl agent ...` exits immediately and takes the agent with it,
-    so incoming pairing would have nobody to say yes."""
+    so incoming pairing would have nobody to say yes.
+
+    -a registers the NoInputNoOutput (auto-accept, Just Works) agent at
+    startup. Registering it by command doesn't work: bluetoothctl auto-
+    registers an interactive agent first, and 'agent off' unregisters
+    asynchronously, so a follow-up 'agent NoInputNoOutput' is refused as
+    'already registered' and the window ends up with NO agent (observed
+    live; the laptop got Authentication Failed)."""
     return subprocess.Popen(
-        ["bluetoothctl"], stdin=subprocess.PIPE,
+        ["bluetoothctl", "-a", "NoInputNoOutput"], stdin=subprocess.PIPE,
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True,
     )
 
@@ -145,7 +161,7 @@ def _default_pw_dump() -> list[dict]:
 
 @dataclass
 class _Bridge:
-    proc: subprocess.Popen
+    proc: subprocess.Popen | None  # None: wireplumber links it, we only track
     mac: str
     direction: str  # "in" | "out"
 
@@ -191,27 +207,29 @@ class BluetoothReceiver:
     # ── voice-tool surface (each returns natural speech) ─────────────────────
     def open_pairing(self, window_s: float = PAIR_WINDOW_S) -> str:
         with self._lock:
+            # Deadline FIRST: the poll thread checks (agent, deadline) as a
+            # pair; exposing a fresh agent while the previous window's stale
+            # deadline is still in the past made poll_once kill the new
+            # window the same second it opened (observed live).
+            self._deadline = self._clock() + window_s
             try:
                 if self._agent is None or self._agent.poll() is not None:
-                    self._agent = self._agent_factory()
+                    agent = self._agent_factory()
                     self._sleep(self.AGENT_SETTLE_S)  # let it reach bluetoothd
-                    # 'agent off' first: bluetoothctl auto-registers an
-                    # INTERACTIVE agent on startup, which would answer
-                    # pairing with passkey prompts nobody can see.
-                    for cmd in ("power on", "agent off",
-                                "agent NoInputNoOutput", "default-agent",
+                    for cmd in ("power on", "default-agent",
                                 "pairable on", "discoverable on"):
-                        self._agent.stdin.write(cmd + "\n")
-                        self._agent.stdin.flush()
+                        agent.stdin.write(cmd + "\n")
+                        agent.stdin.flush()
+                    self._agent = agent
                 else:  # window re-opened — just refresh discoverability
                     self._agent.stdin.write("discoverable on\n")
                     self._agent.stdin.flush()
             except OSError as exc:
                 log.warning("could not open pairing window: %s", exc)
                 self._agent = None
+                self._deadline = 0.0
                 return ("I couldn't open Bluetooth pairing just now — "
                         "the Bluetooth service may be down.")
-            self._deadline = self._clock() + window_s
         log.info("bluetooth pairing window open for %.0fs", window_s)
         minutes = max(1, round(window_s / 60))
         return (f"Pairing is open for about {minutes} minute"
@@ -293,7 +311,9 @@ class BluetoothReceiver:
     def poll_once(self) -> None:
         """One housekeeping pass: window expiry, trust, bridge lifecycles."""
         now = self._clock()
-        if self._agent is not None and now >= self._deadline:
+        with self._lock:  # read (agent, deadline) atomically vs open_pairing
+            expired = self._agent is not None and now >= self._deadline
+        if expired:
             self._close_pairing()
 
         connected = self._connected_devices()
@@ -328,10 +348,12 @@ class BluetoothReceiver:
                    for node in find_bt_streams(self._pw_dump(), self.headset_mac)}
 
         with self._lock:
-            # Reap: node gone, or the loopback died underneath us.
+            # Reap: node gone, or a loopback we own died underneath us.
             for name in list(self._bridges):
+                bridge = self._bridges[name]
                 if (name not in streams
-                        or self._bridges[name].proc.poll() is not None):
+                        or (bridge.proc is not None
+                            and bridge.proc.poll() is not None)):
                     self._kill_bridge(name)
             for name, node in streams.items():
                 if name in self._bridges:
@@ -344,20 +366,24 @@ class BluetoothReceiver:
                         self._repin()
                     except Exception:
                         log.exception("defaults re-pin failed")
-                try:
-                    proc = self._bridge_factory(name, node.direction)
-                    self._bridges[name] = _Bridge(proc, node.mac,
-                                                  node.direction)
-                    if node.mac:
-                        self._trusted.add(node.mac)
-                        self._run(["trust", node.mac], 10)
-                    log.info("bluetooth bridge (%s): %s (%s)",
-                             "their audio -> earphone" if node.direction == "in"
-                             else "earphone mic -> them",
-                             name, self._names.get(node.mac, node.mac))
-                except OSError as exc:
-                    log.warning("could not start audio bridge for %s: %s",
-                                name, exc)
+                proc = None
+                if node.managed:
+                    try:
+                        proc = self._bridge_factory(name, node.direction)
+                    except OSError as exc:
+                        log.warning("could not start audio bridge for %s: %s",
+                                    name, exc)
+                        continue
+                self._bridges[name] = _Bridge(proc, node.mac, node.direction)
+                if node.mac:
+                    self._trusted.add(node.mac)
+                    self._run(["trust", node.mac], 10)
+                log.info("bluetooth %s (%s): %s (%s)",
+                         "bridge" if node.managed
+                         else "stream (wireplumber-linked)",
+                         "their audio -> earphone" if node.direction == "in"
+                         else "earphone mic -> them",
+                         name, self._names.get(node.mac, node.mac))
 
     # ── helpers ───────────────────────────────────────────────────────────────
     def _connected_devices(self) -> dict[str, str]:
@@ -403,11 +429,12 @@ class BluetoothReceiver:
     def _kill_bridge(self, name: str) -> None:
         # caller holds self._lock
         bridge = self._bridges.pop(name)
-        try:
-            bridge.proc.terminate()
-        except Exception:
-            pass
-        log.info("bluetooth audio bridge closed: %s (%s)", name,
+        if bridge.proc is not None:
+            try:
+                bridge.proc.terminate()
+            except Exception:
+                pass
+        log.info("bluetooth audio stream closed: %s (%s)", name,
                  self._names.get(bridge.mac, bridge.mac))
 
 

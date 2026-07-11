@@ -108,6 +108,22 @@ def test_find_bt_streams_takes_a2dp_in_and_gateway_out():
     assert {(s.node_id, s.direction) for s in streams} == {(42, "in"),
                                                            (43, "out")}
     assert all(s.mac == LAPTOP_MAC for s in streams)  # from the node name
+    assert all(s.managed for s in streams)  # device nodes need our loopback
+
+
+def test_find_bt_streams_marks_wireplumber_streams_unmanaged():
+    # Observed on the Pi: this PipeWire classes incoming bluez nodes as
+    # app-like streams, which WirePlumber links to the defaults itself —
+    # bridging them again would double the audio.
+    objects = [
+        bt_node(76, LAPTOP_IN_NODE + ".2",
+                media_class="Stream/Output/Audio", address=LAPTOP_MAC),
+        bt_node(77, LAPTOP_OUT_NODE, media_class="Stream/Input/Audio",
+                profile="headset-audio-gateway", address=LAPTOP_MAC),
+    ]
+    streams = find_bt_streams(objects)
+    assert {(s.direction, s.managed) for s in streams} == {("in", False),
+                                                           ("out", False)}
 
 
 def test_find_bt_streams_excludes_headset_by_mac():
@@ -139,11 +155,27 @@ def test_open_pairing_registers_agent_and_goes_discoverable():
     assert "venom" in msg and "Pairing" in msg
     agent = receiver._agent
     sent = "".join(agent.writes)
-    for cmd in ("agent off", "agent NoInputNoOutput", "default-agent",
-                "pairable on", "discoverable on"):
+    for cmd in ("default-agent", "pairable on", "discoverable on"):
         assert cmd in sent
-    # the interactive auto-agent must be dropped BEFORE ours registers
-    assert sent.index("agent off") < sent.index("agent NoInputNoOutput")
+    # NEVER via 'agent' commands — they race bluetoothctl's auto-agent and
+    # leave the window agentless (the -a startup flag registers it instead).
+    assert "agent NoInputNoOutput" not in sent and "agent off" not in sent
+
+
+def test_reopened_window_survives_the_next_poll():
+    # Regression: reopening after expiry once exposed the new agent beside
+    # the stale past deadline, and the poll thread killed the fresh window
+    # within the same second.
+    clock = {"t": 0.0}
+    receiver, _, _ = make_receiver(clock=lambda: clock["t"])
+    receiver.open_pairing(window_s=120)
+    clock["t"] = 121.0
+    receiver.poll_once()             # first window expires
+    assert receiver._agent is None
+    receiver.open_pairing(window_s=120)
+    second = receiver._agent
+    receiver.poll_once()             # must NOT close the fresh window
+    assert receiver._agent is second and not second.terminated
 
 
 def test_open_window_polls_feed_yes_for_pending_prompts():
@@ -215,6 +247,28 @@ def test_mic_bridge_follows_the_hands_free_link():
                     (LAPTOP_OUT_NODE, "out")}
     status = receiver.status()
     assert "microphone" in status and "HRISHI-LAPTOP" in status
+
+
+def test_wireplumber_streams_tracked_without_loopback():
+    # The live Pi path: node is a Stream/Output/Audio that wireplumber has
+    # already linked to the earphone — we track it (status, disconnect,
+    # re-pin) but must not spawn a doubling loopback.
+    repins = []
+    runner = FakeRunner(devices=DEVICES_LAPTOP, info=INFO_AUDIO)
+    dump = [bt_node(76, LAPTOP_IN_NODE + ".2",
+                    media_class="Stream/Output/Audio")]
+    receiver, spawned, _ = make_receiver(runner=runner, dump=dump,
+                                         repin=lambda: repins.append(1))
+    receiver.poll_once()
+    assert spawned == []                     # wireplumber owns the link
+    assert repins == [1]                     # defaults still re-asserted
+    assert "HRISHI-LAPTOP" in receiver.status()
+    assert "Disconnected 1 device" in receiver.disconnect_all()
+    assert ["disconnect", LAPTOP_MAC] in runner.calls
+
+    dump.clear()
+    receiver.poll_once()
+    assert "No external device" in receiver.status()
 
 
 def test_non_audio_gadgets_never_trigger_pw_dump():
