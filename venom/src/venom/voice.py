@@ -42,6 +42,11 @@ class StreamsDied(Exception):
     """Audio stopped flowing — rebuild the whole audio lifecycle."""
 
 
+class FocusRequested(Exception):
+    """External Bluetooth audio started mid-wake — drop the pre-warmed
+    session (radio quiet) and re-enter the loop via the focus path."""
+
+
 class SilenceTracker:
     """Detects a dead capture path: a real microphone always carries a noise
     floor, so sustained bit-exact silence means nobody is actually listening."""
@@ -292,15 +297,34 @@ class VoiceOrchestrator:
         try:
             chime(speaker)  # audible on every (re)connect: "Venom hears you"
             while True:
+                # Bluetooth focus: while the laptop/phone streams audio into
+                # the earphone, the Pi's single radio belongs to that stream.
+                # No pre-warmed session (Gemini idle-closes it every few
+                # minutes and each re-warm is a Wi-Fi burst — audible as a
+                # stutter in the music) and no wake word. The wake button or
+                # a console prompt breaks in (cold session, ~4s to first
+                # reply); the stream ending resumes the normal cycle.
+                cold_wake = False
+                if self._bt_focused():
+                    self.state = "bluetooth audio"
+                    log.info("bluetooth focus: external audio streaming — "
+                             "wake word off, no pre-warm (button breaks in)")
+                    if not await self._focus_phase(mic, speaker):
+                        continue  # stream ended — back to the pre-warm cycle
+                    cold_wake = True
                 # Pre-warm: open the Gemini Live session (socket + big-prompt
                 # prefill, the ~4-5s cold cost) NOW, while we listen for the wake
                 # word. It sits idle, off the mic, until we activate it — so the
                 # first reply after "Hey Jarvis" is the warm ~1s path every time.
                 session = self._build_session(mic, speaker)
                 warm_task = asyncio.create_task(session.run())
-                self.state = "wake"
-                if not await self._wait_for_wake(mic, speaker, warm_task):
-                    continue  # warm session dropped before wake — spin a new one
+                if not cold_wake:
+                    self.state = "wake"
+                    try:
+                        if not await self._wait_for_wake(mic, speaker, warm_task):
+                            continue  # warm session dropped — spin a new one
+                    except FocusRequested:
+                        continue  # loop top re-enters via the focus path
                 self.state = "conversation"
                 # Chime FIRST — the instant "I heard you" — before the slower
                 # bookkeeping (pausing music can take a beat), so waking never
@@ -348,24 +372,89 @@ class VoiceOrchestrator:
             mic.stop()
             speaker.stop()
 
+    def _bt_focused(self) -> bool:
+        """True while an external device (laptop/phone) is actively streaming
+        Bluetooth audio into the earphone and focus mode is enabled. Keys off
+        the incoming stream only — Venom's own music player is irrelevant."""
+        return (self.btreceiver is not None
+                and self.config.audio.receiver_focus
+                and self.btreceiver.is_streaming)
+
+    def _announce_due_alerts(self, speaker: SpeakerStream) -> None:
+        """Chime for timers/reminders that fire while asleep. Do-Not-Disturb
+        holds them: left unpopped so they announce the moment DND ends."""
+        if self._dnd:
+            return
+        for timer in self.timers.pop_due():
+            chime(speaker)
+            chime(speaker, frequency=1100.0)
+            self.timers.add(0, f"(already finished) {timer.label}")
+            log.info("timer fired while asleep: %s", timer.label)
+        for reminder in self.reminders.pop_due():
+            chime(speaker)
+            chime(speaker, frequency=880.0)
+            self.pending_reminders.append(reminder["text"])
+            log.info("reminder fired while asleep: %s", reminder["text"])
+
+    async def _focus_phase(self, mic: MicStream, speaker: SpeakerStream) -> bool:
+        """Hold radio-quiet while the laptop/phone streams audio. True → the
+        user broke in (wake button or console prompt): converse NOW on a
+        cold session. False → the stream ended: resume the pre-warm cycle.
+        Timers/reminders still chime; stream health is still watched."""
+        starved = 0.0
+        silence = SilenceTracker()
+        self._manual_wake.clear()
+        while True:
+            if not self._bt_focused():
+                log.info("bluetooth focus: stream ended — back to wake listening")
+                return False
+            self._announce_due_alerts(speaker)
+            if not self.inbox.empty():
+                log.info("bluetooth focus: console prompt — waking (cold)")
+                self._drain(mic)
+                return True
+            if self._manual_wake.is_set():
+                self._manual_wake.clear()
+                if not self._dnd:
+                    log.info("bluetooth focus: wake button — waking (cold)")
+                    self._drain(mic)
+                    return True
+            # The mic keeps running (its capture path must stay provably
+            # alive), but nothing leaves the device — no wake model feed,
+            # no uplink. Same starvation/dead-capture guards as wake.
+            try:
+                frame = await asyncio.wait_for(mic.frames.get(), timeout=1.0)
+                starved = 0.0
+            except TimeoutError:
+                starved += 1.0
+                if starved >= STARVATION_SECONDS:
+                    raise StreamsDied(
+                        f"no mic audio for {STARVATION_SECONDS}s (headset gone?)"
+                    ) from None
+                continue
+            chunks = [frame]
+            while True:
+                try:
+                    chunks.append(mic.frames.get_nowait())
+                except asyncio.QueueEmpty:
+                    break
+            if silence.update(b"".join(chunks)):
+                raise StreamsDied(
+                    f"mic delivered pure digital silence for "
+                    f"{SILENCE_REBUILD_SECONDS}s (capture path rerouted?)"
+                )
+
     async def _wake_phase(self, mic: MicStream, speaker: SpeakerStream) -> None:
         starved = 0.0
         silence = SilenceTracker()
         self._manual_wake.clear()  # ignore any press queued from a past cycle
         while True:
-            # Do-Not-Disturb holds proactive alerts: leave due timers/reminders
-            # unpopped so they announce the moment DND is toggled back off.
-            if not self._dnd:
-                for timer in self.timers.pop_due():
-                    chime(speaker)
-                    chime(speaker, frequency=1100.0)
-                    self.timers.add(0, f"(already finished) {timer.label}")
-                    log.info("timer fired while asleep: %s", timer.label)
-                for reminder in self.reminders.pop_due():
-                    chime(speaker)
-                    chime(speaker, frequency=880.0)
-                    self.pending_reminders.append(reminder["text"])
-                    log.info("reminder fired while asleep: %s", reminder["text"])
+            # A stream that starts mid-wake flips us into focus: leave the
+            # wake loop so the caller re-enters via the focus path (and
+            # cancels the pre-warmed session = radio quiet).
+            if self._bt_focused():
+                raise FocusRequested()
+            self._announce_due_alerts(speaker)
             if not self.inbox.empty():
                 log.info("console prompt while asleep — starting a session")
                 self._drain(mic)

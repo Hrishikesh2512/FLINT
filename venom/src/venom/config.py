@@ -79,6 +79,12 @@ class AudioConfig:
     # laptop/phone streams audio into the earphone and can use its mic for
     # calls ("pair my laptop"). Voice keeps working throughout.
     receiver: bool = True
+    # Bluetooth focus: while external audio is streaming, keep the shared
+    # radio for it — no pre-warmed Gemini session (its periodic re-warm is
+    # a Wi-Fi burst you can hear as a stutter) and no wake word; the wake
+    # button (or a console prompt) breaks in, and the stream ending
+    # restores the normal cycle automatically.
+    receiver_focus: bool = True
 
     def __post_init__(self) -> None:
         if self.output not in ("auto", "bluetooth", "usb"):
@@ -366,6 +372,7 @@ def load_config(path: Path | None = None) -> VenomConfig:
             bluetooth_name=str(audio.get("bluetooth_name", "")).strip(),
             noise_suppression=bool(audio.get("noise_suppression", True)),
             receiver=bool(audio.get("receiver", True)),
+            receiver_focus=bool(audio.get("receiver_focus", True)),
         ),
         screen=ScreenConfig(
             enabled=bool(screen.get("enabled", True)),

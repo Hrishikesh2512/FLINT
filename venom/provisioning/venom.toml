@@ -24,6 +24,12 @@ bluetooth_name = ""
 # then plays through the earphone, and its calls can use the earphone mic.
 # Venom's own voice keeps working throughout. Set false to disable entirely.
 receiver = true
+# Bluetooth focus: while the laptop/phone is actively streaming, Venom goes
+# radio-quiet (no pre-warmed Gemini session, wake word off) so the shared
+# 2.4GHz radio belongs to the music — kicks in within ~3s of audio starting.
+# The wake button or a console prompt breaks in (she takes ~4s to reply,
+# cold session); the stream ending restores normal listening automatically.
+receiver_focus = true
 
 [voice]
 enabled = true

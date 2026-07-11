@@ -44,7 +44,9 @@ from venom.btaudio import Runner, _default_runner, normalize_mac, parse_devices
 log = logging.getLogger("venom.receiver")
 
 PAIR_WINDOW_S = 120.0
-POLL_IDLE_S = 5.0     # nothing happening — cheap connected-devices check only
+# 3s, not 5: this is also how fast Bluetooth focus reacts when laptop audio
+# starts — the voice loop should go radio-quiet within ~3s of the first note.
+POLL_IDLE_S = 3.0     # nothing happening — cheap connected-devices check only
 POLL_WINDOW_S = 1.0   # pairing window open — trust newcomers fast
 
 _MAC_IN_NAME = re.compile(r"([0-9A-Fa-f]{2}[_:]){5}[0-9A-Fa-f]{2}")
@@ -243,6 +245,15 @@ class BluetoothReceiver:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._poll_failed = False  # warn once, then stay quiet (dev boxes)
+
+    @property
+    def is_streaming(self) -> bool:
+        """True while an external device is actively sending audio into the
+        earphone. The A2DP node exists only while audio flows (the device
+        suspends it when idle), so this tracks real playback — not a merely
+        connected laptop."""
+        with self._lock:
+            return any(b.direction == "in" for b in self._bridges.values())
 
     # ── voice-tool surface (each returns natural speech) ─────────────────────
     def open_pairing(self, window_s: float = PAIR_WINDOW_S) -> str:

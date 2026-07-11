@@ -338,6 +338,69 @@ def test_disconnect_all_kicks_only_bridged_devices():
     assert ["disconnect", LAPTOP_MAC] in runner.calls
 
 
+def test_is_streaming_tracks_inbound_bridges_only():
+    runner = FakeRunner(devices=DEVICES_LAPTOP, info=INFO_AUDIO)
+    dump = [bt_node(76, LAPTOP_IN_NODE + ".2",
+                    media_class="Stream/Output/Audio"), defaults_obj()]
+    receiver, _, _ = make_receiver(runner=runner, dump=dump)
+    assert receiver.is_streaming is False   # nothing tracked yet
+    receiver.poll_once()
+    assert receiver.is_streaming is True    # laptop audio flowing
+    dump.clear()
+    receiver.poll_once()
+    assert receiver.is_streaming is False   # node gone = playback stopped
+
+
+# ── bluetooth focus (voice loop goes radio-quiet during laptop audio) ─────────
+def test_bt_focused_requires_receiver_flag_and_stream():
+    from types import SimpleNamespace
+
+    from venom.config import AudioConfig
+    from venom.voice import VoiceOrchestrator
+
+    def orch(receiver, focus=True):
+        return SimpleNamespace(
+            btreceiver=receiver,
+            config=SimpleNamespace(audio=AudioConfig(receiver_focus=focus)))
+
+    streaming = SimpleNamespace(is_streaming=True)
+    idle = SimpleNamespace(is_streaming=False)
+    assert VoiceOrchestrator._bt_focused(orch(streaming)) is True
+    assert VoiceOrchestrator._bt_focused(orch(idle)) is False
+    assert VoiceOrchestrator._bt_focused(orch(None)) is False
+    assert VoiceOrchestrator._bt_focused(orch(streaming, focus=False)) is False
+
+
+def test_focus_phase_exits_on_stream_end_and_wakes_on_button():
+    import asyncio
+    from types import SimpleNamespace
+
+    from venom.voice import VoiceOrchestrator
+
+    def orch(focused, manual=False):
+        o = SimpleNamespace(
+            _bt_focused=lambda: focused(),
+            _announce_due_alerts=lambda _sp: None,
+            inbox=SimpleNamespace(empty=lambda: True),
+            _manual_wake=SimpleNamespace(
+                is_set=lambda: manual, clear=lambda: None),
+            _dnd=False,
+            _drain=lambda _mic: None)
+        return o
+
+    mic = SimpleNamespace(frames=None)  # never touched in these paths
+
+    # Stream over → False (resume the normal pre-warm cycle).
+    over = orch(focused=lambda: False)
+    assert asyncio.run(
+        VoiceOrchestrator._focus_phase(over, mic, None)) is False
+
+    # Button pressed while streaming → True (converse now, cold session).
+    button = orch(focused=lambda: True, manual=True)
+    assert asyncio.run(
+        VoiceOrchestrator._focus_phase(button, mic, None)) is True
+
+
 # ── registry + config wiring ──────────────────────────────────────────────────
 def test_receiver_tools_registered_only_when_wired(tmp_path):
     from flint_core.memory import MemoryStore
@@ -372,7 +435,10 @@ def test_receiver_config_flag(tmp_path):
     from venom.config import VenomConfig, load_config
 
     assert VenomConfig().audio.receiver is True  # on by default
+    assert VenomConfig().audio.receiver_focus is True
 
     path = tmp_path / "venom.toml"
-    path.write_text("[audio]\nreceiver = false\n")
-    assert load_config(path).audio.receiver is False
+    path.write_text("[audio]\nreceiver = false\nreceiver_focus = false\n")
+    config = load_config(path)
+    assert config.audio.receiver is False
+    assert config.audio.receiver_focus is False
