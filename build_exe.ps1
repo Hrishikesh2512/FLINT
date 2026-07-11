@@ -2,7 +2,9 @@
 #
 #   powershell -ExecutionPolicy Bypass -File build_exe.ps1
 #
-# Output: dist\FLINT.exe  (copy this one file to anyone — it is self-contained,
+# Output: dist\FLINT.exe  (copy this one file to anyone -- it is self-contained,
+# NB: ASCII only in this file: PowerShell 5.1 reads BOM-less files as cp1252,
+# and a UTF-8 em-dash decodes to a stray quote that breaks string parsing.
 # except Playwright/Chromium browser automation, which needs `playwright install`
 # on the target machine).
 
@@ -28,7 +30,7 @@ $folder = Join-Path $root "dist\FLINT"
 $exe    = Join-Path $folder "FLINT.exe"
 if (-not (Test-Path $exe)) {
     Write-Host "==> Build finished but dist\FLINT\FLINT.exe was not found." -ForegroundColor Red
-    Write-Host "    If the folder is empty, Defender likely quarantined it — add an" -ForegroundColor Red
+    Write-Host "    If the folder is empty, Defender likely quarantined it -- add an" -ForegroundColor Red
     Write-Host "    exclusion for this folder and rebuild:" -ForegroundColor Red
     Write-Host "      Add-MpPreference -ExclusionPath '$root'   (run as Administrator)" -ForegroundColor Red
     exit 1
