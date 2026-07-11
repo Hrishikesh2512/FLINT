@@ -351,6 +351,49 @@ def test_is_streaming_tracks_inbound_bridges_only():
     assert receiver.is_streaming is False   # node gone = playback stopped
 
 
+def test_hold_streams_pauses_for_conversation_and_resumes():
+    # Their audio bleeds into the shared earphone mic — Gemini never hears a
+    # clean end-of-speech (observed live: user talks, she never replies).
+    # Conversations AVRCP-pause the sender and resume it afterwards.
+    calls = []
+
+    def player(mac, action):
+        calls.append((mac, action))
+        return True  # playing → pause succeeds → resume succeeds
+
+    runner = FakeRunner(devices=DEVICES_LAPTOP, info=INFO_AUDIO)
+    receiver, _, _ = make_receiver(runner=runner,
+                                   dump=[bt_node(76, LAPTOP_IN_NODE + ".2",
+                                                 media_class="Stream/Output/Audio"),
+                                         defaults_obj()],
+                                   player_cmd=player)
+    receiver.poll_once()
+    receiver.hold_streams()
+    assert (LAPTOP_MAC, "Pause") in calls
+    receiver.release_streams()
+    assert (LAPTOP_MAC, "Play") in calls
+
+
+def test_hold_streams_never_resumes_a_manual_pause():
+    calls = []
+
+    def player(mac, action):
+        calls.append((mac, action))
+        return False  # not playing (user paused it themselves)
+
+    runner = FakeRunner(devices=DEVICES_LAPTOP, info=INFO_AUDIO)
+    receiver, _, _ = make_receiver(runner=runner,
+                                   dump=[bt_node(76, LAPTOP_IN_NODE + ".2",
+                                                 media_class="Stream/Output/Audio"),
+                                         defaults_obj()],
+                                   player_cmd=player)
+    receiver.poll_once()
+    receiver.hold_streams()
+    assert (LAPTOP_MAC, "Pause") not in calls   # nothing was playing
+    receiver.release_streams()
+    assert (LAPTOP_MAC, "Play") not in calls    # and nothing gets resumed
+
+
 # ── bluetooth focus (voice loop goes radio-quiet during laptop audio) ─────────
 def test_bt_focused_requires_receiver_flag_and_stream():
     from types import SimpleNamespace

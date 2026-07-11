@@ -199,6 +199,29 @@ def _default_linker(output_node: str, input_node: str) -> None:
                    capture_output=True, timeout=10)
 
 
+def _default_player_cmd(mac: str, action: str) -> bool:
+    """AVRCP control of the sending device's media player — exactly what an
+    earbud's pause button does. action: 'IsPlaying' | 'Pause' | 'Play'."""
+    device = "/org/bluez/hci0/dev_" + mac.replace(":", "_")
+    tree = subprocess.run(["busctl", "--system", "tree", "org.bluez"],
+                          capture_output=True, text=True, timeout=10).stdout
+    match = re.search(re.escape(device) + r"/player\d+", tree)
+    if not match:
+        return False
+    player = match.group(0)
+    if action == "IsPlaying":
+        out = subprocess.run(
+            ["busctl", "--system", "get-property", "org.bluez", player,
+             "org.bluez.MediaPlayer1", "Status"],
+            capture_output=True, text=True, timeout=10).stdout
+        return "playing" in out
+    result = subprocess.run(
+        ["busctl", "--system", "call", "org.bluez", player,
+         "org.bluez.MediaPlayer1", action],
+        capture_output=True, timeout=10)
+    return result.returncode == 0
+
+
 @dataclass
 class _Bridge:
     proc: subprocess.Popen | None  # None: wireplumber links it, we only track
@@ -223,7 +246,8 @@ class BluetoothReceiver:
                  pw_dump: Callable[[], list[dict]] = _default_pw_dump,
                  clock: Callable[[], float] = time.monotonic,
                  sleep: Callable[[float], None] = time.sleep,
-                 linker: Callable[[str, str], None] = _default_linker):
+                 linker: Callable[[str, str], None] = _default_linker,
+                 player_cmd: Callable[[str, str], bool] = _default_player_cmd):
         self.headset_mac = normalize_mac(headset_mac) if headset_mac else ""
         self.headset_name = headset_name.strip()
         self._repin = repin
@@ -234,6 +258,8 @@ class BluetoothReceiver:
         self._clock = clock
         self._sleep = sleep
         self._link = linker
+        self._player = player_cmd
+        self._held: list[str] = []  # devices we AVRCP-paused for a conversation
 
         self._lock = threading.Lock()
         self._agent: subprocess.Popen | None = None
@@ -254,6 +280,36 @@ class BluetoothReceiver:
         connected laptop."""
         with self._lock:
             return any(b.direction == "in" for b in self._bridges.values())
+
+    def hold_streams(self) -> None:
+        """A conversation is starting: AVRCP-pause every device streaming
+        into the earphone. Their audio otherwise bleeds into the shared
+        earphone mic and Gemini never hears a clean end-of-speech — the
+        user talks, she never replies (observed live). Only devices that
+        were actually playing are remembered for release_streams, so a
+        manual pause is never resumed over."""
+        with self._lock:
+            macs = sorted({b.mac for b in self._bridges.values()
+                           if b.direction == "in" and b.mac})
+        self._held = []
+        for mac in macs:
+            try:
+                if self._player(mac, "IsPlaying") and self._player(mac, "Pause"):
+                    self._held.append(mac)
+                    log.info("paused %s's media for the conversation",
+                             self._names.get(mac, mac))
+            except Exception:
+                log.exception("AVRCP pause failed for %s", mac)
+
+    def release_streams(self) -> None:
+        """Conversation over: resume exactly what hold_streams paused."""
+        held, self._held = self._held, []
+        for mac in held:
+            try:
+                if self._player(mac, "Play"):
+                    log.info("resumed %s's media", self._names.get(mac, mac))
+            except Exception:
+                log.exception("AVRCP resume failed for %s", mac)
 
     # ── voice-tool surface (each returns natural speech) ─────────────────────
     def open_pairing(self, window_s: float = PAIR_WINDOW_S) -> str:

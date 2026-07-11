@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 
 from flint_core.memory import MemoryStore
 from venom.audio.devices import current_devices
@@ -36,6 +37,11 @@ STARVATION_SECONDS = 12
 # silently rerouted (observed live: headset drops mid-lifecycle and PipeWire
 # falls back to the built-in jack's sink monitor — Venom sits deaf forever).
 SILENCE_REBUILD_SECONDS = 20
+# The wake button toggles (wake ⇄ end conversation). A second press this soon
+# after waking is almost always impatience during the connect gap, not a
+# request to sleep — observed live on a cold (no pre-warm) start: press,
+# two silent seconds, press again, conversation killed before her first word.
+WAKE_TOGGLE_GRACE_SECONDS = 6.0
 
 
 class StreamsDied(Exception):
@@ -159,6 +165,9 @@ class VoiceOrchestrator:
         # press mid-reply becomes a barge-in (interrupt) instead of a queued
         # wake. None between conversations.
         self._session: LiveSession | None = None
+        # When the current conversation began — presses inside the grace
+        # window never end it (see WAKE_TOGGLE_GRACE_SECONDS).
+        self._conversation_started = 0.0
 
     async def run(self) -> None:
         # The wake model takes minutes to load from slow flash — load it in
@@ -336,8 +345,14 @@ class VoiceOrchestrator:
                 # and never replies. Pause our own player for the whole turn;
                 # the finally below resumes it when we go back to sleep.
                 self._duck_music()
+                # Same physics for the laptop/phone streaming into the
+                # earphone: AVRCP-pause it for the conversation (observed
+                # live — with music bleeding in she never answered).
+                if self.btreceiver is not None:
+                    self.btreceiver.hold_streams()
                 self._prepare_opening(session)
                 session.activate()
+                self._conversation_started = time.monotonic()
                 self._session = session  # a wake press now barges in, not wakes
                 # FIXED (Fix 2): conversation is now live and speaking — freeze
                 # the brain switcher until we're back to wake/pre-warm.
@@ -364,6 +379,8 @@ class VoiceOrchestrator:
                     if suppressor is not None:
                         suppressor.gate = False
                     self._unduck_music()
+                    if self.btreceiver is not None:
+                        self.btreceiver.release_streams()
                     self._drain(mic)
                 self._detector.reset()
                 log.info("back to wake listening")
@@ -512,6 +529,11 @@ class VoiceOrchestrator:
             return
         session = self._session
         if session is not None and not session.ended:
+            if (time.monotonic() - self._conversation_started
+                    < WAKE_TOGGLE_GRACE_SECONDS):
+                log.info("wake button — ignored (conversation just started; "
+                         "she's still connecting/listening)")
+                return
             log.info("wake button — ending conversation (sleep)")
             session.request_stop()
             return

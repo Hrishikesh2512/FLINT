@@ -372,6 +372,37 @@ def test_dnd_toggle_and_wake_button_respect_dnd():
     assert o._manual_wake.is_set()
 
 
+def test_wake_button_grace_window_protects_fresh_conversations():
+    import time
+    from types import SimpleNamespace
+
+    from venom.voice import VoiceOrchestrator
+
+    class FakeSession:
+        def __init__(self):
+            self.ended = False
+            self.stops = 0
+
+        def request_stop(self):
+            self.stops += 1
+
+    # Observed live: press → 2 silent seconds (cold connect) → press again
+    # killed the conversation before her first word. Inside the grace
+    # window the toggle must NOT end the session.
+    fresh = SimpleNamespace(_dnd=False, _session=FakeSession(),
+                            _conversation_started=time.monotonic(),
+                            _manual_wake=None)
+    VoiceOrchestrator._on_wake_button(fresh)
+    assert fresh._session.stops == 0
+
+    # A press well after the start is a deliberate "go to sleep".
+    old = SimpleNamespace(_dnd=False, _session=FakeSession(),
+                          _conversation_started=time.monotonic() - 30,
+                          _manual_wake=None)
+    VoiceOrchestrator._on_wake_button(old)
+    assert old._session.stops == 1
+
+
 def test_translation_mode_tool(tmp_path):
     from venom.config import VenomConfig
 
@@ -424,9 +455,12 @@ def test_wake_button_toggles_conversation():
         def is_set(self):
             return self._set
 
-    # Live conversation → the wake button ends it, does not queue a wake.
+    # Live conversation (past the fresh-start grace) → the wake button ends
+    # it, does not queue a wake.
+    import time as _time
     live = FakeSession(ended=False)
-    o = SimpleNamespace(_dnd=False, _session=live, _manual_wake=FakeEvent())
+    o = SimpleNamespace(_dnd=False, _session=live, _manual_wake=FakeEvent(),
+                        _conversation_started=_time.monotonic() - 30)
     VoiceOrchestrator._on_wake_button(o)
     assert live.stopped == 1 and not o._manual_wake.is_set()
 
