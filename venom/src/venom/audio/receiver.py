@@ -153,13 +153,20 @@ class _Bridge:
 class BluetoothReceiver:
     """Pi-as-Bluetooth-headset: pairing window + per-direction bridges."""
 
+    # bluetoothctl needs a beat after spawn to connect to bluetoothd; commands
+    # written before that are lost. Observed live: 'Failed to register agent
+    # object' -> its interactive auto-agent answered pairing with a passkey
+    # prompt into /dev/null -> the laptop got Authentication Failed (0x05).
+    AGENT_SETTLE_S = 2.0
+
     def __init__(self, headset_mac: str = "", headset_name: str = "",
                  repin: Callable[[], None] | None = None,
                  runner: Runner = _default_runner,
                  agent_factory: Callable[[], subprocess.Popen] = _default_agent_factory,
                  bridge_factory: Callable[[str, str], subprocess.Popen] = _default_bridge_factory,
                  pw_dump: Callable[[], list[dict]] = _default_pw_dump,
-                 clock: Callable[[], float] = time.monotonic):
+                 clock: Callable[[], float] = time.monotonic,
+                 sleep: Callable[[float], None] = time.sleep):
         self.headset_mac = normalize_mac(headset_mac) if headset_mac else ""
         self.headset_name = headset_name.strip()
         self._repin = repin
@@ -168,6 +175,7 @@ class BluetoothReceiver:
         self._bridge_factory = bridge_factory
         self._pw_dump = pw_dump
         self._clock = clock
+        self._sleep = sleep
 
         self._lock = threading.Lock()
         self._agent: subprocess.Popen | None = None
@@ -186,13 +194,18 @@ class BluetoothReceiver:
             try:
                 if self._agent is None or self._agent.poll() is not None:
                     self._agent = self._agent_factory()
-                    for cmd in ("power on", "agent NoInputNoOutput",
-                                "default-agent", "pairable on",
-                                "discoverable on"):
+                    self._sleep(self.AGENT_SETTLE_S)  # let it reach bluetoothd
+                    # 'agent off' first: bluetoothctl auto-registers an
+                    # INTERACTIVE agent on startup, which would answer
+                    # pairing with passkey prompts nobody can see.
+                    for cmd in ("power on", "agent off",
+                                "agent NoInputNoOutput", "default-agent",
+                                "pairable on", "discoverable on"):
                         self._agent.stdin.write(cmd + "\n")
+                        self._agent.stdin.flush()
                 else:  # window re-opened — just refresh discoverability
                     self._agent.stdin.write("discoverable on\n")
-                self._agent.stdin.flush()
+                    self._agent.stdin.flush()
             except OSError as exc:
                 log.warning("could not open pairing window: %s", exc)
                 self._agent = None
@@ -287,6 +300,16 @@ class BluetoothReceiver:
         with self._lock:
             self._names.update(connected)
         window_open = self._agent is not None
+        if window_open:
+            # Answer any pending yes/no the agent may still throw (e.g. an
+            # AuthorizeService for a device that connects its audio profile
+            # faster than we trust it). Harmless when nothing is pending —
+            # bluetoothctl just ignores an unknown command.
+            try:
+                self._agent.stdin.write("yes\n")
+                self._agent.stdin.flush()
+            except OSError:
+                pass
 
         for mac in connected:
             if window_open and mac not in self._trusted:

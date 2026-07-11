@@ -86,6 +86,7 @@ def make_receiver(runner=None, dump=None, clock=None, **kwargs):
         bridge_factory=bridge_factory,
         pw_dump=pw_dump,
         clock=clock or (lambda: 0.0),
+        sleep=lambda _s: None,
         **kwargs)
     return receiver, spawned, dumps
 
@@ -138,9 +139,18 @@ def test_open_pairing_registers_agent_and_goes_discoverable():
     assert "venom" in msg and "Pairing" in msg
     agent = receiver._agent
     sent = "".join(agent.writes)
-    for cmd in ("agent NoInputNoOutput", "default-agent",
+    for cmd in ("agent off", "agent NoInputNoOutput", "default-agent",
                 "pairable on", "discoverable on"):
         assert cmd in sent
+    # the interactive auto-agent must be dropped BEFORE ours registers
+    assert sent.index("agent off") < sent.index("agent NoInputNoOutput")
+
+
+def test_open_window_polls_feed_yes_for_pending_prompts():
+    receiver, _, _ = make_receiver()
+    receiver.open_pairing()
+    receiver.poll_once()
+    assert "yes\n" in receiver._agent.writes
 
 
 def test_pairing_window_expires_and_trusts_newcomers():
