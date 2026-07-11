@@ -19,6 +19,11 @@ output = "auto"
 # mode near the Pi once; it is trusted and reconnects automatically forever.
 bluetooth_mac = ""
 bluetooth_name = ""
+# Bluetooth receive: say "pair my laptop" and the Pi turns discoverable as a
+# Bluetooth headset named 'venom' for ~2 minutes — the laptop/phone's audio
+# then plays through the earphone, and its calls can use the earphone mic.
+# Venom's own voice keeps working throughout. Set false to disable entirely.
+receiver = true
 
 [voice]
 enabled = true

@@ -75,6 +75,10 @@ class AudioConfig:
     bluetooth_mac: str = ""
     bluetooth_name: str = ""
     noise_suppression: bool = True   # high-pass + gentle expander on the mic
+    # Bluetooth receive: the Pi doubles as a pairable Bluetooth headset — the
+    # laptop/phone streams audio into the earphone and can use its mic for
+    # calls ("pair my laptop"). Voice keeps working throughout.
+    receiver: bool = True
 
     def __post_init__(self) -> None:
         if self.output not in ("auto", "bluetooth", "usb"):
@@ -361,6 +365,7 @@ def load_config(path: Path | None = None) -> VenomConfig:
             bluetooth_mac=str(audio.get("bluetooth_mac", "")).strip(),
             bluetooth_name=str(audio.get("bluetooth_name", "")).strip(),
             noise_suppression=bool(audio.get("noise_suppression", True)),
+            receiver=bool(audio.get("receiver", True)),
         ),
         screen=ScreenConfig(
             enabled=bool(screen.get("enabled", True)),

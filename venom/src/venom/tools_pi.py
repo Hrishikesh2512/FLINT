@@ -300,7 +300,8 @@ def parse_reminder_time(minutes_from_now: float | None = None,
 def build_pi_registry(config: VenomConfig, memory: MemoryStore,
                       timers: TimerBoard, music=None,
                       reminders=None, notes=None, lists=None,
-                      location=None, chess=None, notifications=None) -> ToolRegistry:
+                      location=None, chess=None, notifications=None,
+                      receiver=None) -> ToolRegistry:
     reg = ToolRegistry(platform="linux")
 
     if music is not None:
@@ -426,6 +427,42 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
         )
         def read_notifications() -> str:
             return notifications.read_unread()
+
+    if receiver is not None:
+        @reg.tool(
+            description=(
+                "Makes this wearable discoverable as a Bluetooth headset named "
+                "'venom' for about two minutes, so the user's laptop or phone "
+                "can connect, play its audio through the earpiece, and use the "
+                "earpiece mic for its calls. Use when they say 'pair my "
+                "laptop', 'connect my laptop audio', 'play my phone through "
+                "you', or 'bluetooth pairing on'. Tell the user exactly what "
+                "this returns — it has the connection steps."
+            ),
+        )
+        def pair_bluetooth_device() -> str:
+            return receiver.open_pairing()
+
+        @reg.tool(
+            description=(
+                "Reports whether a laptop or phone is currently streaming "
+                "audio through the earpiece, and whether pairing is open. Use "
+                "for 'is my laptop connected?', 'kya connected hai?'."
+            ),
+        )
+        def bluetooth_audio_status() -> str:
+            return receiver.status()
+
+        @reg.tool(
+            description=(
+                "Disconnects the laptop/phone that is streaming audio through "
+                "the earpiece. Use when the user says 'disconnect my laptop', "
+                "'stop the laptop audio', 'bluetooth disconnect karo'. Does "
+                "NOT touch the user's headset or stop your own music."
+            ),
+        )
+        def disconnect_bluetooth_audio() -> str:
+            return receiver.disconnect_all()
 
     @reg.tool(
         description=(

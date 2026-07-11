@@ -32,13 +32,25 @@ def pw_dump() -> list[dict]:
 
 
 # ── pure parsing ──────────────────────────────────────────────────────────────
-def find_bluez_card(objects: list[dict]) -> int | None:
+def find_bluez_card(objects: list[dict], mac: str = "") -> int | None:
+    """The headset's bluez card. With a MAC, prefer the card at that address —
+    a laptop streaming audio TO the Pi is also a bluez card, and switching
+    *its* profile would kill the incoming stream. Falls back to the first
+    bluez card when no address matches (older stacks without the prop)."""
+    want = mac.strip().upper().replace("-", ":")
+    fallback: int | None = None
     for obj in objects:
         props = (obj.get("info", {}) or {}).get("props", {}) or {}
-        if (props.get("media.class") == "Audio/Device"
+        if not (props.get("media.class") == "Audio/Device"
                 and "bluez" in str(props.get("device.api", ""))):
+            continue
+        if not want:
             return obj.get("id")
-    return None
+        if str(props.get("api.bluez5.address", "")).upper() == want:
+            return obj.get("id")
+        if fallback is None:
+            fallback = obj.get("id")
+    return fallback
 
 
 def enum_profiles(objects: list[dict], card_id: int) -> list[dict]:
@@ -111,12 +123,15 @@ def pin_usb_audio(wait: float = 1.0, attempts: int = 4) -> bool:
     return False
 
 
-def pin_bluetooth_audio(wait: float = 2.0, attempts: int = 3) -> bool:
+def pin_bluetooth_audio(wait: float = 2.0, attempts: int = 3,
+                        mac: str = "") -> bool:
     """Switch the connected headset to its mic-capable profile and make its
-    nodes the defaults. True when a Bluetooth microphone source exists."""
+    nodes the defaults. True when a Bluetooth microphone source exists.
+    Pass the headset's MAC when other Bluetooth audio devices (a laptop
+    streaming to the Pi) may be connected, so we pin the right card."""
     for attempt in range(1, attempts + 1):
         objects = pw_dump()
-        card = find_bluez_card(objects)
+        card = find_bluez_card(objects, mac)
         if card is None:
             log.info("no bluez card in the graph yet (attempt %d/%d)", attempt, attempts)
             time.sleep(wait)

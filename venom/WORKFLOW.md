@@ -129,6 +129,9 @@ the model maps natural speech → the tool. Defined in
 |------|-----|------|
 | `look_at_screen()` | "look at my screen" | laptop OCR → text (needs screen server) |
 | `find_my_phone()` | "find my phone" | ntfy push to ring phone |
+| `pair_bluetooth_device()` | "pair my laptop" | Pi discoverable ~2 min as BT headset 'venom'; laptop/phone audio → earphone, earphone mic → its calls |
+| `bluetooth_audio_status()` | "is my laptop connected?" | who's streaming / using the mic |
+| `disconnect_bluetooth_audio()` | "disconnect my laptop" | kick the streaming device (headset untouched) |
 | `translation_mode(enable)` | "translation mode" | Hindi ↔ Kannada/Telugu interpreter |
 | `end_conversation()` | "bye" | close session |
 | `power_off()` | "shut down for the night" | power off Pi |

@@ -118,13 +118,25 @@ class VoiceOrchestrator:
         self.notifications = NotificationHub(
             config.phone.ntfy_server, config.phone.notify_topic,
             is_dnd=lambda: self._dnd)
+        # Bluetooth receive: laptop/phone audio into the earphone. A process-
+        # wide singleton — orchestrators are rebuilt after crashes, and two
+        # receivers would bridge every stream twice (doubled audio).
+        self.btreceiver = None
+        if config.audio.receiver:
+            from venom.audio.receiver import shared_receiver
+
+            self.btreceiver = shared_receiver(
+                headset_mac=config.audio.bluetooth_mac,
+                headset_name=config.audio.bluetooth_name,
+                repin=self._repin_defaults)
         self.registry = build_pi_registry(config, self.memory, self.timers,
                                           music=self.music,
                                           reminders=self.reminders,
                                           notes=self.notes, lists=self.lists,
                                           location=self.location,
                                           chess=self.chess,
-                                          notifications=self.notifications)
+                                          notifications=self.notifications,
+                                          receiver=self.btreceiver)
         self._detector: WakeWordDetector | None = None
         # True while we've paused our own music for a live conversation, so we
         # only resume what *we* paused (not a track the user paused by hand).
@@ -165,6 +177,10 @@ class VoiceOrchestrator:
         # Phone notifications (WhatsApp): chime on arrival, read on demand.
         self.notifications.start()
 
+        # Bluetooth receive: bridge laptop/phone audio into the earphone.
+        if self.btreceiver is not None:
+            self.btreceiver.start()
+
         first_cycle = True
         died_streak = 0
         while True:
@@ -187,6 +203,20 @@ class VoiceOrchestrator:
             first_cycle = False
             self.state = "reconnecting"
             await asyncio.sleep(3)
+
+    def _repin_defaults(self) -> None:
+        """Re-assert PipeWire defaults on Venom's own headset. Called by the
+        Bluetooth receiver the moment an external device starts streaming,
+        so a connecting laptop can never disturb the Pi's audio path.
+        Blocking (subprocess) — runs on the receiver's thread, not the loop."""
+        if self.config.audio.use_bluetooth:
+            from venom.audio.routing import pin_bluetooth_audio
+
+            pin_bluetooth_audio(mac=self.config.audio.bluetooth_mac)
+        else:
+            from venom.audio.routing import pin_usb_audio
+
+            pin_usb_audio()
 
     def _alert_audio_dead(self, reason: str) -> None:
         """Push a one-time ntfy alert to the phone: the audio path is dead and
@@ -221,7 +251,8 @@ class VoiceOrchestrator:
             # A lifecycle without a microphone is useless (the wake loop would
             # sit deaf on the sink monitor), so failure here restarts the cycle.
             self.state = "activating headset microphone"
-            if not await asyncio.to_thread(pin_bluetooth_audio, 3.0, 6):
+            if not await asyncio.to_thread(pin_bluetooth_audio, 3.0, 6,
+                                           self.config.audio.bluetooth_mac):
                 raise StreamsDied("headset connected but no microphone appeared")
         else:
             # USB (or default) path: make the USB earphone PipeWire's default

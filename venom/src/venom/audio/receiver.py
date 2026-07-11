@@ -1,0 +1,400 @@
+"""Bluetooth audio receive — the wearable doubles as a Bluetooth headset.
+
+The user's laptop or phone pairs to the Pi like any headset ("pair my
+laptop" opens a short discoverable window). Both directions are bridged:
+
+- what the device plays (A2DP, or HFP call audio) lands in the earphone,
+  mixed with — never replacing — Venom's own voice
+- when the device opens its hands-free link (a call, a meeting app), the
+  earphone's microphone is looped back to it, so Venom's mic IS the
+  laptop's mic. PipeWire shares one capture source between clients, so
+  Venom keeps hearing the wake word at the same time.
+
+Three moving parts:
+
+- a pairing window: one persistent ``bluetoothctl`` process holding a
+  NoInputNoOutput agent (auto-accept, Just Works) while discoverable;
+  closed on a deadline so the Pi isn't permanently open to pairing
+- a poll loop that watches PipeWire for the device's stream nodes and
+  spawns a ``pw-loopback`` per direction: their source → default sink
+  (earphone), and default source (mic) → their hands-free sink; each
+  bridge dies with the connection
+- a defaults re-pin hook: fired whenever a bridge appears, so a device
+  that just connected can never steal the default sink/source the voice
+  loop depends on. Venom's own audio stays untouched.
+
+The headset's own nodes are never bridged (excluded by MAC and by the
+``headset-head-unit`` profile), so a Bluetooth-headset setup can't loop
+its mic back into its ear. All subprocess seams are injectable; parsing
+is pure.
+"""
+
+from __future__ import annotations
+
+import logging
+import re
+import subprocess
+import threading
+import time
+from collections.abc import Callable
+from dataclasses import dataclass
+
+from venom.btaudio import Runner, _default_runner, normalize_mac, parse_devices
+
+log = logging.getLogger("venom.receiver")
+
+PAIR_WINDOW_S = 120.0
+POLL_IDLE_S = 5.0     # nothing happening — cheap connected-devices check only
+POLL_WINDOW_S = 1.0   # pairing window open — trust newcomers fast
+
+_MAC_IN_NAME = re.compile(r"([0-9A-Fa-f]{2}[_:]){5}[0-9A-Fa-f]{2}")
+
+
+# ── pure parsing ──────────────────────────────────────────────────────────────
+@dataclass(frozen=True)
+class BtStream:
+    """A bridgeable Bluetooth stream node in the PipeWire graph.
+
+    direction "in"  — audio the device sends us (bridge → earphone)
+    direction "out" — the device's hands-free return channel (bridge the
+                      earphone mic → it, so Venom's mic is its mic)
+    """
+
+    node_id: int
+    name: str
+    mac: str  # colon form, uppercase; "" when the props don't say
+    direction: str  # "in" | "out"
+
+
+def _node_mac(props: dict, name: str) -> str:
+    mac = str(props.get("api.bluez5.address", "")).strip().upper()
+    if not mac:
+        match = _MAC_IN_NAME.search(name)
+        mac = match.group(0).replace("_", ":").upper() if match else ""
+    return mac
+
+
+def find_bt_streams(objects: list[dict], exclude_mac: str = "") -> list[BtStream]:
+    """Bluetooth stream nodes worth bridging, both directions.
+
+    Inbound: any bluez capture node from a connected laptop/phone — A2DP
+    music or HFP call downlink. Outbound: a bluez playback node whose
+    profile says the remote device is a hands-free *audio gateway* (it
+    opened the link that wants our microphone).
+
+    The configured headset is excluded by MAC, and its own microphone by
+    the ``headset-head-unit`` profile — bridging either would loop the
+    headset's mic straight back into its ear.
+    """
+    exclude = exclude_mac.strip().upper().replace("-", ":")
+    found: list[BtStream] = []
+    for obj in objects:
+        props = (obj.get("info", {}) or {}).get("props", {}) or {}
+        media_class = props.get("media.class")
+        if media_class not in ("Audio/Source", "Audio/Sink"):
+            continue
+        name = str(props.get("node.name", ""))
+        if "bluez" not in (str(props.get("device.api", "")) + " " + name):
+            continue
+        profile = str(props.get("api.bluez5.profile", ""))
+        if "headset-head-unit" in profile:  # our own headset's mic path
+            continue
+        mac = _node_mac(props, name)
+        if exclude and mac == exclude:
+            continue
+        if media_class == "Audio/Source":
+            found.append(BtStream(obj.get("id"), name, mac, "in"))
+        elif "gateway" in profile:
+            # An Audio/Sink toward a hands-free gateway = its mic channel.
+            # Plain A2DP sinks (headphones we play TO) are never bridged.
+            found.append(BtStream(obj.get("id"), name, mac, "out"))
+    return found
+
+
+# ── default subprocess seams ──────────────────────────────────────────────────
+def _default_agent_factory() -> subprocess.Popen:
+    """A persistent bluetoothctl we feed commands over stdin — a one-shot
+    `bluetoothctl agent ...` exits immediately and takes the agent with it,
+    so incoming pairing would have nobody to say yes."""
+    return subprocess.Popen(
+        ["bluetoothctl"], stdin=subprocess.PIPE,
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True,
+    )
+
+
+def _default_bridge_factory(node_name: str, direction: str) -> subprocess.Popen:
+    """One pw-loopback per stream. Inbound captures the device's stream and
+    plays to the default sink (the earphone); outbound captures the default
+    source (the earphone mic) and plays into the device's hands-free sink.
+    pw-loopback resamples both sides itself, so the graph rate and the
+    earphone's rate never need to agree with the peer's."""
+    if direction == "in":
+        args = ["pw-loopback", "-n", "venom-bt-bridge", "-C", node_name]
+    else:
+        args = ["pw-loopback", "-n", "venom-bt-mic-bridge", "-P", node_name]
+    return subprocess.Popen(
+        args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+
+
+def _default_pw_dump() -> list[dict]:
+    from venom.audio.routing import pw_dump
+
+    return pw_dump()
+
+
+@dataclass
+class _Bridge:
+    proc: subprocess.Popen
+    mac: str
+    direction: str  # "in" | "out"
+
+
+class BluetoothReceiver:
+    """Pi-as-Bluetooth-headset: pairing window + per-direction bridges."""
+
+    def __init__(self, headset_mac: str = "", headset_name: str = "",
+                 repin: Callable[[], None] | None = None,
+                 runner: Runner = _default_runner,
+                 agent_factory: Callable[[], subprocess.Popen] = _default_agent_factory,
+                 bridge_factory: Callable[[str, str], subprocess.Popen] = _default_bridge_factory,
+                 pw_dump: Callable[[], list[dict]] = _default_pw_dump,
+                 clock: Callable[[], float] = time.monotonic):
+        self.headset_mac = normalize_mac(headset_mac) if headset_mac else ""
+        self.headset_name = headset_name.strip()
+        self._repin = repin
+        self._run = runner
+        self._agent_factory = agent_factory
+        self._bridge_factory = bridge_factory
+        self._pw_dump = pw_dump
+        self._clock = clock
+
+        self._lock = threading.Lock()
+        self._agent: subprocess.Popen | None = None
+        self._deadline = 0.0
+        self._bridges: dict[str, _Bridge] = {}  # node name -> bridge
+        self._names: dict[str, str] = {}        # MAC -> device name
+        self._trusted: set[str] = set()
+        self._audio_capable: dict[str, bool] = {}
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._poll_failed = False  # warn once, then stay quiet (dev boxes)
+
+    # ── voice-tool surface (each returns natural speech) ─────────────────────
+    def open_pairing(self, window_s: float = PAIR_WINDOW_S) -> str:
+        with self._lock:
+            try:
+                if self._agent is None or self._agent.poll() is not None:
+                    self._agent = self._agent_factory()
+                    for cmd in ("power on", "agent NoInputNoOutput",
+                                "default-agent", "pairable on",
+                                "discoverable on"):
+                        self._agent.stdin.write(cmd + "\n")
+                else:  # window re-opened — just refresh discoverability
+                    self._agent.stdin.write("discoverable on\n")
+                self._agent.stdin.flush()
+            except OSError as exc:
+                log.warning("could not open pairing window: %s", exc)
+                self._agent = None
+                return ("I couldn't open Bluetooth pairing just now — "
+                        "the Bluetooth service may be down.")
+            self._deadline = self._clock() + window_s
+        log.info("bluetooth pairing window open for %.0fs", window_s)
+        minutes = max(1, round(window_s / 60))
+        return (f"Pairing is open for about {minutes} minute"
+                f"{'s' if minutes > 1 else ''}. On the laptop or phone, pick "
+                f"'venom' in the Bluetooth device list — once it connects, "
+                f"its audio plays in your earpiece, and on calls it can use "
+                f"this mic too.")
+
+    def status(self) -> str:
+        with self._lock:
+            streaming = sorted({self._names.get(b.mac, b.mac or "an unnamed device")
+                                for b in self._bridges.values()
+                                if b.direction == "in"})
+            mic_users = sorted({self._names.get(b.mac, b.mac or "an unnamed device")
+                                for b in self._bridges.values()
+                                if b.direction == "out"})
+            window_open = (self._agent is not None
+                           and self._clock() < self._deadline)
+        parts = []
+        if streaming:
+            parts.append(f"{' and '.join(streaming)} is streaming audio "
+                         f"through your earpiece")
+        if mic_users:
+            parts.append(f"{' and '.join(mic_users)} is using your "
+                         f"earpiece microphone")
+        if parts:
+            return ", and ".join(parts) + "."
+        if window_open:
+            return ("Nothing is streaming yet, but pairing is open — pick "
+                    "'venom' in the device's Bluetooth list.")
+        return "No external device is streaming audio right now."
+
+    def disconnect_all(self) -> str:
+        with self._lock:
+            macs = sorted({b.mac for b in self._bridges.values() if b.mac})
+        if not macs:
+            return "Nothing is streaming to disconnect."
+        for mac in macs:
+            try:
+                self._run(["disconnect", mac], 15)
+            except Exception as exc:
+                log.warning("disconnect %s failed: %s", mac, exc)
+        n = len(macs)
+        return (f"Disconnected {n} device{'s' if n > 1 else ''} — "
+                f"the earpiece is all yours again.")
+
+    # ── background loop ───────────────────────────────────────────────────────
+    def start(self) -> None:
+        if self._thread is not None and self._thread.is_alive():
+            return
+        self._stop.clear()
+        self._thread = threading.Thread(target=self._loop, daemon=True,
+                                        name="bt-receiver")
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=5)
+        self._close_pairing()
+        with self._lock:
+            for name in list(self._bridges):
+                self._kill_bridge(name)
+
+    def _loop(self) -> None:
+        while not self._stop.is_set():
+            try:
+                self.poll_once()
+                self._poll_failed = False
+            except Exception as exc:
+                # First failure is worth a warning; a box without
+                # bluetoothctl/pipewire would otherwise spam the journal.
+                if not self._poll_failed:
+                    log.warning("receiver poll failed: %s", exc)
+                    self._poll_failed = True
+            window_open = self._agent is not None and self._clock() < self._deadline
+            self._stop.wait(POLL_WINDOW_S if window_open else POLL_IDLE_S)
+
+    def poll_once(self) -> None:
+        """One housekeeping pass: window expiry, trust, bridge lifecycles."""
+        now = self._clock()
+        if self._agent is not None and now >= self._deadline:
+            self._close_pairing()
+
+        connected = self._connected_devices()
+        with self._lock:
+            self._names.update(connected)
+        window_open = self._agent is not None
+
+        for mac in connected:
+            if window_open and mac not in self._trusted:
+                # A newcomer paired during the window: trust it so it can
+                # reconnect forever without another pairing dance.
+                self._run(["trust", mac], 10)
+                self._trusted.add(mac)
+
+        # pw-dump is the expensive call — only when a device that can even
+        # carry audio is around, or we still hold bridges to reap.
+        if not self._bridges and not any(
+                self._is_audio_peer(mac) for mac in connected):
+            return
+
+        streams = {node.name: node
+                   for node in find_bt_streams(self._pw_dump(), self.headset_mac)}
+
+        with self._lock:
+            # Reap: node gone, or the loopback died underneath us.
+            for name in list(self._bridges):
+                if (name not in streams
+                        or self._bridges[name].proc.poll() is not None):
+                    self._kill_bridge(name)
+            for name, node in streams.items():
+                if name in self._bridges:
+                    continue
+                # Before any external audio flows, make sure the defaults
+                # still point at Venom's own headset — a device that just
+                # connected must never disturb the Pi's audio path.
+                if self._repin is not None:
+                    try:
+                        self._repin()
+                    except Exception:
+                        log.exception("defaults re-pin failed")
+                try:
+                    proc = self._bridge_factory(name, node.direction)
+                    self._bridges[name] = _Bridge(proc, node.mac,
+                                                  node.direction)
+                    if node.mac:
+                        self._trusted.add(node.mac)
+                        self._run(["trust", node.mac], 10)
+                    log.info("bluetooth bridge (%s): %s (%s)",
+                             "their audio -> earphone" if node.direction == "in"
+                             else "earphone mic -> them",
+                             name, self._names.get(node.mac, node.mac))
+                except OSError as exc:
+                    log.warning("could not start audio bridge for %s: %s",
+                                name, exc)
+
+    # ── helpers ───────────────────────────────────────────────────────────────
+    def _connected_devices(self) -> dict[str, str]:
+        """{mac: name} of connected devices that aren't the headset."""
+        devices = parse_devices(self._run(["devices", "Connected"], 10))
+        out: dict[str, str] = {}
+        for mac, name in devices.items():
+            if self.headset_mac and mac == self.headset_mac:
+                continue
+            if (self.headset_name
+                    and self.headset_name.lower() in name.lower()):
+                continue
+            out[mac] = name
+        return out
+
+    def _is_audio_peer(self, mac: str) -> bool:
+        """Can this device stream audio at us or use our mic — i.e. does it
+        offer A2DP Audio Source or a hands-free/headset Audio Gateway?
+        Checked once per MAC (bluetoothctl info) so shutter remotes and
+        other non-audio gadgets never trigger a pw-dump every poll."""
+        if mac not in self._audio_capable:
+            info = self._run(["info", mac], 10)
+            self._audio_capable[mac] = ("Audio Source" in info
+                                        or "Gateway" in info)
+        return self._audio_capable[mac]
+
+    def _close_pairing(self) -> None:
+        with self._lock:
+            agent, self._agent = self._agent, None
+        if agent is None:
+            return
+        try:
+            agent.stdin.write("discoverable off\npairable off\nexit\n")
+            agent.stdin.flush()
+        except OSError:
+            pass
+        try:
+            agent.terminate()
+        except Exception:
+            pass
+        log.info("bluetooth pairing window closed")
+
+    def _kill_bridge(self, name: str) -> None:
+        # caller holds self._lock
+        bridge = self._bridges.pop(name)
+        try:
+            bridge.proc.terminate()
+        except Exception:
+            pass
+        log.info("bluetooth audio bridge closed: %s (%s)", name,
+                 self._names.get(bridge.mac, bridge.mac))
+
+
+# One receiver per process: the voice orchestrator is rebuilt after crashes,
+# and two instances would each spawn a loopback per stream — doubled audio.
+_shared: BluetoothReceiver | None = None
+
+
+def shared_receiver(**kwargs) -> BluetoothReceiver:
+    global _shared
+    if _shared is None:
+        _shared = BluetoothReceiver(**kwargs)
+    return _shared

@@ -19,6 +19,10 @@ architecture with FLINT through `flint-core`, but it is its own product.
 - **Weather** — any city, no extra API key (open-meteo).
 - **Timers** — "set a timer for 10 minutes for chai"; a chime plays in your
   headset when it fires, even if Venom was asleep.
+- **Bluetooth headset for your laptop/phone** — "pair my laptop" makes the
+  Pi discoverable as 'venom'; the device's audio plays through your earphone
+  (mixed with Venom's voice, never replacing it) and its calls can use the
+  earphone mic. Disconnect from the device, or say "disconnect my laptop".
 - **Time & date**, **headset volume control** by voice.
 - **Long-term memory** — it quietly remembers who you are, what you like,
   what you're working on, and uses it naturally next time.
