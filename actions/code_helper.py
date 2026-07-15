@@ -14,10 +14,9 @@
 import subprocess
 import sys
 import re
-import time
 from pathlib import Path
 
-from core.llm import GatewayModel, get_gateway
+from core.llm import GatewayModel
 
 DESKTOP            = Path.home() / "Desktop"
 MAX_BUILD_ATTEMPTS = 3
@@ -84,24 +83,6 @@ def _has_error(output: str) -> bool:
     error_signals = ["error", "exception", "traceback", "syntaxerror",
                      "nameerror", "typeerror", "stderr", "failed", "crash"]
     return any(s in output.lower() for s in error_signals)
-
-
-def _take_screenshot() -> Path | None:
-    try:
-        import pyautogui
-        screenshot_path = Path.home() / "Desktop" / f"flint_debug_{int(time.time())}.png"
-        screenshot = pyautogui.screenshot()
-        screenshot.save(str(screenshot_path))
-        print(f"[Code] 📸 Screenshot: {screenshot_path}")
-        return screenshot_path
-    except Exception as e:
-        print(f"[Code] ⚠️ Screenshot failed: {e}")
-        return None
-
-
-def _image_to_base64(path: Path) -> str:
-    import base64
-    return base64.b64encode(path.read_bytes()).decode("utf-8")
 
 
 def _detect_intent(description: str, file_path: str, code: str) -> str:
@@ -428,12 +409,6 @@ def _screen_debug_action(description, file_path, player, speak=None) -> str:
 
     print("[Code] 📸 Capturing screen for debug...")
 
-
-    screenshot_path = _take_screenshot()
-    if not screenshot_path:
-        return "Could not take screenshot, sir. Please make sure PyAutoGUI is installed."
-
-
     file_content = ""
     if file_path:
         file_content, err = _read_file(file_path)
@@ -441,39 +416,15 @@ def _screen_debug_action(description, file_path, player, speak=None) -> str:
             print(f"[Code] ⚠️ Could not read file: {err}")
 
     try:
-        import base64
-
-        image_b64 = base64.b64encode(screenshot_path.read_bytes()).decode("ascii")
+        from core.vision_service import get_vision_service
 
         user_question = description or "What error or problem do you see on the screen? How can it be fixed?"
-
-        context = ""
-        if file_content:
-            context = f"\n\nAdditionally, here is the related file content:\n```\n{file_content[:4000]}\n```"
-
-        analysis_prompt = f"""You are an expert programmer and debugger analyzing a screenshot.
-
-User's question: {user_question}{context}
-
-Please:
-1. Identify any errors, exceptions, or problems visible on the screen
-2. Explain what is causing the problem in simple terms
-3. Provide a concrete fix or solution
-4. If there's code visible, show the corrected version
-
-Be specific and actionable. If you see an error message, quote it exactly."""
-
-        response = get_gateway().vision(
-            analysis_prompt, image_b64, "image/png", max_tokens=4096,
+        analysis = get_vision_service().debug_screen(
+            user_question,
+            related_file_content=file_content,
         )
 
-        analysis = response.text.strip()
         print("[Code] ✅ Screen analysis complete")
-
-        try:
-            screenshot_path.unlink()
-        except Exception:
-            pass
 
         if file_path and file_content:
 
@@ -488,11 +439,6 @@ Be specific and actionable. If you see an error message, quote it exactly."""
         return analysis
 
     except Exception as e:
-
-        try:
-            screenshot_path.unlink()
-        except Exception:
-            pass
         return f"Screen analysis failed: {e}"
 
 

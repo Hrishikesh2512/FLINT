@@ -1,6 +1,5 @@
 #computer_control.py
 import json
-import re
 import string
 import subprocess
 import sys
@@ -307,29 +306,10 @@ def _focus_window(title: str) -> str:
     return f"focus_window: unknown OS '{os_name}'"
 def _screen_find(description: str) -> tuple[int, int] | None:
     try:
-        from core.llm import get_gateway
-        from core.capture_engine import get_engine
+        from core.vision_service import get_vision_service
 
         _require_pyautogui()
-        w, h  = pyautogui.size()
-        # Frame-diff cached capture: repeated finds on an unchanged screen
-        # reuse the same encoded image token instead of re-encoding a PNG.
-        frame = get_engine().capture_screen()
-
-        text = get_gateway().vision(
-            f"This is a downscaled screenshot of a {w}×{h} pixel screen. "
-            f"Locate the UI element: '{description}'. "
-            f"Reply ONLY with its center in FULL-SCREEN coordinates "
-            f"(0,0 top-left, {w},{h} bottom-right) as: x,y — or NOT_FOUND",
-            frame.b64,
-            frame.mime,
-        ).text
-
-        if "NOT_FOUND" in text.upper():
-            return None
-        match = re.search(r"(\d+)\s*,\s*(\d+)", text)
-        if match:
-            return int(match.group(1)), int(match.group(2))
+        return get_vision_service().locate_on_screen(description)
     except Exception as e:
         print(f"[ComputerControl] ⚠️ screen_find failed: {e}")
     return None
