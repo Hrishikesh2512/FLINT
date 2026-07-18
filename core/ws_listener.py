@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import threading
 import time
 from typing import Callable
@@ -43,6 +44,8 @@ try:
     _WS_OK = True
 except ImportError:
     _WS_OK = False
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 8765
@@ -127,8 +130,8 @@ class CommandListener:
         if self.on_clients_changed:
             try:
                 self.on_clients_changed(self.client_count())
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("ws_listener: notify_clients_changed failed: %s", e)
 
     async def _handler(self, ws):
         with self._lock:
@@ -143,8 +146,8 @@ class CommandListener:
             }))
             async for raw in ws:
                 await self._on_message(ws, raw)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("ws_listener: handler exception: %s", e)
         finally:
             with self._lock:
                 self._clients.discard(ws)
@@ -231,8 +234,8 @@ class CommandListener:
         for ws in targets:
             try:
                 await ws.send(data)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("ws_listener: broadcast send failed: %s", e)
 
 
 _listener: CommandListener | None = None
