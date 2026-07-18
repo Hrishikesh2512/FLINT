@@ -29,7 +29,7 @@ supabase==2.31.0
 
 # Web / data
 beautifulsoup4==4.15.0
-duckduckgo-search==8.1.1
+ddgs==8.1.1
 youtube-transcript-api==1.2.4
 
 # Windows integration
