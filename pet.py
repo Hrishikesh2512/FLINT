@@ -304,7 +304,7 @@ class CreatureRenderer:
     def _clear(self):
         for i in self._ids:
             try: self.c.delete(i)
-            except: pass
+            except Exception: pass
         self._ids = []
 
     def _oval(self, x0, y0, x1, y1, **kw):
