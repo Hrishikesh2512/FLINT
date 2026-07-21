@@ -59,10 +59,13 @@ def _write_chime(path: Path = CHIME_WAV) -> Path | None:
 class NotificationHub:
     """Subscribes to the phone's notification topic; chimes + holds messages."""
 
-    def __init__(self, server: str, topic: str, is_dnd=None):
+    def __init__(self, server: str, topic: str, is_dnd=None, on_arrival=None):
         self._server = (server or "https://ntfy.sh").rstrip("/")
         self._topic = (topic or "").strip()
         self._is_dnd = is_dnd or (lambda: False)
+        # Called (off the network thread) with the sender name when a message
+        # arrives and DND is off — lets the voice loop announce it proactively.
+        self._on_arrival = on_arrival
         self._recent: deque[dict] = deque(maxlen=30)
         self._unread = 0
         self._seen: deque[str] = deque(maxlen=200)  # message ids, for dedupe
@@ -121,6 +124,11 @@ class NotificationHub:
         log.info("notification: %s — %s", entry["title"], entry["message"][:60])
         if not self._is_dnd():
             self._chime()
+            if self._on_arrival:
+                try:
+                    self._on_arrival(entry["title"] or "Someone")
+                except Exception as exc:  # never let a hook kill the subscriber
+                    log.debug("on_arrival hook failed: %s", exc)
 
     def _chime(self) -> None:
         if not self._chime_path:

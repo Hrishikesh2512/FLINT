@@ -213,6 +213,15 @@ function digitsOnly(s) {
   return (s || '').replace(/[^0-9]/g, '');
 }
 
+// An individual (1:1) human chat — either classic phone-number addressing or
+// WhatsApp's newer LID (@lid) privacy addressing. Deliberately EXCLUDES groups
+// (@g.us), channels (@newsletter) and status (@broadcast) so auto-reply and
+// forwarding only ever touch person-to-person DMs.
+function isIndividualChat(jid) {
+  if (!jid) return false;
+  return jid.endsWith('@s.whatsapp.net') || jid.endsWith('@lid');
+}
+
 // Resolve a `to` argument (name | phone number | jid) to a WhatsApp JID.
 // Returns {jid} on success, {candidates:[{jid,name}]} when a name is
 // ambiguous, or {error} when nothing matches.
@@ -374,14 +383,23 @@ async function start() {
   sock.ev.on('messaging-history.set', ({ contacts: c }) => learnFrom(c));
 
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    for (const msg of messages) {
+      const dbgJid = msg.key && msg.key.remoteJid;
+      console.log(
+        `[venom-whatsapp] upsert type=${type} jid=${dbgJid} ` +
+        `fromMe=${msg.key && msg.key.fromMe} hasMsg=${!!msg.message} ` +
+        `text=${JSON.stringify((messageText(msg) || '').slice(0, 40))}`);
+    }
     if (type !== 'notify') return;
     for (const msg of messages) {
       if (!msg.message || msg.key.fromMe) continue;
       const jid = msg.key.remoteJid;
       // Learn the sender's name; forward only 1:1 chats (skip groups/status).
       if (msg.pushName) rememberContact(jid, msg.pushName);
-      if (!isJidUser(jid)) continue;
-      lastChatJid = jidNormalizedUser(jid);
+      if (!isIndividualChat(jid)) continue;
+      // @lid jids aren't phone-number jids, so don't run them through
+      // jidNormalizedUser (which assumes @s.whatsapp.net) — keep them as-is.
+      lastChatJid = jid.endsWith('@lid') ? jid : jidNormalizedUser(jid);
       const text = messageText(msg);
       const sender = msg.pushName || contacts.get(lastChatJid) || jid.split('@')[0];
       if (text) {

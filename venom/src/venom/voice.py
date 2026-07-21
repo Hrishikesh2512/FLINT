@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 import time
 
 from flint_core.memory import MemoryStore
@@ -128,7 +129,13 @@ class VoiceOrchestrator:
 
         self.notifications = NotificationHub(
             config.phone.ntfy_server, config.phone.notify_topic,
-            is_dnd=lambda: self._dnd)
+            is_dnd=lambda: self._dnd, on_arrival=self._note_whatsapp)
+        # Senders of WhatsApp messages that arrived while idle, awaiting a
+        # proactive spoken announcement. Filled from the notification thread,
+        # drained by the wake loop — hence the lock.
+        self._pending_announcements: list[str] = []
+        self._ann_lock = threading.Lock()
+        self._opening_announcement: str | None = None
         # Bluetooth receive: laptop/phone audio into the earphone. A process-
         # wide singleton — orchestrators are rebuilt after crashes, and two
         # receivers would bridge every stream twice (doubled audio).
@@ -426,6 +433,42 @@ class VoiceOrchestrator:
                 and self.config.audio.receiver_focus
                 and self.btreceiver.is_streaming)
 
+    def _note_whatsapp(self, sender: str) -> None:
+        """Notification-thread hook: a WhatsApp arrived. Queue the sender for a
+        proactive spoken announcement (picked up by the idle wake loop). Held
+        under DND — the hub already suppresses the chime then too."""
+        if self._dnd:
+            return
+        with self._ann_lock:
+            self._pending_announcements.append(sender or "Someone")
+
+    def _take_announcement(self) -> str | None:
+        """Drain queued WhatsApp senders into one opening instruction, or None.
+        Bursts collapse into a single announcement so she doesn't chatter."""
+        with self._ann_lock:
+            if not self._pending_announcements:
+                return None
+            senders = self._pending_announcements[:]
+            self._pending_announcements.clear()
+        seen: list[str] = []
+        for s in senders:
+            if s not in seen:
+                seen.append(s)
+        if len(seen) == 1:
+            who = seen[0]
+        elif len(seen) == 2:
+            who = f"{seen[0]} and {seen[1]}"
+        else:
+            who = f"{seen[0]}, {seen[1]} and {len(seen) - 2} others"
+        one = len(senders) == 1
+        return (
+            f"[Proactive] The user just received "
+            f"{'a WhatsApp message' if one else 'WhatsApp messages'} from {who}. "
+            f"Open the conversation by telling them now, in ONE short warm "
+            f"Hinglish sentence — e.g. 'Sir, {who} ne WhatsApp pe message kiya "
+            f"hai' — and ask if they'd like it read out. Do NOT read the message "
+            f"content yet; wait for them to say yes.")
+
     def _announce_due_alerts(self, speaker: SpeakerStream) -> None:
         """Chime for timers/reminders that fire while asleep. Do-Not-Disturb
         holds them: left unpopped so they announce the moment DND ends."""
@@ -507,6 +550,15 @@ class VoiceOrchestrator:
             if self._bt_focused():
                 raise FocusRequested()
             self._announce_due_alerts(speaker)
+            # A WhatsApp arrived while asleep — wake ourselves to announce who
+            # messaged (unless DND, which holds it queued until DND lifts).
+            if not self._dnd:
+                ann = self._take_announcement()
+                if ann is not None:
+                    self._opening_announcement = ann
+                    log.info("whatsapp arrived while asleep — announcing sender")
+                    self._drain(mic)
+                    return
             if not self.inbox.empty():
                 log.info("console prompt while asleep — starting a session")
                 self._drain(mic)
@@ -625,6 +677,14 @@ class VoiceOrchestrator:
 
     def _prepare_opening(self, session: LiveSession) -> None:
         """At the moment of waking, decide whether to lead with a briefing."""
+        # A queued WhatsApp announcement takes priority over the morning brief:
+        # she woke *because* of the message, so lead with who it's from.
+        if self._opening_announcement:
+            session._opening = self._opening_announcement
+            self._opening_announcement = None
+            self.session.mark_interaction()
+            log.info("delivering whatsapp announcement")
+            return
         if self.session.should_brief():
             from venom.tools_pi import build_briefing
 
