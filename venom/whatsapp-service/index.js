@@ -61,8 +61,6 @@ const NTFY_TOPIC = (process.env.NTFY_TOPIC || '').trim();
 const GEMINI_API_KEY = (process.env.GEMINI_API_KEY || '').trim();
 const GEMINI_MODEL = (process.env.GEMINI_MODEL || 'gemini-2.5-flash').trim();
 const AUTO_REPLY_USER = (process.env.AUTO_REPLY_USER || '').trim() || 'the user';
-const AUTO_REPLY_COOLDOWN_MS = 8000; // min gap between replies to one chat
-const AUTO_REPLY_MAX_PER_HOUR = 5;   // per-chat cap — stops runaway bot loops
 const AUTO_REPLY_HISTORY = 6;        // turns of context kept per chat
 
 const CONTACTS_FILE = path.join(STATE_DIR, 'contacts.json');
@@ -134,10 +132,6 @@ function persistAutoReply() {
 }
 /** @type {Map<string, Array<{role:string, text:string}>>} recent turns per chat */
 const chatHistory = new Map();
-/** @type {Map<string, number>} last auto-reply time per chat (ms) */
-const lastAutoReplyAt = new Map();
-/** @type {Map<string, {windowStart:number, count:number}>} hourly cap per chat */
-const autoReplyCount = new Map();
 
 function pushHistory(jid, role, text) {
   const h = chatHistory.get(jid) || [];
@@ -146,40 +140,26 @@ function pushHistory(jid, role, text) {
   chatHistory.set(jid, h);
 }
 
-// Rolling hourly cap so a chat (or another auto-responder) can't loop forever.
-function underHourlyCap(jid) {
-  const now = Date.now();
-  const rec = autoReplyCount.get(jid);
-  if (!rec || now - rec.windowStart > 3600_000) {
-    autoReplyCount.set(jid, { windowStart: now, count: 0 });
-    return true;
-  }
-  return rec.count < AUTO_REPLY_MAX_PER_HOUR;
-}
-function noteAutoReply(jid) {
-  lastAutoReplyAt.set(jid, Date.now());
-  const rec = autoReplyCount.get(jid) || { windowStart: Date.now(), count: 0 };
-  rec.count += 1;
-  autoReplyCount.set(jid, rec);
-}
-
 const AUTO_REPLY_SYSTEM =
   `You are Jarvis — ${AUTO_REPLY_USER}'s witty AI assistant, in the spirit of ` +
-  `Tony Stark's Jarvis: dry, clever, effortlessly composed, and a little cheeky ` +
-  `— auto-replying to WhatsApp messages while ${AUTO_REPLY_USER} is busy. Always ` +
-  `write in the THIRD PERSON as Jarvis about ${AUTO_REPLY_USER}, NEVER as if you ` +
-  `were ${AUTO_REPLY_USER} (do not use "I"/"me" to mean ${AUTO_REPLY_USER}). Add ` +
-  `a light, classy touch of humour or a witty aside — playful and elegant, never ` +
-  `crude, and never at the sender's expense; the joke is gently on ` +
-  `${AUTO_REPLY_USER} being unreachable, not on them. Still genuinely acknowledge ` +
-  `their message. Examples: "Jarvis here. ${AUTO_REPLY_USER} has wandered away ` +
-  `from his phone — a rare and beautiful sighting. He shall return your message ` +
-  `shortly." / "${AUTO_REPLY_USER} abhi busy hai, filhaal main Jarvis morcha ` +
-  `sambhal raha hoon. Thoda sabr rakho, wapas aake reply karega." Match the ` +
-  `sender's language and script (Hinglish with Hinglish). Keep it to one or two ` +
-  `short sentences. Never agree to payments, share personal, financial, or ` +
-  `private details, or send links or codes. Do not add any signature or ` +
-  `sign-off yourself.`;
+  `Tony Stark's Jarvis: dry, clever, effortlessly composed, a little cheeky. ` +
+  `${AUTO_REPLY_USER} is busy right now, so YOU are chatting with whoever ` +
+  `messages him — keeping them company and helping where you can until he is ` +
+  `free. On someone's FIRST message, let them know ${AUTO_REPLY_USER} is tied up ` +
+  `but they are welcome to talk to you (Jarvis) in the meantime and you'll pass ` +
+  `things on — e.g. "Jarvis here — ${AUTO_REPLY_USER} is buried in something at ` +
+  `the moment, but do carry on with me; I'll keep him posted." After that, ` +
+  `genuinely ENGAGE with what they actually say: answer their questions, chat, ` +
+  `be helpful — do NOT keep repeating that he is busy, and only mention his ` +
+  `availability if they ask when he'll be back. Always speak in the THIRD PERSON ` +
+  `as Jarvis about ${AUTO_REPLY_USER} (never "I"/"me" as ${AUTO_REPLY_USER}); ` +
+  `refer to yourself as Jarvis. Keep the dry wit — playful and classy, never ` +
+  `crude, never at the sender's expense. Match the sender's language and script ` +
+  `(Hinglish with Hinglish). Keep replies short — one or two sentences. Never ` +
+  `agree to payments, share ${AUTO_REPLY_USER}'s personal, financial, or private ` +
+  `details, make firm commitments on his behalf, or send links or codes; for ` +
+  `anything only ${AUTO_REPLY_USER} can decide, say you'll flag it for him. Do ` +
+  `not add any signature or sign-off yourself.`;
 
 async function generateReply(jid, incomingText) {
   if (!GEMINI_API_KEY) return '';
@@ -223,19 +203,12 @@ async function maybeAutoReply(jid, incomingText, tsSeconds) {
   if (!autoReply || !incomingText) return;
   // Never touch the pre-activation backlog.
   if (tsSeconds && tsSeconds < autoReplyEnabledAt) return;
-  const last = lastAutoReplyAt.get(jid) || 0;
-  if (Date.now() - last < AUTO_REPLY_COOLDOWN_MS) return;
-  if (!underHourlyCap(jid)) {
-    logger.warn({ jid }, 'auto-reply hourly cap reached — skipping');
-    return;
-  }
   try {
     const reply = await generateReply(jid, incomingText);
     if (!reply) return;
     await sendText(jid, reply);
     pushHistory(jid, 'user', incomingText);
     pushHistory(jid, 'model', reply);
-    noteAutoReply(jid);
     console.log(`[venom-whatsapp] auto-replied to ${jid.split('@')[0]}: ${reply.slice(0, 60)}`);
   } catch (err) {
     logger.warn({ err }, 'auto-reply send failed');
@@ -496,8 +469,6 @@ const server = http.createServer(async (req, res) => {
       // Answer only messages from this point on; wipe stale per-chat context.
       autoReplyEnabledAt = Math.floor(Date.now() / 1000);
       chatHistory.clear();
-      lastAutoReplyAt.clear();
-      autoReplyCount.clear();
     }
     persistAutoReply();
     const hasKey = !!GEMINI_API_KEY;
