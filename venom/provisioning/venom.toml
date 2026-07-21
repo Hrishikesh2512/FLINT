@@ -116,6 +116,26 @@ app_password = ""          # 16-char app password (spaces ok)
 enabled     = true
 photo_topic = ""          # ntfy topic for photo pushes; empty = reuse [phone] ntfy_topic
 
+# ── Ambient awareness (she speaks first) ─────────────────────────────────────
+# Every few minutes Venom fuses what she knows — calendar, weather, unread
+# mail, reminders, her own temperature and disk — and opens a conversation
+# herself when the combination is actually worth it ("rain aa rahi hai and
+# you've got that 4pm — chhata le lena"). She never opens one without
+# something specific to say. The knobs below are all about restraint: quiet
+# hours, a minimum gap, a per-topic cooldown and a daily cap. Every value is
+# optional — deleting this whole section keeps the tuned defaults.
+[ambient]
+enabled               = true
+tick_seconds          = 300     # how often she looks at the world
+quiet_start_hour      = 23      # never speaks first from 23:00...
+quiet_end_hour        = 7       # ...until 07:00
+min_gap_minutes       = 45      # minimum spacing between two openings
+kind_cooldown_minutes = 180     # per topic (weather / mail / device / ...)
+max_per_day           = 6
+mail_pileup           = 5       # unread count worth mentioning
+temp_warn_c           = 80      # she tells you when *she's* overheating
+disk_warn_pct         = 90
+
 # ── Brain candidates, lowest priority number wins ────────────────────────────
 # The laptop running the FLINT brain service. Update `host` to your laptop's
 # LAN or Tailscale address. Priority 0 = always preferred when reachable.

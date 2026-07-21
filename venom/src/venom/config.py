@@ -263,6 +263,50 @@ class WhatsAppConfig:
 
 
 @dataclass(frozen=True)
+class AmbientConfig:
+    """Ambient awareness — whether Venom is allowed to speak first.
+
+    On a slow tick she fuses calendar, weather, mail, reminders and her own
+    vitals, and opens a conversation when the combination is worth it (see
+    venom/ambient.py). Every knob here exists to bound how often that can
+    happen: the whole feature is only as good as its restraint.
+    """
+
+    enabled: bool = True
+    tick_seconds: float = 300.0        # how often to look at the world
+    warmup_seconds: float = 180.0      # settle after boot before any nudge
+
+    # ── restraint ────────────────────────────────────────────────────────
+    quiet_start_hour: int = 23         # never speak first from 23:00...
+    quiet_end_hour: int = 7            # ...until 07:00
+    min_gap_minutes: float = 45.0      # minimum spacing between any two
+    kind_cooldown_minutes: float = 180.0   # per signal family
+    max_per_day: int = 6
+
+    # ── signal thresholds ────────────────────────────────────────────────
+    weather_horizon_hours: float = 3.0   # "heading out into this" window
+    weather_cache_minutes: float = 30.0
+    evening_start_hour: int = 20         # early-start warning window
+    evening_end_hour: int = 23
+    early_hour: int = 9                  # tomorrow before this = an early start
+    mail_pileup: int = 5                 # unread count worth mentioning
+    mail_idle_hours: float = 3.0
+    temp_warn_c: float = 80.0
+    disk_warn_pct: float = 90.0
+    idle_hours_before_checkin: float = 5.0
+    checkin_horizon_hours: float = 4.0   # how far ahead a check-in may look
+
+    def __post_init__(self) -> None:
+        if self.tick_seconds <= 0:
+            raise ValueError("ambient.tick_seconds must be positive")
+        for name in ("quiet_start_hour", "quiet_end_hour", "evening_start_hour",
+                     "evening_end_hour", "early_hour"):
+            hour = getattr(self, name)
+            if not (0 <= hour <= 23):
+                raise ValueError(f"ambient.{name} must be an hour 0-23")
+
+
+@dataclass(frozen=True)
 class PhoneConfig:
     """Find-my-phone over ntfy. Subscribe your phone's ntfy app to `ntfy_topic`
     (give it a loud/alarm sound) and shutter button 2 rings it. Off until a
@@ -307,6 +351,7 @@ class VenomConfig:
     buttons: ButtonsConfig = field(default_factory=ButtonsConfig)
     phone: PhoneConfig = field(default_factory=PhoneConfig)
     whatsapp: WhatsAppConfig = field(default_factory=WhatsAppConfig)
+    ambient: AmbientConfig = field(default_factory=AmbientConfig)
 
     def __post_init__(self) -> None:
         if self.poll_interval <= 0:
@@ -394,11 +439,13 @@ def load_config(path: Path | None = None) -> VenomConfig:
     buttons = data.get("buttons", {})
     phone = data.get("phone", {})
     whatsapp = data.get("whatsapp", {})
+    ambient = data.get("ambient", {})
     raw_brains = data.get("brain", [])
 
     brains = _parse_brains(raw_brains) if raw_brains else DEFAULT_CLOUD_CANDIDATES
 
     voice_defaults = VoiceConfig()
+    ambient_defaults = AmbientConfig()
     return VenomConfig(
         # FIXED (Fix 8): keep TOML fallbacks in step with the dataclass
         # defaults — 30s poll, 5s probe timeout.
@@ -497,4 +544,11 @@ def load_config(path: Path | None = None) -> VenomConfig:
             token=str(whatsapp.get("token", "")).strip(),
             timeout=float(whatsapp.get("timeout", 20.0)),
         ),
+        # Every ambient knob falls back to the dataclass default, so an empty
+        # [ambient] section (or none at all) is the tuned configuration.
+        ambient=AmbientConfig(**{
+            name: type(getattr(ambient_defaults, name))(ambient[name])
+            for name in vars(ambient_defaults)
+            if name in ambient
+        }),
     )

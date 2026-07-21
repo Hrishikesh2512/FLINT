@@ -139,6 +139,10 @@ class VoiceOrchestrator:
         self._pending_announcements: list[str] = []
         self._ann_lock = threading.Lock()
         self._opening_announcement: str | None = None
+        # Ambient awareness: the loop that lets her open a conversation on her
+        # own (see venom/ambient.py). Built in run(), where there's a loop.
+        self.ambient = None
+        self._ambient_task: asyncio.Task | None = None
         # Bluetooth receive: laptop/phone audio into the earphone. A process-
         # wide singleton — orchestrators are rebuilt after crashes, and two
         # receivers would bridge every stream twice (doubled audio).
@@ -234,6 +238,10 @@ class VoiceOrchestrator:
         # Calendar feed refresh + proactive event alerts.
         if self.calwatch is not None:
             self.calwatch.start()
+
+        # Ambient awareness — she watches the world and speaks first when it's
+        # worth it. Keep a reference (asyncio holds tasks weakly).
+        self._ambient_task = self._start_ambient()
 
         first_cycle = True
         died_streak = 0
@@ -488,6 +496,63 @@ class VoiceOrchestrator:
             f"hai' — and ask if they'd like it read out. Do NOT read the message "
             f"content yet; wait for them to say yes.")
 
+    # ── ambient awareness (she speaks first) ─────────────────────────────────
+    def _start_ambient(self) -> asyncio.Task | None:
+        """Launch the ambient loop, if enabled. Additive: any failure here
+        leaves a perfectly good reactive assistant."""
+        if not self.config.ambient.enabled:
+            return None
+        try:
+            from venom.ambient import AmbientLoop
+
+            self.ambient = AmbientLoop(
+                self.config,
+                self.config.memory_path.parent / "ambient.json",
+                speak=self.queue_proactive,
+                is_busy=self._ambient_busy,
+                session=self.session,
+                calendar=self.calwatch,
+                mailbox=self.mailbox,
+                memory=self.memory,
+                location=self.location,
+                reminders=self.reminders)
+        except Exception:
+            log.exception("ambient loop failed to start — continuing without it")
+            return None
+        log.info("ambient awareness on (tick %.0fs, quiet %02d:00-%02d:00)",
+                 self.config.ambient.tick_seconds,
+                 self.config.ambient.quiet_start_hour,
+                 self.config.ambient.quiet_end_hour)
+        return asyncio.create_task(self.ambient.run())
+
+    def shutdown(self) -> None:
+        """Stop the background tasks this orchestrator owns.
+
+        The voice loop rebuilds the orchestrator after a crash; an ambient
+        loop left running on the discarded one would keep queueing nudges
+        nobody reads — and burn their once-only keys doing it.
+        """
+        if self._ambient_task is not None:
+            self._ambient_task.cancel()
+            self._ambient_task = None
+
+    def _ambient_busy(self) -> bool:
+        """True whenever she must not open her mouth unprompted: DND, a live
+        conversation, an already-queued opening, or someone else's audio
+        streaming through the earphone."""
+        return (self._dnd
+                or self._session is not None
+                or self._opening_announcement is not None
+                or self._bt_focused())
+
+    def queue_proactive(self, instruction: str) -> None:
+        """Ambient loop -> wake loop: open the next session with this.
+
+        Deliberately the same door the WhatsApp announcement uses, so every
+        unprompted conversation Venom starts goes through one code path.
+        """
+        self._opening_announcement = instruction
+
     def _announce_due_alerts(self, speaker: SpeakerStream) -> None:
         """Chime for timers/reminders that fire while asleep. Do-Not-Disturb
         holds them: left unpopped so they announce the moment DND ends."""
@@ -576,6 +641,12 @@ class VoiceOrchestrator:
                 if ann is not None:
                     self._opening_announcement = ann
                     log.info("whatsapp arrived while asleep — announcing sender")
+                    self._drain(mic)
+                    return
+                # The ambient loop decided something is worth saying — wake
+                # ourselves and lead with it, exactly like a WhatsApp arrival.
+                if self._opening_announcement is not None:
+                    log.info("ambient nudge queued — waking to speak first")
                     self._drain(mic)
                     return
             if not self.inbox.empty():
@@ -803,3 +874,5 @@ async def run_voice_forever(config: VenomConfig, set_state, activity=None) -> No
             backoff = 2.0 if ran_for > 60 else min(backoff * 2, 60.0)
             set_state("voice: restarting")
             await asyncio.sleep(backoff)
+        finally:
+            orchestrator.shutdown()

@@ -23,6 +23,12 @@ architecture with FLINT through `flint-core`, but it is its own product.
   Pi discoverable as 'venom'; the device's audio plays through your earphone
   (mixed with Venom's voice, never replacing it) and its calls can use the
   earphone mic. Disconnect from the device, or say "disconnect my laptop".
+- **Ambient awareness** — she also speaks *first*. Every few minutes she
+  fuses calendar, weather, unread mail, reminders and her own vitals, and
+  opens a conversation when the combination earns it: rain plus somewhere to
+  be ("chhata le lena"), an 8 a.m. start told to you tonight, her own SD card
+  filling up. Bounded by quiet hours, a per-topic cooldown and a daily cap —
+  and she stays silent rather than ask a generic "sab theek?".
 - **Time & date**, **headset volume control** by voice.
 - **Long-term memory** — it quietly remembers who you are, what you like,
   what you're working on, and uses it naturally next time.
@@ -39,6 +45,7 @@ venom/src/venom/
 ├── live.py         # one Gemini Live session: audio duplex + tool dispatch
 ├── wake.py         # openWakeWord ("hey jarvis") + silence endpointing
 ├── tools_pi.py     # search, weather, timers, volume, memory, goodbye
+├── ambient.py      # sense → judge → gate: when she opens the conversation
 ├── audio/          # USB headset auto-selection, mic/speaker streams, chimes
 ├── supervisor.py   # health monitors + voice loop, systemd watchdog
 └── monitors/       # internet probe, headset detection, brain resolver

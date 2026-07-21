@@ -86,6 +86,23 @@ class Mailbox:
         client.select("INBOX", readonly=True)  # NEVER mutate the mailbox
         return client
 
+    def unread_count(self) -> int:
+        """How many unread messages are sitting there; -1 if we can't tell.
+
+        A bare SEARCH with no fetches — cheap enough for the ambient loop to
+        ask on every tick without hammering Gmail.
+        """
+        try:
+            client = self._open()
+            try:
+                _, data = client.search(None, "UNSEEN")
+                return len((data[0] or b"").split())
+            finally:
+                client.logout()
+        except Exception as exc:
+            log.warning("unread count failed: %s", exc)
+            return -1
+
     def unread_summary(self, limit: int = 5) -> str:
         try:
             client = self._open()

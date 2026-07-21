@@ -219,34 +219,53 @@ def _read_file(path: str) -> str:
         return ""
 
 
-def device_vitals() -> str:
-    """A spoken-style health summary of the Pi — temperature, memory, disk,
-    uptime — from /proc and /sys. Anything unreadable is simply omitted, so
-    this works (as far as it can) on any box."""
-    parts: list[str] = []
+def device_metrics() -> dict[str, float]:
+    """Raw device health numbers from /proc and /sys.
+
+    Keys — temp_c, mem_pct, disk_pct, uptime_s — are present only when they
+    could actually be read, so this returns {} on a non-Linux dev box rather
+    than lying with zeros. The spoken summary below and the ambient loop's
+    self-health warnings both read from here, so there is one parser."""
+    out: dict[str, float] = {}
 
     temp = _read_file("/sys/class/thermal/thermal_zone0/temp").strip()
     if temp.isdigit():
-        celsius = int(temp) / 1000
-        heat = " — running hot!" if celsius >= 75 else ""
-        parts.append(f"temperature {celsius:.0f}°C{heat}")
+        out["temp_c"] = int(temp) / 1000
 
     mem = {line.split(":")[0]: int(line.split()[1])
            for line in _read_file("/proc/meminfo").splitlines()[:5]
            if ":" in line}
     if "MemTotal" in mem and "MemAvailable" in mem and mem["MemTotal"]:
-        used = 100 * (1 - mem["MemAvailable"] / mem["MemTotal"])
-        parts.append(f"memory {used:.0f}% used")
+        out["mem_pct"] = 100 * (1 - mem["MemAvailable"] / mem["MemTotal"])
 
     try:
         st = os.statvfs("/")  # Linux-only; absent on dev boxes
-        parts.append(f"disk {100 * (1 - st.f_bavail / st.f_blocks):.0f}% full")
-    except (OSError, AttributeError):
+        out["disk_pct"] = 100 * (1 - st.f_bavail / st.f_blocks)
+    except (OSError, AttributeError, ZeroDivisionError):
         pass
 
     up = _read_file("/proc/uptime").split()
     if up:
-        secs = int(float(up[0]))
+        out["uptime_s"] = float(up[0])
+    return out
+
+
+def device_vitals() -> str:
+    """A spoken-style health summary of the Pi — temperature, memory, disk,
+    uptime. Anything unreadable is simply omitted, so this works (as far as
+    it can) on any box."""
+    metrics = device_metrics()
+    parts: list[str] = []
+
+    if "temp_c" in metrics:
+        heat = " — running hot!" if metrics["temp_c"] >= 75 else ""
+        parts.append(f"temperature {metrics['temp_c']:.0f}°C{heat}")
+    if "mem_pct" in metrics:
+        parts.append(f"memory {metrics['mem_pct']:.0f}% used")
+    if "disk_pct" in metrics:
+        parts.append(f"disk {metrics['disk_pct']:.0f}% full")
+    if "uptime_s" in metrics:
+        secs = int(metrics["uptime_s"])
         parts.append(f"up {secs // 3600}h {secs % 3600 // 60}m")
 
     if not parts:

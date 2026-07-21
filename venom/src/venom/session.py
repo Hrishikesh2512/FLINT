@@ -50,6 +50,13 @@ class SessionState:
             return False  # used recently — not a fresh morning
         return True
 
+    def last_interaction(self) -> float:
+        """Epoch of the last conversation, or 0.0 if she's never met him.
+
+        The ambient loop reads this to know how long he's been quiet.
+        """
+        return float(self._load().get("last_interaction", 0.0) or 0.0)
+
     def mark_briefed(self, now: float | None = None) -> None:
         now = time.time() if now is None else now
         data = self._load()
