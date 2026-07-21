@@ -288,10 +288,19 @@ if [ -d "$WA_SRC" ]; then
         mkdir -p /var/lib/venom/whatsapp
         chown -R venom:venom "$WA_DST" /var/lib/venom/whatsapp
 
-        # Forward incoming WhatsApp to the same ntfy topic Venom already reads.
+        # Bridge env: incoming-forward topic, plus the Gemini key + user name so
+        # auto-reply mode can compose messages. Pulled straight from venom.toml.
         WA_TOPIC="$(sed -n 's/^[[:space:]]*notify_topic[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' \
             /etc/venom/venom.toml 2>/dev/null | head -1)"
-        printf 'NTFY_TOPIC=%s\n' "$WA_TOPIC" > /etc/venom/whatsapp.env
+        WA_GEMINI="$(sed -n 's/^[[:space:]]*api_key[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' \
+            /etc/venom/venom.toml 2>/dev/null | head -1)"
+        WA_USER="$(sed -n 's/^[[:space:]]*user_name[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' \
+            /etc/venom/venom.toml 2>/dev/null | head -1)"
+        {
+            printf 'NTFY_TOPIC=%s\n' "$WA_TOPIC"
+            printf 'GEMINI_API_KEY=%s\n' "$WA_GEMINI"
+            printf 'AUTO_REPLY_USER=%s\n' "$WA_USER"
+        } > /etc/venom/whatsapp.env
         chgrp venom /etc/venom/whatsapp.env && chmod 0640 /etc/venom/whatsapp.env
 
         install -m 0644 "$APP_DIR/venom/provisioning/venom-whatsapp.service" \

@@ -56,6 +56,15 @@ const TOKEN = (process.env.WA_TOKEN || '').trim();
 const NTFY_SERVER = (process.env.NTFY_SERVER || 'https://ntfy.sh').replace(/\/+$/, '');
 const NTFY_TOPIC = (process.env.NTFY_TOPIC || '').trim();
 
+// Auto-reply mode: when on, the bridge answers incoming 1:1 messages itself
+// with a short Gemini-composed reply on the user's behalf.
+const GEMINI_API_KEY = (process.env.GEMINI_API_KEY || '').trim();
+const GEMINI_MODEL = (process.env.GEMINI_MODEL || 'gemini-2.5-flash').trim();
+const AUTO_REPLY_USER = (process.env.AUTO_REPLY_USER || '').trim() || 'the user';
+const AUTO_REPLY_COOLDOWN_MS = 8000; // min gap between replies to one chat
+const AUTO_REPLY_MAX_PER_HOUR = 5;   // per-chat cap — stops runaway bot loops
+const AUTO_REPLY_HISTORY = 6;        // turns of context kept per chat
+
 const CONTACTS_FILE = path.join(STATE_DIR, 'contacts.json');
 const AUTH_DIR = path.join(STATE_DIR, 'auth');
 
@@ -101,6 +110,104 @@ let loggedIn = false;
 let currentQR = null; // raw QR string while pairing; null once connected
 let lastChatJid = null; // most recent 1:1 chat, for "reply to the last message"
 let reconnectDelay = 2000; // grows on repeated failures so we don't hammer WA
+
+// ── auto-reply state (all in-memory: OFF after any restart, by design) ───────
+let autoReply = false;
+let autoReplyEnabledAt = 0; // epoch seconds; only answer messages newer than this
+/** @type {Map<string, Array<{role:string, text:string}>>} recent turns per chat */
+const chatHistory = new Map();
+/** @type {Map<string, number>} last auto-reply time per chat (ms) */
+const lastAutoReplyAt = new Map();
+/** @type {Map<string, {windowStart:number, count:number}>} hourly cap per chat */
+const autoReplyCount = new Map();
+
+function pushHistory(jid, role, text) {
+  const h = chatHistory.get(jid) || [];
+  h.push({ role, text });
+  while (h.length > AUTO_REPLY_HISTORY) h.shift();
+  chatHistory.set(jid, h);
+}
+
+// Rolling hourly cap so a chat (or another auto-responder) can't loop forever.
+function underHourlyCap(jid) {
+  const now = Date.now();
+  const rec = autoReplyCount.get(jid);
+  if (!rec || now - rec.windowStart > 3600_000) {
+    autoReplyCount.set(jid, { windowStart: now, count: 0 });
+    return true;
+  }
+  return rec.count < AUTO_REPLY_MAX_PER_HOUR;
+}
+function noteAutoReply(jid) {
+  lastAutoReplyAt.set(jid, Date.now());
+  const rec = autoReplyCount.get(jid) || { windowStart: Date.now(), count: 0 };
+  rec.count += 1;
+  autoReplyCount.set(jid, rec);
+}
+
+const AUTO_REPLY_SYSTEM =
+  `You are auto-replying to WhatsApp messages on behalf of ${AUTO_REPLY_USER}, ` +
+  `who is busy right now. Reply briefly and warmly in the FIRST PERSON as ` +
+  `${AUTO_REPLY_USER}, in the SAME language and script as the sender (match ` +
+  `Hinglish with Hinglish). One or two short sentences, like a real quick text. ` +
+  `Do not say you are a bot, an AI, or an auto-reply. Never agree to payments, ` +
+  `share personal, financial, or private details, or send links or codes. If the ` +
+  `message really needs ${AUTO_REPLY_USER} personally, just say you'll get back ` +
+  `to them shortly.`;
+
+async function generateReply(jid, incomingText) {
+  if (!GEMINI_API_KEY) return '';
+  const history = chatHistory.get(jid) || [];
+  const contents = history.map((t) => ({ role: t.role, parts: [{ text: t.text }] }));
+  contents.push({ role: 'user', parts: [{ text: incomingText }] });
+  const url =
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}` +
+    `:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      system_instruction: { parts: [{ text: AUTO_REPLY_SYSTEM }] },
+      contents,
+      generationConfig: {
+        maxOutputTokens: 200,
+        temperature: 0.7,
+        // A one-line text needs no chain-of-thought; thinking just adds latency.
+        thinkingConfig: { thinkingBudget: 0 },
+      },
+    }),
+  });
+  if (!resp.ok) {
+    logger.warn({ status: resp.status }, 'gemini auto-reply failed');
+    return '';
+  }
+  const data = await resp.json();
+  const parts = data?.candidates?.[0]?.content?.parts || [];
+  return parts.map((p) => p.text || '').join('').trim();
+}
+
+async function maybeAutoReply(jid, incomingText, tsSeconds) {
+  if (!autoReply || !incomingText) return;
+  // Never touch the pre-activation backlog.
+  if (tsSeconds && tsSeconds < autoReplyEnabledAt) return;
+  const last = lastAutoReplyAt.get(jid) || 0;
+  if (Date.now() - last < AUTO_REPLY_COOLDOWN_MS) return;
+  if (!underHourlyCap(jid)) {
+    logger.warn({ jid }, 'auto-reply hourly cap reached — skipping');
+    return;
+  }
+  try {
+    const reply = await generateReply(jid, incomingText);
+    if (!reply) return;
+    await sock.sendMessage(jid, { text: reply });
+    pushHistory(jid, 'user', incomingText);
+    pushHistory(jid, 'model', reply);
+    noteAutoReply(jid);
+    console.log(`[venom-whatsapp] auto-replied to ${jid.split('@')[0]}: ${reply.slice(0, 60)}`);
+  } catch (err) {
+    logger.warn({ err }, 'auto-reply send failed');
+  }
+}
 
 function digitsOnly(s) {
   return (s || '').replace(/[^0-9]/g, '');
@@ -277,7 +384,10 @@ async function start() {
       lastChatJid = jidNormalizedUser(jid);
       const text = messageText(msg);
       const sender = msg.pushName || contacts.get(lastChatJid) || jid.split('@')[0];
-      if (text) await forwardIncoming(jid, sender, text);
+      if (text) {
+        await forwardIncoming(jid, sender, text);
+        await maybeAutoReply(lastChatJid, text, Number(msg.messageTimestamp) || 0);
+      }
     }
   });
 }
@@ -317,10 +427,31 @@ const server = http.createServer(async (req, res) => {
       user: (sock && sock.user && sock.user.id) || null,
       contacts: contacts.size,
       hasQR: !!currentQR,
+      autoReply,
     });
   }
 
   if (!authed(req)) return sendJSON(res, 401, { error: 'unauthorized' });
+
+  if (route === '/auto-reply' && req.method === 'POST') {
+    let payload;
+    try {
+      payload = JSON.parse((await readBody(req)) || '{}');
+    } catch {
+      return sendJSON(res, 400, { error: 'invalid JSON body' });
+    }
+    autoReply = !!payload.enabled;
+    if (autoReply) {
+      // Answer only messages from this point on; wipe stale per-chat context.
+      autoReplyEnabledAt = Math.floor(Date.now() / 1000);
+      chatHistory.clear();
+      lastAutoReplyAt.clear();
+      autoReplyCount.clear();
+    }
+    const hasKey = !!GEMINI_API_KEY;
+    console.log(`[venom-whatsapp] auto-reply ${autoReply ? 'ON' : 'OFF'}`);
+    return sendJSON(res, 200, { autoReply, hasKey });
+  }
 
   if (route === '/qr') {
     if (!currentQR) {

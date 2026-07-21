@@ -82,3 +82,27 @@ class WhatsAppClient:
                     "QR under WhatsApp to pair it.")
         reason = data.get("error") or "something went wrong"
         return f"I couldn't send that: {reason}."
+
+    def set_auto_reply(self, enabled: bool) -> str:
+        """Turn auto-reply mode on/off. When on, the bridge answers incoming
+        1:1 messages itself, in the user's voice, until turned off."""
+        try:
+            _, data = self._request(
+                "POST", "/auto-reply", {"enabled": bool(enabled)})
+        except urllib.error.HTTPError as exc:
+            try:
+                data = json.loads(exc.read().decode("utf-8", "replace"))
+            except (ValueError, OSError):
+                data = {}
+        except (urllib.error.URLError, OSError) as exc:
+            log.warning("whatsapp auto-reply toggle failed: %s", exc)
+            return ("I couldn't reach WhatsApp — the bridge isn't running.")
+        if enabled:
+            if data.get("autoReply") and data.get("hasKey"):
+                return ("Auto message mode is on. I'll reply to new WhatsApp "
+                        "messages myself until you tell me to stop.")
+            if data.get("autoReply") and not data.get("hasKey"):
+                return ("Auto mode is on, but I have no Gemini key here to write "
+                        "replies — nothing will be sent until that's set.")
+            return "I couldn't turn auto mode on."
+        return "Auto message mode is off. I'll stop replying on my own."

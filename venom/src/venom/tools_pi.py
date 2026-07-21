@@ -516,6 +516,30 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
         def send_whatsapp(text: str, to: str = "") -> str:
             return whatsapp.send(text, to)
 
+        @reg.tool(
+            description=(
+                "Turns AUTO-REPLY mode for WhatsApp on or off. When ON, you "
+                "answer NEW incoming WhatsApp messages yourself, on the user's "
+                "behalf, without them dictating each reply — until they turn it "
+                "off. Existing unread chats are left alone; only messages that "
+                "arrive after it's switched on are answered. Use when the user "
+                "says 'auto message mode on/off', 'auto reply on', 'reply to "
+                "messages automatically', 'answer my WhatsApp for me', or 'stop "
+                "auto replying'."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "enable": {"type": "boolean",
+                               "description": "true to start auto-replying, "
+                                              "false to stop"},
+                },
+                "required": ["enable"],
+            },
+        )
+        def auto_reply_mode(enable: bool) -> str:
+            return whatsapp.set_auto_reply(enable)
+
     if receiver is not None:
         @reg.tool(
             description=(
