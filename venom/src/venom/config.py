@@ -244,6 +244,25 @@ class ButtonsConfig:
 
 
 @dataclass(frozen=True)
+class WhatsAppConfig:
+    """Self-hosted WhatsApp send, via the Baileys bridge (venom/whatsapp-service).
+    The bridge owns the WhatsApp Web session; Venom talks to its localhost HTTP
+    API to send messages ('reply to Tushar: ...'). Incoming messages arrive
+    through the ntfy notify path, not here. On unless disabled — the bridge
+    reports 'not linked yet' until the QR is scanned."""
+
+    enabled: bool = True
+    host: str = "127.0.0.1"
+    port: int = 8788
+    token: str = ""        # must match the bridge's WA_TOKEN, if set
+    timeout: float = 20.0
+
+    @property
+    def ready(self) -> bool:
+        return self.enabled
+
+
+@dataclass(frozen=True)
 class PhoneConfig:
     """Find-my-phone over ntfy. Subscribe your phone's ntfy app to `ntfy_topic`
     (give it a loud/alarm sound) and shutter button 2 rings it. Off until a
@@ -287,6 +306,7 @@ class VenomConfig:
     camera: CameraConfig = field(default_factory=CameraConfig)
     buttons: ButtonsConfig = field(default_factory=ButtonsConfig)
     phone: PhoneConfig = field(default_factory=PhoneConfig)
+    whatsapp: WhatsAppConfig = field(default_factory=WhatsAppConfig)
 
     def __post_init__(self) -> None:
         if self.poll_interval <= 0:
@@ -373,6 +393,7 @@ def load_config(path: Path | None = None) -> VenomConfig:
     camera = data.get("camera", {})
     buttons = data.get("buttons", {})
     phone = data.get("phone", {})
+    whatsapp = data.get("whatsapp", {})
     raw_brains = data.get("brain", [])
 
     brains = _parse_brains(raw_brains) if raw_brains else DEFAULT_CLOUD_CANDIDATES
@@ -468,5 +489,12 @@ def load_config(path: Path | None = None) -> VenomConfig:
             ntfy_server=str(phone.get("ntfy_server", "https://ntfy.sh")).strip(),
             ntfy_topic=str(phone.get("ntfy_topic", "")).strip(),
             notify_topic=str(phone.get("notify_topic", "")).strip(),
+        ),
+        whatsapp=WhatsAppConfig(
+            enabled=bool(whatsapp.get("enabled", True)),
+            host=str(whatsapp.get("host", "127.0.0.1")).strip(),
+            port=int(whatsapp.get("port", 8788)),
+            token=str(whatsapp.get("token", "")).strip(),
+            timeout=float(whatsapp.get("timeout", 20.0)),
         ),
     )

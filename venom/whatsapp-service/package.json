@@ -1,0 +1,19 @@
+{
+  "name": "venom-whatsapp-service",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Self-hosted WhatsApp bridge for Venom — Baileys (WhatsApp Web protocol) behind a tiny localhost HTTP API. Venom's voice loop sends through it; incoming messages are forwarded to Venom's ntfy topic.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.9",
+    "pino": "^9.5.0",
+    "qrcode": "^1.5.4",
+    "qrcode-terminal": "^0.12.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

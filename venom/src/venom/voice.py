@@ -156,6 +156,12 @@ class VoiceOrchestrator:
             from venom.gmail import Mailbox
 
             self.mailbox = Mailbox(config.mail)
+        # Self-hosted WhatsApp send, via the Baileys bridge on localhost.
+        self.whatsapp = None
+        if config.whatsapp.ready:
+            from venom.whatsapp import WhatsAppClient
+
+            self.whatsapp = WhatsAppClient(config.whatsapp)
         self.registry = build_pi_registry(config, self.memory, self.timers,
                                           music=self.music,
                                           reminders=self.reminders,
@@ -165,7 +171,8 @@ class VoiceOrchestrator:
                                           notifications=self.notifications,
                                           receiver=self.btreceiver,
                                           calendar=self.calwatch,
-                                          mailbox=self.mailbox)
+                                          mailbox=self.mailbox,
+                                          whatsapp=self.whatsapp)
         self._detector: WakeWordDetector | None = None
         # True while we've paused our own music for a live conversation, so we
         # only resume what *we* paused (not a track the user paused by hand).

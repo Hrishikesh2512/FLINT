@@ -254,6 +254,49 @@ systemctl restart bluetooth.service pipewire-system.service wireplumber-system.s
 systemctl enable venom.service
 systemctl restart venom.service
 
+# ── 6b. WhatsApp bridge (self-hosted Baileys) ────────────────────────────────
+# A small Node service that owns the WhatsApp Web session so Venom can send
+# messages by voice; incoming messages are forwarded to the ntfy notify topic.
+# Kept OUTSIDE the git checkout (/opt/venom/whatsapp-service) so node_modules
+# survives `git checkout -f`. Node deps reinstall only when package.json changes.
+WA_SRC="$APP_DIR/venom/whatsapp-service"
+WA_DST=/opt/venom/whatsapp-service
+if [ -d "$WA_SRC" ]; then
+    NODE_MAJOR="$(node -v 2>/dev/null | sed 's/v\([0-9]*\).*/\1/')"
+    if [ -z "$NODE_MAJOR" ] || [ "$NODE_MAJOR" -lt 18 ]; then
+        log "installing Node.js 20 (NodeSource)"
+        curl -fsSL https://deb.nodesource.com/setup_20.x | bash - >/dev/null 2>&1 || true
+        apt-get install -y -qq nodejs || log "node install failed — WhatsApp bridge skipped"
+    fi
+    if command -v node >/dev/null 2>&1; then
+        mkdir -p "$WA_DST"
+        cp -f "$WA_SRC/package.json" "$WA_SRC/index.js" "$WA_DST/"
+        [ -f "$WA_SRC/README.md" ] && cp -f "$WA_SRC/README.md" "$WA_DST/"
+        WA_HASH="$(sha256sum "$WA_DST/package.json" | cut -d' ' -f1)"
+        if [ "$(cat "$WA_DST/.deps-hash" 2>/dev/null)" != "$WA_HASH" ]; then
+            log "installing WhatsApp bridge npm deps (first run or deps changed)"
+            (cd "$WA_DST" && npm install --omit=dev --no-audit --no-fund) \
+                && echo "$WA_HASH" > "$WA_DST/.deps-hash" \
+                || log "npm install failed — WhatsApp bridge may not start"
+        fi
+        mkdir -p /var/lib/venom/whatsapp
+        chown -R venom:venom "$WA_DST" /var/lib/venom/whatsapp
+
+        # Forward incoming WhatsApp to the same ntfy topic Venom already reads.
+        WA_TOPIC="$(sed -n 's/^[[:space:]]*notify_topic[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' \
+            /etc/venom/venom.toml 2>/dev/null | head -1)"
+        printf 'NTFY_TOPIC=%s\n' "$WA_TOPIC" > /etc/venom/whatsapp.env
+        chgrp venom /etc/venom/whatsapp.env && chmod 0640 /etc/venom/whatsapp.env
+
+        install -m 0644 "$APP_DIR/venom/provisioning/venom-whatsapp.service" \
+            /etc/systemd/system/venom-whatsapp.service
+        systemctl daemon-reload
+        systemctl enable --now venom-whatsapp.service || true
+        log "WhatsApp bridge up — pair it by scanning the QR:"
+        log "  journalctl -u venom-whatsapp -n 40 --no-pager   (WhatsApp → Linked Devices)"
+    fi
+fi
+
 # ── 7. appliance niceties for a battery-powered headless box ─────────────────
 # Keep journald small and RAM-first (the whole OS lives on the pendrive).
 mkdir -p /etc/systemd/journald.conf.d

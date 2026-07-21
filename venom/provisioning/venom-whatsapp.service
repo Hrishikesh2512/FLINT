@@ -1,0 +1,39 @@
+[Unit]
+Description=Venom WhatsApp bridge — self-hosted Baileys send + incoming forward
+Documentation=https://github.com/Hrishikesh2512/FLINT
+After=network-online.target nss-lookup.target venom.service
+Wants=network-online.target nss-lookup.target
+
+[Service]
+Type=simple
+User=venom
+WorkingDirectory=/opt/venom/whatsapp-service
+ExecStart=/usr/bin/node /opt/venom/whatsapp-service/index.js
+Restart=always
+RestartSec=5
+
+# Bind localhost-only; Venom's Python reaches it on 127.0.0.1:8788.
+Environment=WA_HOST=127.0.0.1
+Environment=WA_PORT=8788
+Environment=WA_STATE_DIR=/var/lib/venom/whatsapp
+Environment=NTFY_SERVER=https://ntfy.sh
+# NTFY_TOPIC (incoming forward) is written here by provision.sh from venom.toml.
+EnvironmentFile=-/etc/venom/whatsapp.env
+
+StateDirectory=venom
+
+# A WhatsApp Web client is light, but never let it threaten the voice loop.
+MemoryHigh=200M
+MemoryMax=300M
+
+# Hardening — only reads its own code, writes only /var/lib/venom/whatsapp.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

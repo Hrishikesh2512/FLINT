@@ -301,7 +301,8 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
                       timers: TimerBoard, music=None,
                       reminders=None, notes=None, lists=None,
                       location=None, chess=None, notifications=None,
-                      receiver=None, calendar=None, mailbox=None) -> ToolRegistry:
+                      receiver=None, calendar=None, mailbox=None,
+                      whatsapp=None) -> ToolRegistry:
     reg = ToolRegistry(platform="linux")
 
     if calendar is not None:
@@ -485,6 +486,35 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
         )
         def read_notifications() -> str:
             return notifications.read_unread()
+
+    if whatsapp is not None and config.whatsapp.ready:
+        @reg.tool(
+            description=(
+                "Sends a WhatsApp message on the user's behalf. Use when they "
+                "say 'WhatsApp X to <name>', 'message <name>', 'text <name>', "
+                "'reply to <name>', or after reading a message 'reply: ...'. "
+                "Pass the message body as `text`, converting their spoken words "
+                "into a natural written message. Set `to` to the contact's name "
+                "(or a phone number); LEAVE `to` EMPTY to reply to whoever last "
+                "messaged. If several contacts match a name, this asks which one "
+                "— relay that and call again with a clearer name. Always confirm "
+                "the message and recipient with the user before sending anything "
+                "they didn't dictate word-for-word."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string",
+                             "description": "The message to send"},
+                    "to": {"type": "string",
+                           "description": "Contact name or phone number; omit to "
+                                          "reply to the most recent chat"},
+                },
+                "required": ["text"],
+            },
+        )
+        def send_whatsapp(text: str, to: str = "") -> str:
+            return whatsapp.send(text, to)
 
     if receiver is not None:
         @reg.tool(
