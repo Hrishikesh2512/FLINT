@@ -38,6 +38,7 @@ const {
   default: makeWASocket,
   useMultiFileAuthState,
   makeCacheableSignalKeyStore,
+  fetchLatestBaileysVersion,
   DisconnectReason,
   Browsers,
   jidNormalizedUser,
@@ -99,6 +100,7 @@ let connected = false;
 let loggedIn = false;
 let currentQR = null; // raw QR string while pairing; null once connected
 let lastChatJid = null; // most recent 1:1 chat, for "reply to the last message"
+let reconnectDelay = 2000; // grows on repeated failures so we don't hammer WA
 
 function digitsOnly(s) {
   return (s || '').replace(/[^0-9]/g, '');
@@ -185,14 +187,25 @@ async function forwardIncoming(jid, sender, text) {
 async function start() {
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
 
+  // Pull WhatsApp Web's current protocol version — a stale hardcoded version is
+  // rejected at the handshake with a 405, so never rely on the bundled default.
+  let version;
+  try {
+    ({ version } = await fetchLatestBaileysVersion());
+    console.log(`[venom-whatsapp] using WA Web version ${version.join('.')}`);
+  } catch (err) {
+    console.log('[venom-whatsapp] version fetch failed, using bundled default');
+  }
+
   sock = makeWASocket({
+    version,
     auth: {
       creds: state.creds,
       keys: makeCacheableSignalKeyStore(state.keys, logger),
     },
     logger,
     printQRInTerminal: false,
-    browser: Browsers.appropriate('Venom'),
+    browser: Browsers.ubuntu('Chrome'),
     syncFullHistory: false,
     // Never mark the linked device "online" — that would divert notifications
     // away from the user's phone. Venom is a silent observer + sender.
@@ -214,6 +227,7 @@ async function start() {
       connected = true;
       loggedIn = true;
       currentQR = null;
+      reconnectDelay = 2000; // healthy link — reset backoff
       const me = sock.user && sock.user.id;
       if (me) rememberContact(me, sock.user.name || 'me');
       console.log(`[venom-whatsapp] connected as ${me || 'unknown'}`);
@@ -230,10 +244,14 @@ async function start() {
         console.log('[venom-whatsapp] logged out — clearing session, will re-pair');
         try { fs.rmSync(AUTH_DIR, { recursive: true, force: true }); } catch {}
         fs.mkdirSync(AUTH_DIR, { recursive: true });
+        reconnectDelay = 2000;
         setTimeout(start, 1500);
       } else {
-        console.log(`[venom-whatsapp] connection closed (${code}) — reconnecting`);
-        setTimeout(start, 2000);
+        // Back off on repeated failures (esp. 405) so we don't get rate-limited.
+        console.log(
+          `[venom-whatsapp] connection closed (${code}) — retry in ${reconnectDelay}ms`);
+        setTimeout(start, reconnectDelay);
+        reconnectDelay = Math.min(reconnectDelay * 2, 30000);
       }
     }
   });

@@ -262,7 +262,13 @@ systemctl restart venom.service
 WA_SRC="$APP_DIR/venom/whatsapp-service"
 WA_DST=/opt/venom/whatsapp-service
 if [ -d "$WA_SRC" ]; then
-    NODE_MAJOR="$(node -v 2>/dev/null | sed 's/v\([0-9]*\).*/\1/')"
+    # NB: compute the version in an `if` guard, not `VAR=$(node -v)` — under
+    # `set -e` a missing `node` (127) inside a command substitution aborts the
+    # whole script before we ever install it.
+    NODE_MAJOR=""
+    if command -v node >/dev/null 2>&1; then
+        NODE_MAJOR="$(node -v | sed 's/v\([0-9]*\).*/\1/')"
+    fi
     if [ -z "$NODE_MAJOR" ] || [ "$NODE_MAJOR" -lt 18 ]; then
         log "installing Node.js 20 (NodeSource)"
         curl -fsSL https://deb.nodesource.com/setup_20.x | bash - >/dev/null 2>&1 || true
