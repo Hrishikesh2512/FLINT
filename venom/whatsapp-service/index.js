@@ -146,14 +146,15 @@ function noteAutoReply(jid) {
 }
 
 const AUTO_REPLY_SYSTEM =
-  `You are auto-replying to WhatsApp messages on behalf of ${AUTO_REPLY_USER}, ` +
-  `who is busy right now. Reply briefly and warmly in the FIRST PERSON as ` +
-  `${AUTO_REPLY_USER}, in the SAME language and script as the sender (match ` +
-  `Hinglish with Hinglish). One or two short sentences, like a real quick text. ` +
-  `Do not say you are a bot, an AI, or an auto-reply. Never agree to payments, ` +
-  `share personal, financial, or private details, or send links or codes. If the ` +
-  `message really needs ${AUTO_REPLY_USER} personally, just say you'll get back ` +
-  `to them shortly.`;
+  `You are Jarvis, ${AUTO_REPLY_USER}'s personal assistant, auto-replying to ` +
+  `WhatsApp messages on ${AUTO_REPLY_USER}'s behalf while ${AUTO_REPLY_USER} is ` +
+  `busy. Always write in the THIRD PERSON as Jarvis, referring to ` +
+  `${AUTO_REPLY_USER} by name — NEVER as if you were ${AUTO_REPLY_USER} (do not ` +
+  `use "I"/"me" to mean ${AUTO_REPLY_USER}). For example: "${AUTO_REPLY_USER} is ` +
+  `busy right now and will get back to you soon." Match the sender's language ` +
+  `and script (Hinglish with Hinglish). Keep it to one or two short sentences. ` +
+  `Never agree to payments, share personal, financial, or private details, or ` +
+  `send links or codes. Do not add any signature or sign-off yourself.`;
 
 async function generateReply(jid, incomingText) {
   if (!GEMINI_API_KEY) return '';
@@ -186,6 +187,13 @@ async function generateReply(jid, incomingText) {
   return parts.map((p) => p.text || '').join('').trim();
 }
 
+// Every WhatsApp message Venom sends is tagged so the recipient knows it came
+// from Jarvis, not the user typing — italic via WhatsApp's _underscore_ markup.
+const SIGNATURE = '\n\n_Jarvis(Auto-Generated)_';
+async function sendText(jid, text) {
+  return sock.sendMessage(jid, { text: (text || '').trim() + SIGNATURE });
+}
+
 async function maybeAutoReply(jid, incomingText, tsSeconds) {
   if (!autoReply || !incomingText) return;
   // Never touch the pre-activation backlog.
@@ -199,7 +207,7 @@ async function maybeAutoReply(jid, incomingText, tsSeconds) {
   try {
     const reply = await generateReply(jid, incomingText);
     if (!reply) return;
-    await sock.sendMessage(jid, { text: reply });
+    await sendText(jid, reply);
     pushHistory(jid, 'user', incomingText);
     pushHistory(jid, 'model', reply);
     noteAutoReply(jid);
@@ -522,7 +530,7 @@ const server = http.createServer(async (req, res) => {
       });
     }
     try {
-      await sock.sendMessage(resolved.jid, { text });
+      await sendText(resolved.jid, text);
       lastChatJid = isJidUser(resolved.jid) ? resolved.jid : lastChatJid;
       const name = contacts.get(resolved.jid) || resolved.jid.split('@')[0];
       return sendJSON(res, 200, { ok: true, to: resolved.jid, name });
