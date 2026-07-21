@@ -111,9 +111,27 @@ let currentQR = null; // raw QR string while pairing; null once connected
 let lastChatJid = null; // most recent 1:1 chat, for "reply to the last message"
 let reconnectDelay = 2000; // grows on repeated failures so we don't hammer WA
 
-// ── auto-reply state (all in-memory: OFF after any restart, by design) ───────
+// ── auto-reply state ─────────────────────────────────────────────────────────
+// The on/off flag persists across restarts/reboots (a deploy or power-cycle
+// shouldn't silently stop answering), but on load we reset the "enabled at"
+// clock to now so the restart's backlog is never auto-answered.
+const AUTOREPLY_FILE = path.join(STATE_DIR, 'autoreply.json');
 let autoReply = false;
 let autoReplyEnabledAt = 0; // epoch seconds; only answer messages newer than this
+try {
+  if (JSON.parse(fs.readFileSync(AUTOREPLY_FILE, 'utf8')).enabled) {
+    autoReply = true;
+    autoReplyEnabledAt = Math.floor(Date.now() / 1000);
+  }
+} catch { /* no saved state — default off */ }
+
+function persistAutoReply() {
+  try {
+    fs.writeFileSync(AUTOREPLY_FILE, JSON.stringify({ enabled: autoReply }));
+  } catch (err) {
+    logger.warn({ err }, 'could not persist auto-reply state');
+  }
+}
 /** @type {Map<string, Array<{role:string, text:string}>>} recent turns per chat */
 const chatHistory = new Map();
 /** @type {Map<string, number>} last auto-reply time per chat (ms) */
@@ -474,6 +492,7 @@ const server = http.createServer(async (req, res) => {
       lastAutoReplyAt.clear();
       autoReplyCount.clear();
     }
+    persistAutoReply();
     const hasKey = !!GEMINI_API_KEY;
     console.log(`[venom-whatsapp] auto-reply ${autoReply ? 'ON' : 'OFF'}`);
     return sendJSON(res, 200, { autoReply, hasKey });
