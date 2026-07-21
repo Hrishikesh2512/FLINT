@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shlex
 import socket
 import subprocess
 import threading
@@ -137,7 +138,13 @@ build <span id=ver>?</span></div>
 <div id=settings></div>
 <div class=row><button onclick="saveSettings()">save &amp; restart</button></div></details>
 <details ontoggle="if(this.open)loadMem()"><summary>[+] MEMORY</summary>
-<pre id=mem>...</pre></details>
+<pre id=mem>...</pre>
+<div class=lbl>edit in the terminal: <b>memory set &lt;category&gt; &lt;key&gt; &lt;value&gt;</b>
+ &middot; <b>memory del &lt;category&gt; &lt;key&gt;</b> &middot; <b>memory categories</b></div></details>
+<details ontoggle="if(this.open)loadConn()"><summary>[+] CONNECTIONS</summary>
+<pre id=conn>...</pre>
+<div class=lbl>edit in the terminal: <b>connections add &lt;name&gt; phone=.. nick=.. insta=.. interest=.. note=..</b>
+ &middot; <b>connections del &lt;name&gt;</b> &middot; <b>connections show &lt;name&gt;</b></div></details>
 <details ontoggle="if(this.open)loadLogs()"><summary>[+] LOGS</summary>
 <div class=row><button onclick="loadLogs()">refresh</button></div><pre id=logs></pre></details>
 <details ontoggle="if(this.open)termInit()"><summary>[+] TERMINAL</summary>
@@ -226,6 +233,8 @@ async function loadLogs(){$('logs').textContent='loading...';
 $('logs').textContent=(await(await api('/api/logs')).json()).text}
 async function loadMem(){$('mem').textContent='loading...';
 $('mem').textContent=(await(await api('/api/memory')).json()).text}
+async function loadConn(){$('conn').textContent='loading...';
+$('conn').textContent=(await(await api('/api/connections')).json()).text}
 let hist=[],hp=0;
 async function runTerm(c){const r=await(await api('/api/term',{cmd:c})).json();
 $('term').textContent+=$('cwd').textContent+'$ '+c+'\\n'+(r.out||'')+'\\n';
@@ -382,6 +391,137 @@ class WebConsole:
         except Exception as exc:
             return f"(memory unavailable: {exc})"
 
+    def connections_dump(self) -> str:
+        try:
+            from venom.config import load_config
+            from venom.stores import ConnectionStore
+
+            store = ConnectionStore(load_config().memory_path.parent
+                                    / "connections.json")
+            return self._connections_cmd(store, ["list"])
+        except Exception as exc:
+            return f"(connections unavailable: {exc})"
+
+    # ── console built-ins: edit Connections & Memory from the terminal ────────
+    # Intercepted before the shell so neither needs hand-edited JSON. Return a
+    # {out, cwd} dict when the command is ours, else None to fall through.
+    def _data_command(self, raw: str) -> dict | None:
+        try:
+            parts = shlex.split(raw)
+        except ValueError:
+            return None
+        if not parts or parts[0].lower() not in (
+                "connections", "conn", "memory", "mem"):
+            return None
+        cwd = self._cwd or "/"
+        try:
+            from venom.config import load_config
+
+            cfg = load_config()
+            if parts[0].lower() in ("connections", "conn"):
+                from venom.stores import ConnectionStore
+
+                store = ConnectionStore(cfg.memory_path.parent
+                                        / "connections.json")
+                return {"out": self._connections_cmd(store, parts[1:]),
+                        "cwd": cwd}
+            from flint_core.memory import MemoryStore
+
+            return {"out": self._memory_cmd(MemoryStore(cfg.memory_path),
+                                            parts[1:]), "cwd": cwd}
+        except Exception as exc:
+            return {"out": f"[error: {exc}]", "cwd": cwd}
+
+    _CONN_KEYS = {"phone", "nick", "nickname", "insta", "instagram",
+                  "interest", "note"}
+
+    @classmethod
+    def _connections_cmd(cls, store, args: list[str]) -> str:
+        if not args or args[0].lower() in ("list", "ls"):
+            data = store._load({})
+            if not data:
+                return "(no connections saved)"
+            out: list[str] = []
+            for rec in data.values():
+                head = rec.get("name", "?")
+                if rec.get("aliases"):
+                    head += " (" + ", ".join(rec["aliases"]) + ")"
+                out.append(head)
+                if rec.get("phones"):
+                    out.append("    ph: " + ", ".join(rec["phones"]))
+                if rec.get("instagram"):
+                    out.append("    ig: " + rec["instagram"])
+                if rec.get("interests"):
+                    out.append("    likes: " + ", ".join(rec["interests"]))
+                if rec.get("notes"):
+                    out.append("    note: " + "; ".join(rec["notes"]))
+            return "\n".join(out)
+        sub, rest = args[0].lower(), args[1:]
+        if sub == "show":
+            return store.describe(" ".join(rest)) if rest \
+                else "usage: connections show <name>"
+        if sub in ("del", "delete", "rm", "forget"):
+            name = " ".join(rest)
+            if not name:
+                return "usage: connections del <name>"
+            return f"removed {name}" if store.forget(name) \
+                else f"no match for '{name}'"
+        if sub in ("add", "set", "save", "edit"):
+            kv: dict[str, str] = {}
+            name_parts: list[str] = []
+            for a in rest:
+                key = a.split("=", 1)[0].lower() if "=" in a else ""
+                if key in cls._CONN_KEYS:
+                    kv[key] = a.split("=", 1)[1]
+                else:
+                    name_parts.append(a)
+            name = " ".join(name_parts)
+            if not name:
+                return ("usage: connections add <name> [phone=..] [nick=..] "
+                        "[insta=..] [interest=..] [note=..]")
+            store.save(name, phone=kv.get("phone", ""),
+                       nickname=kv.get("nick", kv.get("nickname", "")),
+                       instagram=kv.get("insta", kv.get("instagram", "")),
+                       interest=kv.get("interest", ""), note=kv.get("note", ""))
+            return "saved:\n" + store.describe(name)
+        return ("connections commands:\n"
+                "  connections [list]\n"
+                "  connections show <name>\n"
+                "  connections add <name> [phone=..] [nick=..] [insta=..] "
+                "[interest=..] [note=..]\n"
+                "  connections del <name>")
+
+    @staticmethod
+    def _memory_cmd(mem, args: list[str]) -> str:
+        if not args or args[0].lower() in ("list", "ls", "show"):
+            out: list[str] = []
+            for cat, entries in mem.load().items():
+                if not entries:
+                    continue
+                out.append(f"[{cat}]")
+                for key, entry in entries.items():
+                    val = entry.get("value") if isinstance(entry, dict) else entry
+                    out.append(f"  {key} = {val}")
+            return "\n".join(out) if out else "(nothing remembered yet)"
+        sub = args[0].lower()
+        if sub == "set":
+            if len(args) < 4:
+                return "usage: memory set <category> <key> <value>"
+            return mem.remember(args[1], args[2], " ".join(args[3:]))
+        if sub in ("del", "delete", "rm", "forget"):
+            if len(args) < 3:
+                return "usage: memory del <category> <key>"
+            return mem.forget(args[1], args[2])
+        if sub in ("cats", "categories"):
+            from flint_core.memory.store import CATEGORIES
+
+            return "categories: " + ", ".join(CATEGORIES)
+        return ("memory commands:\n"
+                "  memory [list]\n"
+                "  memory set <category> <key> <value>\n"
+                "  memory del <category> <key>\n"
+                "  memory categories")
+
     def prompt(self, text: str) -> bool:
         orch, loop = self.orchestrator, self.loop
         if not text or orch is None or loop is None:
@@ -498,6 +638,11 @@ class WebConsole:
         the working directory across calls so `cd` behaves. Prefers the root
         shell daemon (full privileges); falls back to the in-process shell,
         which runs as the unprivileged, ProtectSystem=strict venom user."""
+        # Console built-ins (connections/memory editing) win over the shell so
+        # they work identically on the root daemon and the sandboxed fallback.
+        builtin = self._data_command((cmd or "").strip())
+        if builtin is not None:
+            return builtin
         root = self._root_shell((cmd or "").strip())
         if root is not None:
             return root
@@ -586,6 +731,9 @@ class WebConsole:
                     self._send(json.dumps(console.vitals()).encode())
                 elif self.path == "/api/memory":
                     self._send(json.dumps({"text": console.memory_dump()}).encode())
+                elif self.path == "/api/connections":
+                    self._send(json.dumps(
+                        {"text": console.connections_dump()}).encode())
                 else:
                     self._send(PAGE.encode(), "text/html; charset=utf-8")
 
