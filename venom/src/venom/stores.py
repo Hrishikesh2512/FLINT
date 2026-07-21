@@ -188,6 +188,137 @@ class ConversationLog(_JsonStore):
         return "\n".join(lines) + "\n"
 
 
+class ConnectionStore(_JsonStore):
+    """People Venom knows — numbers, nicknames, socials, interests, notes — so
+    she can both *contact* them (name -> number, independent of WhatsApp's own
+    contact sync) and *recall who they are*. One record per person, keyed by a
+    normalized name; nicknames/aliases resolve to the same record. Every field
+    merges, so telling her one fact at a time builds the person up over time.
+
+    Record shape:
+        {"name": "Rahul Sharma", "aliases": ["rahul bhai"],
+         "phones": ["919812345678"], "instagram": "rahul.s",
+         "interests": ["cricket"], "notes": ["met at college"]}
+    """
+
+    @staticmethod
+    def _key(name: str) -> str:
+        return (name or "").strip().lower()
+
+    @staticmethod
+    def _digits(phone: str) -> str:
+        return "".join(ch for ch in (phone or "") if ch.isdigit())
+
+    @staticmethod
+    def _blank(name: str) -> dict:
+        return {"name": name, "aliases": [], "phones": [],
+                "instagram": "", "interests": [], "notes": []}
+
+    def _match_key(self, data: dict, query: str) -> str | None:
+        """Storage key for a person by name or any alias (exact, then loose)."""
+        q = (query or "").strip().lower()
+        if not q:
+            return None
+        if q in data:
+            return q
+        for k, rec in data.items():
+            if q in [a.lower() for a in rec.get("aliases", [])]:
+                return k
+        # Loose: query is a substring of the name, or every word of the query
+        # appears in the name ("rahul" -> "Rahul Sharma", "sharma rahul" too).
+        for k, rec in data.items():
+            name = rec.get("name", "").lower()
+            hay = [name, k] + [a.lower() for a in rec.get("aliases", [])]
+            if any(q in h for h in hay if h):
+                return k
+            if name and all(w in name for w in q.split()):
+                return k
+        return None
+
+    @staticmethod
+    def _add_unique(lst: list, val: str) -> None:
+        val = (val or "").strip()
+        if val and val.lower() not in [x.lower() for x in lst]:
+            lst.append(val)
+
+    def save(self, name: str, phone: str = "", nickname: str = "",
+             instagram: str = "", interest: str = "", note: str = "") -> dict:
+        """Create or update a person, merging every provided field."""
+        with self._lock:
+            data = self._load({})
+            key = (self._match_key(data, name)
+                   or (self._match_key(data, nickname) if nickname else None))
+            if key is None:
+                key = self._key(name) or self._key(nickname)
+                if not key:
+                    return {}
+                rec = self._blank((name or nickname).strip())
+            else:
+                rec = data.get(key, self._blank((name or nickname).strip()))
+            if name and not rec.get("name"):
+                rec["name"] = name.strip()
+            # A different-but-real name given for an existing record becomes an
+            # alias rather than clobbering the canonical name.
+            if name and name.strip().lower() != rec.get("name", "").lower():
+                self._add_unique(rec["aliases"], name)
+            if nickname:
+                self._add_unique(rec["aliases"], nickname)
+            digits = self._digits(phone)
+            if digits:
+                self._add_unique(rec["phones"], digits)
+            if instagram:
+                rec["instagram"] = instagram.strip().lstrip("@")
+            if interest:
+                self._add_unique(rec["interests"], interest)
+            if note:
+                self._add_unique(rec["notes"], note)
+            data[key] = rec
+            self._save(data)
+        return rec
+
+    def find(self, query: str) -> dict | None:
+        data = self._load({})
+        key = self._match_key(data, query)
+        return data.get(key) if key else None
+
+    def phone_for(self, query: str) -> str:
+        rec = self.find(query)
+        phones = rec.get("phones", []) if rec else []
+        return phones[0] if phones else ""
+
+    def describe(self, query: str) -> str:
+        rec = self.find(query)
+        if not rec:
+            return f"I don't have anyone saved as {query}."
+        parts = [rec["name"]]
+        if rec.get("aliases"):
+            parts.append(f"(also {', '.join(rec['aliases'])})")
+        bits = []
+        if rec.get("phones"):
+            bits.append(f"number {', '.join(rec['phones'])}")
+        if rec.get("instagram"):
+            bits.append(f"Instagram {rec['instagram']}")
+        if rec.get("interests"):
+            bits.append(f"into {', '.join(rec['interests'])}")
+        if rec.get("notes"):
+            bits.append("; ".join(rec["notes"]))
+        return " — ".join([" ".join(parts)] + ([", ".join(bits)] if bits else [])) \
+            or rec["name"]
+
+    def all_names(self) -> list[str]:
+        return [rec.get("name", k) for k, rec in self._load({}).items()]
+
+    def forget(self, query: str) -> bool:
+        with self._lock:
+            data = self._load({})
+            key = self._match_key(data, query)
+            if key is None:
+                return False
+            del data[key]
+            self._save(data)
+        return True
+
+
 class ListStore(_JsonStore):
     """Named item lists — shopping, to-do, packing, etc."""
 

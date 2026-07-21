@@ -98,13 +98,16 @@ class VoiceOrchestrator:
         self.memory = MemoryStore(config.memory_path)
         self.timers = TimerBoard()
         # Persistent productivity stores live beside memory in the state dir.
-        from venom.stores import (ConversationLog, ListStore, NoteStore,
-                                  ReminderStore)
+        from venom.stores import (ConnectionStore, ConversationLog, ListStore,
+                                  NoteStore, ReminderStore)
 
         state_dir = config.memory_path.parent
         self.reminders = ReminderStore(state_dir / "reminders.json")
         self.notes = NoteStore(state_dir / "notes.json")
         self.lists = ListStore(state_dir / "lists.json")
+        # People she knows — numbers, nicknames, socials, interests — used to
+        # contact them and to recall who they are.
+        self.connections = ConnectionStore(state_dir / "connections.json")
         from venom.session import SessionState
 
         self.session = SessionState(state_dir / "session.json")
@@ -179,7 +182,8 @@ class VoiceOrchestrator:
                                           receiver=self.btreceiver,
                                           calendar=self.calwatch,
                                           mailbox=self.mailbox,
-                                          whatsapp=self.whatsapp)
+                                          whatsapp=self.whatsapp,
+                                          connections=self.connections)
         self._detector: WakeWordDetector | None = None
         # True while we've paused our own music for a live conversation, so we
         # only resume what *we* paused (not a track the user paused by hand).
