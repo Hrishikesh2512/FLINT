@@ -315,7 +315,22 @@ class VoiceOrchestrator:
             from venom.audio.routing import pin_usb_audio
 
             self.state = "selecting usb audio"
-            await asyncio.to_thread(pin_usb_audio)
+            # Wait for the earphone to actually be present (a USB mic source)
+            # before opening streams. On an unplug/replug the USB node
+            # re-enumerates; opening against the vanished device — or whatever
+            # default PipeWire fell back to — left Venom deaf until a reboot.
+            # Looping here means a replug reconnects on its own, in-session.
+            waited = 0
+            while not await asyncio.to_thread(pin_usb_audio):
+                if waited == 0:
+                    log.warning("USB earphone not present — waiting for a (re)connect")
+                self.state = "waiting for usb earphone"
+                if waited == 8:  # ~half a minute gone — nudge the phone once
+                    self._alert_audio_dead("earphone disconnected")
+                waited += 1
+                await asyncio.sleep(3)
+            if waited:
+                log.info("USB earphone (re)connected — resuming")
 
         # Streams only make sense once the wake model can consume them.
         self.state = "loading wake model"
