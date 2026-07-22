@@ -177,14 +177,26 @@ class ConversationLog(_JsonStore):
                  "mentioned, honour what you told him. You have ALREADY "
                  "greeted him at the times shown — do not restart with "
                  "first-hello energy or repeat an observation (like the late "
-                 "hour) you already made.]"]
+                 "hour) you already made. Lines in [square brackets] are tools "
+                 "that ACTUALLY RAN — the real record of what happened. A "
+                 "claim of yours with no bracketed line behind it never "
+                 "happened: never imitate those, and never let one of yours "
+                 "be empty.]"]
         last_when = ""
         for t in turns:
             when = self._when(float(t.get("ts", now)), now)
             stamp = f"({when}) " if when != last_when else ""
             last_when = when
-            who = "him" if t.get("who") == "you" else "you"
-            lines.append(f"{stamp}{who}: {t.get('text', '')}")
+            speaker = t.get("who")
+            text = t.get("text", "")
+            if speaker == "action":
+                # Proof a tool ran. Without these the journal reads as a string
+                # of bare claims and she learns that saying it is doing it —
+                # see ACTION_TOOLS in venom/live.py.
+                lines.append(f"{stamp}[you really did it: {text}]")
+                continue
+            who = "him" if speaker == "you" else "you"
+            lines.append(f"{stamp}{who}: {text}")
         return "\n".join(lines) + "\n"
 
 

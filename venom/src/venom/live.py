@@ -205,6 +205,10 @@ PERSONA = (
     "volume, ALWAYS call the matching tool (play_music, pause_music, "
     "resume_music, next_song, stop_music, change_volume) — NEVER just say you "
     "did it without calling the tool; nothing happens unless the tool runs. "
+    "A bare 'laga diya maine' with no tool call behind it is a lie: he hears "
+    "the same song still playing and has to ask you twice. So when you confirm "
+    "a play or a skip, NAME what is now playing — the title comes back in the "
+    "tool result, and if you cannot name it you did not actually start it. "
     "And say each confirmation ONCE: if you already told him while the tool "
     "ran ('skip kar diya'), do not repeat it after the tool result comes back "
     "— add only new information (like what's playing now) or stay quiet.\n\n"
@@ -280,6 +284,47 @@ def collapse_doubled(text: str) -> str:
     if rem == 0 and half and t[:half].strip() == t[half:].strip():
         return t[:half].strip()
     return t
+
+
+# Tools whose entire point is that something CHANGED in the world. Every call
+# to one is journaled into the conversation log, so the history she reads back
+# carries proof the action happened instead of only her claim about it.
+#
+# Why this exists: the journal used to store speech alone. She would then read
+# back turn after turn of "play X" -> "haan yaar, laga diya maine" with no tool
+# anywhere in sight, and learn from her own transcript that saying it IS doing
+# it. Observed live — two byte-identical "laga diya maine" replies seven
+# minutes apart, no play_music call either time, song never changed, and the
+# user re-asking for the same song because nothing happened. The prompt already
+# forbade it; forty turns of contrary example beat one line of instruction.
+#
+# Read-only tools stay out on purpose: they would crowd real conversation out
+# of the rendered window. Add new state-changing tools here.
+ACTION_TOOLS = frozenset({
+    "play_music", "stop_music", "pause_music", "resume_music", "next_song",
+    "set_volume", "change_volume", "send_whatsapp", "auto_reply_mode",
+    "laptop_task", "set_timer", "set_reminder", "cancel_reminder",
+    "add_note", "clear_notes", "add_to_list", "remove_from_list", "clear_list",
+    "save_memory", "save_connection", "forget_connection",
+    "start_chess_game", "play_chess_move", "resign_chess",
+    "pair_bluetooth_device", "disconnect_bluetooth_audio",
+    "translation_mode", "find_my_phone", "power_off",
+})
+
+# A journal line is context, not prose — keep it to a glance.
+ACTION_NOTE_CHARS = 160
+
+
+def action_note(name: str, args, result: str) -> str:
+    """One compact journal line recording that a tool really ran.
+
+    Includes the outcome, failures included: a tool that errored must show up
+    as an error, or she will read the bare call as a success and confirm
+    something that never happened.
+    """
+    shown = ", ".join(f"{k}={v}" for k, v in dict(args or {}).items())
+    outcome = " ".join(str(result).split())
+    return f"{name}({shown}) -> {outcome}"[:ACTION_NOTE_CHARS]
 
 
 def is_normal_closure(exc: BaseException) -> bool:
@@ -625,6 +670,8 @@ class LiveSession:
             except Exception as exc:
                 log.warning("tool %s failed: %s", call.name, exc)
                 result = f"Tool failed: {exc}"
+            if call.name in ACTION_TOOLS:
+                self._record("action", action_note(call.name, call.args, result))
             responses.append(types.FunctionResponse(
                 id=call.id, name=call.name, response={"result": str(result)}))
         # FIXED (Fix 4): serialise the reply — tools now run concurrently, so two

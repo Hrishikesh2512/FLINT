@@ -184,3 +184,24 @@ def test_conversation_log_empty_renders_nothing(tmp_path):
     from venom.stores import ConversationLog
 
     assert ConversationLog(tmp_path / "c.json").render_for_prompt() == ""
+
+
+def test_conversation_log_renders_actions_as_proof(tmp_path):
+    """Tool runs render as bracketed proof, not as another spoken turn.
+
+    Without this the journal is speech only, and a run of "play X" ->
+    "laga diya maine" teaches her that the sentence alone is the whole job.
+    """
+    from venom.stores import ConversationLog
+
+    log = ConversationLog(tmp_path / "conv.json", clock=lambda: 1000000.0)
+    log.add("you", "play janam janam")
+    log.add("action", "play_music(query=janam janam) -> Playing: Janam Janam")
+    log.add("jarvis", "laga diya, Janam Janam chal raha hai")
+
+    rendered = log.render_for_prompt(now=1000000.0)
+    assert "[you really did it: play_music(query=janam janam) " \
+           "-> Playing: Janam Janam]" in rendered
+    # an action is never mistaken for something she said out loud
+    assert "you: play_music" not in rendered
+    assert "him: play_music" not in rendered

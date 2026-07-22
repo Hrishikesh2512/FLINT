@@ -41,6 +41,56 @@ class _DummyMem:
         return {}
 
 
+# ── action journalling (she must not be able to fake having done it) ─────────
+def test_action_note_carries_args_and_outcome():
+    from venom.live import action_note
+
+    note = action_note("play_music", {"query": "janam janam"},
+                       "Playing: Janam Janam Ka Saath")
+    assert note == "play_music(query=janam janam) -> Playing: Janam Janam Ka Saath"
+
+
+def test_action_note_records_failures_too():
+    """A failed tool must read as a failure, or she confirms a thing that
+    never happened — the exact bug this journalling exists to kill."""
+    from venom.live import action_note
+
+    assert "Tool failed" in action_note("play_music", {"query": "x"},
+                                        "Tool failed: no results")
+
+
+def test_action_note_stays_short():
+    from venom.live import ACTION_NOTE_CHARS, action_note
+
+    note = action_note("play_music", {"query": "a" * 500}, "b" * 500)
+    assert len(note) == ACTION_NOTE_CHARS
+    assert "\n" not in note
+
+
+def test_music_tools_are_journalled_but_reads_are_not():
+    from venom.live import ACTION_TOOLS
+
+    for name in ("play_music", "next_song", "stop_music", "send_whatsapp"):
+        assert name in ACTION_TOOLS
+    # read-only tools would crowd real conversation out of the window
+    for name in ("now_playing", "web_search", "check_inbox", "current_time"):
+        assert name not in ACTION_TOOLS
+
+
+def test_every_journalled_tool_actually_exists():
+    """A typo here is silent — the tool just never gets journalled, and the
+    'she claims she did it' bug quietly comes back for that tool."""
+    import re
+    from pathlib import Path
+
+    import venom.tools_pi as tp
+    from venom.live import ACTION_TOOLS
+
+    source = Path(tp.__file__).read_text(encoding="utf-8")
+    defined = set(re.findall(r"^\s+def ([a-z_]+)\(", source, re.MULTILINE))
+    assert ACTION_TOOLS <= defined, ACTION_TOOLS - defined
+
+
 # ── morning-briefing gating ───────────────────────────────────────────────────
 def test_should_brief_only_after_730_and_a_gap(tmp_path):
     s = SessionState(tmp_path / "sess.json")
