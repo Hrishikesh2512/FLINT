@@ -13,6 +13,7 @@ import hmac
 import json
 import logging
 import os
+import re
 import shlex
 import socket
 import subprocess
@@ -40,6 +41,13 @@ VOICE_KEYS = ("wake_word", "wake_threshold", "voice_name", "user_name",
 # through the keyspace.
 LOCKOUT_THRESHOLD = 8      # consecutive wrong PINs from one IP before a lock
 LOCKOUT_SECONDS = 300     # how long that IP stays locked out
+
+
+def _as_int(value) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _toml_value(value) -> str:
@@ -142,6 +150,19 @@ build <span id=ver>?</span></div>
 <details><summary>[+] BLUETOOTH</summary><div class=row>
 <button onclick="bt(0)">paired</button><button onclick="bt(1)">scan 8s</button></div>
 <div id=btlist></div></details>
+<details ontoggle="if(this.open)loadWifi()"><summary>[+] NETWORK</summary>
+<div id=wifinow class=lbl>—</div>
+<div id=wifisaved></div>
+<div class=row>
+<input id=wssid placeholder="SSID" autocomplete=off style=max-width:150px>
+<input id=wpass placeholder="password" type=password autocomplete=off style=max-width:150px>
+<input id=wprio placeholder="prio" autocomplete=off style=max-width:56px>
+<button onclick="wifiAdd()">add / update</button>
+<button onclick="wifiScan()">scan</button></div>
+<div id=wifimsg class=sys></div><div id=wifiscan class=lbl></div>
+<div class=lbl style=margin-top:4px>base = the network the Pi always prefers (your phone
+hotspot). It auto-connects to the highest-priority network in range and falls back on its
+own &mdash; tip: manage this over Tailscale so a change can't lock you out.</div></details>
 <details><summary>[+] TIMERS</summary><div id=timers class=lbl>—</div></details>
 <details ontoggle="if(this.open)loadSettings()"><summary>[+] SETTINGS</summary>
 <div id=settings></div>
@@ -230,6 +251,35 @@ $('btlist').innerHTML=d.map(x=>`<div class=row><span class="led ${x.connected?'o
 ).join('')||'<div class=lbl>none found</div>'}
 function btUse(m,n){if(confirm('Switch headset to '+n+'? Venom restarts.'))
 api('/api/bluetooth',{mac:m,name:n})}
+const jsx=s=>(s+'').replace(/'/g,"\\\\'");
+async function loadWifi(){let d;try{d=await(await api('/api/wifi')).json()}catch(e){return}
+if(!d.nm){$('wifinow').textContent='NetworkManager not available on this box.';
+$('wifisaved').innerHTML='';return}
+$('wifinow').innerHTML='&#9679; on: '+(d.current.name?H(d.current.name)+
+(d.current.signal!=null?' ('+d.current.signal+'%)':''):'&mdash;');
+$('wifisaved').innerHTML=d.saved.map(n=>`<div class=row>`+
+`<span class="led ${n.active?'on':''}" style=min-width:150px>${H(n.name)} `+
+`${n.active?'&#10003;':''} <small style=opacity:.55>p${n.priority}</small></span>`+
+`<button onclick="wifiAct('connect','${jsx(n.name)}')">use</button>`+
+`<button onclick="wifiAct('base','${jsx(n.name)}')">base</button>`+
+`<button onclick="wifiAct('remove','${jsx(n.name)}')" style=border-color:var(--red)>del</button>`+
+`</div>`).join('')||'<div class=lbl>no saved networks yet</div>'}
+async function wifiAct(action,name){if(action=='remove'&&!confirm('Remove '+name+'?'))return;
+$('wifimsg').textContent='working...';
+const r=await(await api('/api/wifi',{action,name})).json();
+$('wifimsg').textContent=r.result||'';loadWifi()}
+async function wifiAdd(){const ssid=$('wssid').value.trim();if(!ssid)return;
+const b={action:'add',ssid,password:$('wpass').value};
+const p=$('wprio').value.trim();if(p)b.priority=p;
+$('wifimsg').textContent='working...';
+const r=await(await api('/api/wifi',b)).json();
+$('wifimsg').textContent=r.result||'';$('wpass').value='';loadWifi()}
+async function wifiScan(){$('wifiscan').textContent='scanning...';
+let d;try{d=await(await api('/api/wifi')).json()}catch(e){return}
+$('wifiscan').innerHTML=(d.available||[]).map(a=>
+`<span class=led style=cursor:pointer onclick="$('wssid').value='${jsx(a.ssid)}';`+
+`$('wssid').focus()">${H(a.ssid)} ${a.signal}%${a.known?' &#10003;':''}</span>`
+).join(' ')||'<span class=lbl>none found</span>'}
 async function loadSettings(){const s=await(await api('/api/settings')).json();
 $('settings').innerHTML=Object.entries(s).map(([k,v])=>
 `<div class=row><span class=lbl style=min-width:150px>${k}</span>`+
@@ -722,6 +772,61 @@ class WebConsole:
             out = f"[error: {exc}]"
         return {"out": out[-20000:], "cwd": self._cwd}
 
+    # ── Wi-Fi networks (via NetworkManager, as root) ─────────────────────────
+    def _nm(self, argv: list[str]) -> tuple[int, str]:
+        """Run one nmcli command as root and return (rc, output). Goes through
+        the root shell daemon (same channel as the terminal); on a dev box
+        without the daemon it falls back to a direct call, which usually can't
+        modify connections — that's fine, it just reports the failure."""
+        cmd = " ".join(shlex.quote(a) for a in argv)
+        root = self._root_shell(cmd + '; printf "\\n__rc:%s" "$?"')
+        if root is not None:
+            out = root.get("out", "")
+            rc = 0
+            m = re.search(r"__rc:(\d+)\s*$", out)
+            if m:
+                rc = int(m.group(1))
+                out = out[:m.start()]
+            return rc, out.rstrip()
+        try:
+            r = subprocess.run(argv, capture_output=True, text=True, timeout=30)
+            return r.returncode, (r.stdout or "") + (r.stderr or "")
+        except (OSError, subprocess.SubprocessError) as exc:
+            return 1, str(exc)
+
+    def wifi_overview(self) -> dict:
+        from venom import netman
+
+        try:
+            return netman.overview(self._nm)
+        except Exception as exc:  # never let a parse hiccup 500 the panel
+            log.warning("wifi overview failed: %s", exc)
+            return {"nm": False, "current": {}, "saved": [], "available": []}
+
+    def wifi_action(self, data: dict) -> str:
+        from venom import netman
+
+        action = str(data.get("action", "")).strip()
+        name = str(data.get("name", data.get("ssid", ""))).strip()
+        try:
+            if action == "add":
+                return netman.add_or_update(
+                    self._nm, name, str(data.get("password", "")),
+                    _as_int(data.get("priority")))
+            if action == "remove":
+                return netman.remove(self._nm, name)
+            if action == "connect":
+                return netman.connect(self._nm, name)
+            if action == "base":
+                return netman.set_base(self._nm, name)
+            if action == "priority":
+                return netman.set_priority(self._nm, name,
+                                           _as_int(data.get("priority")) or 0)
+        except Exception as exc:  # noqa: BLE001 — surface, don't crash the thread
+            log.warning("wifi action %s failed: %s", action, exc)
+            return f"That didn't work: {exc}"
+        return "Unknown Wi-Fi action."
+
     @staticmethod
     def logs(lines: int = 60) -> str:
         out = subprocess.run(
@@ -783,6 +888,8 @@ class WebConsole:
                 elif self.path == "/api/connections":
                     self._send(json.dumps(
                         {"text": console.connections_dump()}).encode())
+                elif self.path == "/api/wifi":
+                    self._send(json.dumps(console.wifi_overview()).encode())
                 else:
                     self._send(PAGE.encode(), "text/html; charset=utf-8")
 
@@ -820,6 +927,9 @@ class WebConsole:
                 elif self.path == "/api/term":
                     self._send(json.dumps(
                         console.terminal(str(data.get("cmd", "")))).encode())
+                elif self.path == "/api/wifi":
+                    self._send(json.dumps(
+                        {"result": console.wifi_action(data)}).encode())
                 else:
                     self._send(b"{}")
 
