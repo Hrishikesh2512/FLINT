@@ -342,6 +342,11 @@ table inet filter {
         udp dport 68 accept          comment "DHCP client"
         udp dport 5353 accept        comment "mDNS / venom.local"
         tcp dport 22 accept          comment "SSH (key-only)"
+        # Tuya smart-bulb discovery: the bulbs broadcast on UDP 6666/6667/7000
+        # and we listen for them. Scoped to private LAN sources + wlan0 so this
+        # stays shut on any public/hotspot network. Bulb CONTROL is outbound
+        # (TCP 6668) and rides the established rule, so it needs nothing here.
+        iifname "wlan0" ip saddr { 192.168.0.0/16, 10.0.0.0/8, 172.16.0.0/12 } udp dport { 6666, 6667, 7000 } accept comment "Tuya bulb discovery (LAN only)"
     }
     chain forward { type filter hook forward priority 0; policy drop; }
     chain output { type filter hook output priority 0; policy accept; }
