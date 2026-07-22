@@ -61,14 +61,32 @@ wake_code = 114  # shutter button 2 (Volume-Down) = KEY_VOLUMEDOWN → wake Veno
 # NB: keep the shutter's iOS/Android switch in the position where the buttons
 # send volume up/down — flipping it changes these codes.
 
+# ── Web console ──────────────────────────────────────────────────────────────
+# The browser console includes a ROOT SHELL, so treat its reachability as
+# root access to the whole device. Default: bound to loopback only — reach it
+# over an SSH tunnel (`ssh -L 8787:localhost:8787 <user>@venom.local`) or over
+# Tailscale, never on raw Wi-Fi the Pi roams onto. The access PIN is generated
+# on first provision (`sudo cat /var/lib/venom/web_token`).
+# Set bind = "0.0.0.0" ONLY on a network you fully trust (e.g. your own home
+# Wi-Fi) and never on a public/shared/hotspot network.
+[web]
+bind = "127.0.0.1"
+
 # ── Find my phone (ntfy) ─────────────────────────────────────────────────────
 # "Find my phone" / "ring my phone" (spoken) sends a max-priority push to this
 # ntfy topic. Install the ntfy app on your phone, subscribe to the same topic,
 # and give it a loud/alarm sound so it rings even on silent. Off until a topic
-# is set. Use a long, random topic name — anyone who knows it can ring your phone.
+# is set.
+#
+# SECURITY: ntfy.sh topics are PUBLIC — the topic name is the only secret.
+# Anyone who learns it can read everything pushed here (incoming WhatsApp,
+# photos) AND publish fake messages Venom will read out. So:
+#   - Use a long, unguessable random name (e.g. `openssl rand -hex 12`).
+#   - NEVER commit the real topic to git. Leave this blank in the repo and set
+#     it only in the on-device /etc/venom/venom.toml, or self-host ntfy with auth.
 [phone]
 ntfy_server = "https://ntfy.sh"
-ntfy_topic  = "venom-k1j2os4maw"   # subscribe your phone's ntfy app to this exact topic
+ntfy_topic  = ""   # set a long random topic ON THE DEVICE; keep it out of git
 
 # ── Screen reading (OCR) ─────────────────────────────────────────────────────
 # Run laptop/screen_server.py on your laptop, then say "look at my screen" and

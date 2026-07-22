@@ -9,6 +9,7 @@ snapshots and posts messages onto thread-safe queues.
 
 from __future__ import annotations
 
+import hmac
 import json
 import logging
 import os
@@ -16,6 +17,7 @@ import shlex
 import socket
 import subprocess
 import threading
+import time
 import tomllib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -31,6 +33,13 @@ CMD_TIMEOUT = 300  # must match venom.shell_server; console waits this long
 OVERRIDE_PATH = Path("/var/lib/venom/override.toml")
 VOICE_KEYS = ("wake_word", "wake_threshold", "voice_name", "user_name",
               "inactivity_timeout")
+
+# Brute-force protection for the console PIN. The terminal here is a root
+# shell, so the PIN is the only thing between the LAN and full device control:
+# lock an IP out after a burst of wrong guesses instead of letting it grind
+# through the keyspace.
+LOCKOUT_THRESHOLD = 8      # consecutive wrong PINs from one IP before a lock
+LOCKOUT_SECONDS = 300     # how long that IP stays locked out
 
 
 def _toml_value(value) -> str:
@@ -256,21 +265,55 @@ setInterval(tick,1500);setInterval(vtick,3000);tick();vtick();
 class WebConsole:
     """Owns the HTTP thread; the voice loop attaches itself on each start."""
 
-    def __init__(self, port: int = 8787, token: str = ""):
+    def __init__(self, port: int = 8787, token: str = "",
+                 bind: str = "127.0.0.1"):
         self.port = port
         self.token = token
+        # Bind address. Default loopback: the console (a root shell) is reached
+        # over an SSH tunnel or Tailscale, never raw on whatever Wi-Fi the Pi
+        # roams onto. Set web.bind = "0.0.0.0" in venom.toml to expose it on the
+        # LAN (only sensible on a network you fully trust).
+        self.bind = bind or "127.0.0.1"
         self.orchestrator = None  # set by attach(); may be replaced on restart
         self.loop = None
         self._prev_cpu = None  # (idle, total) for %-usage deltas
         self._cwd = None       # terminal working dir, persisted across calls
         self._prev_cwd = None  # for `cd -`
+        self._auth_fails: dict[str, tuple[int, float]] = {}  # ip -> (count, until)
+        self._auth_lock = threading.Lock()
 
-    def authorized(self, headers) -> bool:
-        """A request is allowed when no token is set, or it presents it."""
+    def authorized(self, headers, ip: str = "") -> str:
+        """Authorise a request: returns 'ok', 'bad', or 'locked'.
+
+        The PIN is compared in constant time (no timing oracle), and an IP that
+        keeps guessing wrong is locked out for a while so the 32-bit-ish PIN
+        can't be ground through over the network."""
         if not self.token:
-            return True
+            return "ok"
+        now = time.monotonic()
+        with self._auth_lock:
+            fails, until = self._auth_fails.get(ip, (0, 0.0))
+            if until and now < until:
+                return "locked"
         supplied = (headers.get("Authorization", "") or "").removeprefix("Bearer ")
-        return supplied == self.token
+        if hmac.compare_digest(supplied, self.token):
+            with self._auth_lock:
+                self._auth_fails.pop(ip, None)  # clean slate on success
+            return "ok"
+        # An absent PIN is just an un-authenticated poll (the page fetches
+        # /api/state before the user types anything) — answer 401 so the UI
+        # prompts, but don't let it burn the lockout budget. Only a supplied,
+        # wrong PIN counts as a guess.
+        if not supplied:
+            return "bad"
+        with self._auth_lock:
+            fails += 1
+            until = now + LOCKOUT_SECONDS if fails >= LOCKOUT_THRESHOLD else 0.0
+            self._auth_fails[ip] = (fails, until)
+        if until:
+            log.warning("console: %s locked out after %d bad PINs", ip, fails)
+            return "locked"
+        return "bad"
 
     def attach(self, orchestrator, loop) -> None:
         self.orchestrator = orchestrator
@@ -709,10 +752,16 @@ class WebConsole:
                 self.wfile.write(body)
 
             def _guard(self) -> bool:
-                """Serve 401 for unauthorized API calls; True when allowed."""
-                if console.authorized(self.headers):
+                """True when allowed; else serve 401 (bad PIN) or 429 (locked)."""
+                verdict = console.authorized(
+                    self.headers, self.client_address[0])
+                if verdict == "ok":
                     return True
-                self._send(b'{"error":"unauthorized"}', code=401)
+                if verdict == "locked":
+                    self._send(b'{"error":"too many attempts - locked"}',
+                               code=429)
+                else:
+                    self._send(b'{"error":"unauthorized"}', code=401)
                 return False
 
             def do_GET(self):
@@ -774,7 +823,7 @@ class WebConsole:
                 else:
                     self._send(b"{}")
 
-        server = ThreadingHTTPServer(("0.0.0.0", self.port), Handler)
+        server = ThreadingHTTPServer((self.bind, self.port), Handler)
         threading.Thread(target=server.serve_forever, daemon=True,
                          name="venom-web").start()
-        log.info("web console on http://0.0.0.0:%d", self.port)
+        log.info("web console on http://%s:%d", self.bind, self.port)

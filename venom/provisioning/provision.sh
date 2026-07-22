@@ -196,8 +196,10 @@ chown -R venom:venom /var/lib/venom 2>/dev/null || true
 #   ssh <user>@venom.local  then  sudo cat /var/lib/venom/web_token
 mkdir -p /var/lib/venom
 if [ ! -s /var/lib/venom/web_token ]; then
-    (openssl rand -hex 4 2>/dev/null \
-        || tr -dc 'a-f0-9' </dev/urandom | head -c 8) > /var/lib/venom/web_token
+    # 16 bytes = 128-bit PIN. The console terminal is a root shell, so this is
+    # effectively the device's root password — make it un-guessable.
+    (openssl rand -hex 16 2>/dev/null \
+        || tr -dc 'a-f0-9' </dev/urandom | head -c 32) > /var/lib/venom/web_token
 fi
 chown venom:venom /var/lib/venom/web_token 2>/dev/null || true
 chmod 640 /var/lib/venom/web_token
@@ -309,6 +311,101 @@ if [ -d "$WA_SRC" ]; then
         systemctl enable --now venom-whatsapp.service || true
         log "WhatsApp bridge up — pair it by scanning the QR:"
         log "  journalctl -u venom-whatsapp -n 40 --no-pager   (WhatsApp → Linked Devices)"
+    fi
+fi
+
+# ── 6c. host hardening: firewall + SSH + Tailscale ──────────────────────────
+# The Pi roams onto untrusted networks (phone hotspots, shared Wi-Fi). Lock the
+# host down so nothing but SSH is reachable from those networks, keep the root
+# shell / console / WhatsApp bridge loopback-only, and prefer Tailscale for
+# remote access. All idempotent and best-effort — never abort provisioning.
+
+# Firewall (nftables): default-deny inbound, allow loopback, established, ICMP,
+# DHCP-client + mDNS, SSH, and anything arriving over the Tailscale interface
+# (that's how the console/SSH are meant to be reached off-LAN). Outbound is
+# unrestricted — Venom needs to reach Gemini/ntfy/GitHub/WhatsApp freely.
+if ! command -v nft >/dev/null 2>&1; then
+    apt-get install -y -qq --no-install-recommends nftables || true
+fi
+if command -v nft >/dev/null 2>&1; then
+    cat > /etc/nftables.conf <<'EOF'
+#!/usr/sbin/nft -f
+# Venom host firewall — managed by provision.sh. Default-deny inbound.
+flush ruleset
+table inet filter {
+    chain input {
+        type filter hook input priority 0; policy drop;
+        iif "lo" accept
+        iifname "tailscale0" accept
+        ct state established,related accept
+        ct state invalid drop
+        ip protocol icmp accept
+        ip6 nexthdr icmpv6 accept
+        udp dport 68 accept          comment "DHCP client"
+        udp dport 5353 accept        comment "mDNS / venom.local"
+        tcp dport 22 accept          comment "SSH (key-only)"
+    }
+    chain forward { type filter hook forward priority 0; policy drop; }
+    chain output { type filter hook output priority 0; policy accept; }
+}
+EOF
+    chmod 0755 /etc/nftables.conf
+    systemctl enable nftables 2>/dev/null || true
+    if ! nft -f /etc/nftables.conf 2>/tmp/nft.err; then
+        log "nftables load failed ($(cat /tmp/nft.err 2>/dev/null)) — skipping firewall"
+    else
+        log "firewall active (default-deny inbound; SSH + Tailscale allowed)"
+    fi
+fi
+
+# SSH: keys only, no root login, no passwords — but ONLY disable passwords when
+# an authorized_keys with real content exists, or we'd lock ourselves out.
+HOME_USER="$(id -nu 1000 2>/dev/null || true)"
+HAVE_KEYS=0
+for akf in "/home/$HOME_USER/.ssh/authorized_keys" /root/.ssh/authorized_keys; do
+    [ -s "$akf" ] && HAVE_KEYS=1
+done
+mkdir -p /etc/ssh/sshd_config.d
+{
+    echo "# Venom SSH hardening — managed by provision.sh"
+    echo "PermitRootLogin no"
+    echo "KbdInteractiveAuthentication no"
+    echo "MaxAuthTries 3"
+    if [ "$HAVE_KEYS" = 1 ]; then
+        echo "PasswordAuthentication no"
+        echo "PubkeyAuthentication yes"
+    else
+        # No key found — leave password auth on so the owner isn't locked out,
+        # but shout about it: this is the single biggest remaining risk.
+        echo "# PasswordAuthentication left ENABLED: no authorized_keys found."
+        echo "# Add your public key (ssh-copy-id) then set PasswordAuthentication no."
+    fi
+} > /etc/ssh/sshd_config.d/venom-hardening.conf
+chmod 0644 /etc/ssh/sshd_config.d/venom-hardening.conf
+if [ "$HAVE_KEYS" != 1 ]; then
+    log "WARNING: no SSH key found — password login left ON to avoid lockout."
+    log "         run ssh-copy-id to add a key, then re-provision to disable passwords."
+fi
+systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
+
+# Tailscale: the recommended way to reach the console/SSH off-LAN (the console
+# now binds to loopback). Install the binary; bring the tailnet up only when an
+# auth key is supplied (env, or /boot/firmware/venom/tailscale.authkey), so this
+# stays hands-off and never blocks a boot.
+if ! command -v tailscale >/dev/null 2>&1; then
+    curl -fsSL https://tailscale.com/install.sh | sh >/dev/null 2>&1 \
+        || log "tailscale install skipped (no network / unsupported)"
+fi
+TS_AUTHKEY="${VENOM_TAILSCALE_AUTHKEY:-}"
+[ -z "$TS_AUTHKEY" ] && [ -s /boot/firmware/venom/tailscale.authkey ] \
+    && TS_AUTHKEY="$(cat /boot/firmware/venom/tailscale.authkey)"
+if command -v tailscale >/dev/null 2>&1; then
+    systemctl enable --now tailscaled 2>/dev/null || true
+    if [ -n "$TS_AUTHKEY" ] && ! tailscale status >/dev/null 2>&1; then
+        log "bringing up Tailscale from supplied auth key"
+        tailscale up --authkey="$TS_AUTHKEY" --ssh --hostname=venom \
+            --accept-dns=false >/dev/null 2>&1 \
+            || log "tailscale up failed — check the auth key"
     fi
 fi
 

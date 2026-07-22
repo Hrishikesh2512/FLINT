@@ -846,10 +846,13 @@ async def run_voice_forever(config: VenomConfig, set_state, activity=None) -> No
         try:
             from venom.web import WebConsole
 
-            console = WebConsole(config.web_port, token=config.web_token)
+            console = WebConsole(config.web_port, token=config.web_token,
+                                 bind=config.web_bind)
             console.start()
-            if not config.web_token:
-                log.warning("web console has NO token — open to anyone on the LAN")
+            if not config.web_token and config.web_bind != "127.0.0.1":
+                log.warning("web console has NO token AND is not loopback-bound "
+                            "— open to anyone who can reach %s:%d",
+                            config.web_bind, config.web_port)
         except Exception:
             log.exception("web console failed to start — continuing without it")
     while True:

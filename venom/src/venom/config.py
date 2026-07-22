@@ -336,8 +336,12 @@ class VenomConfig:
     memory_path: Path = Path("/var/lib/venom/memory.json")
     internet_host: str = "1.1.1.1"
     internet_port: int = 53
-    web_enabled: bool = True   # browser console on the LAN
+    web_enabled: bool = True   # browser console
     web_port: int = 8787
+    # Bind address for the console. Loopback by default: the console is a root
+    # shell, so it's reached over an SSH tunnel or Tailscale, never raw on an
+    # untrusted network. Set to "0.0.0.0" only on a LAN you fully trust.
+    web_bind: str = "127.0.0.1"
     web_token: str = ""        # console access PIN; empty = open (dev only)
     gemini_api_key: str = ""
     brains: tuple[BrainCandidate, ...] = field(default=DEFAULT_CLOUD_CANDIDATES)
@@ -457,6 +461,8 @@ def load_config(path: Path | None = None) -> VenomConfig:
         internet_port=int(internet.get("port", 53)),
         web_enabled=bool(data.get("web", {}).get("enabled", True)),
         web_port=int(data.get("web", {}).get("port", 8787)),
+        web_bind=str(data.get("web", {}).get("bind", "127.0.0.1")).strip()
+        or "127.0.0.1",
         web_token=str(
             os.environ.get("VENOM_WEB_TOKEN", "").strip()
             or data.get("web", {}).get("token", "")

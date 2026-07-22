@@ -672,12 +672,36 @@ def test_web_authorized_gate():
     from venom.web import WebConsole
 
     open_console = WebConsole(token="")
-    assert open_console.authorized({})           # no token -> open
+    assert open_console.authorized({}) == "ok"   # no token -> open
 
-    locked = WebConsole(token="s3cret")
-    assert not locked.authorized({})
-    assert not locked.authorized({"Authorization": "Bearer wrong"})
-    assert locked.authorized({"Authorization": "Bearer s3cret"})
+    con = WebConsole(token="s3cret")
+    # A missing PIN is 'bad' (prompt the user) but never counts toward lockout.
+    assert con.authorized({}, "1.2.3.4") == "bad"
+    assert con.authorized({"Authorization": "Bearer wrong"}, "1.2.3.4") == "bad"
+    assert con.authorized({"Authorization": "Bearer s3cret"}, "1.2.3.4") == "ok"
+
+
+def test_web_lockout_after_repeated_wrong_pins():
+    from venom.web import LOCKOUT_THRESHOLD, WebConsole
+
+    con = WebConsole(token="s3cret")
+    bad = {"Authorization": "Bearer nope"}
+    # First THRESHOLD-1 wrong guesses are just 'bad'; the next trips the lock.
+    for _ in range(LOCKOUT_THRESHOLD - 1):
+        assert con.authorized(bad, "9.9.9.9") == "bad"
+    assert con.authorized(bad, "9.9.9.9") == "locked"
+    # Once locked, even the CORRECT PIN is refused for that IP...
+    assert con.authorized({"Authorization": "Bearer s3cret"}, "9.9.9.9") == "locked"
+    # ...but a different IP is unaffected.
+    assert con.authorized({"Authorization": "Bearer s3cret"}, "8.8.8.8") == "ok"
+
+
+def test_web_binds_loopback_by_default():
+    from venom.web import WebConsole
+
+    assert WebConsole().bind == "127.0.0.1"
+    assert WebConsole(bind="").bind == "127.0.0.1"   # empty falls back to loopback
+    assert WebConsole(bind="0.0.0.0").bind == "0.0.0.0"
 
 
 # ── session teardown & dead-capture-path detection ───────────────────────────
