@@ -130,9 +130,11 @@ class VoiceOrchestrator:
         self.chess = ChessGame()
         from venom.notifications import NotificationHub
 
+        # Incoming WhatsApp is delivered locally by the bridge over loopback
+        # (no public ntfy round-trip). Enabled whenever WhatsApp is.
         self.notifications = NotificationHub(
-            config.phone.ntfy_server, config.phone.notify_topic,
-            is_dnd=lambda: self._dnd, on_arrival=self._note_whatsapp)
+            is_dnd=lambda: self._dnd, on_arrival=self._note_whatsapp,
+            enabled=config.whatsapp.enabled)
         # Senders of WhatsApp messages that arrived while idle, awaiting a
         # proactive spoken announcement. Filled from the notification thread,
         # drained by the wake loop — hence the lock.

@@ -12,20 +12,21 @@
  *   POST /send  {to,text} -> send a message; `to` = name | number | jid,
  *                            or omit `to` to reply to the most recent chat.
  *
- * Incoming 1:1 messages are forwarded to the configured ntfy topic so Venom's
- * existing NotificationHub chimes on arrival and reads them on demand — the
- * exact path the phone/MacroDroid forwarder used, now sourced here instead.
+ * Incoming 1:1 messages are delivered straight to Venom's notification hub on
+ * this same Pi over loopback (VENOM_NOTIFY_URL) so it chimes on arrival and
+ * reads them on demand — no public ntfy round-trip, so message contents never
+ * leave the box. Delivery is queued and retried, so a message that lands while
+ * the voice daemon is mid-restart is held rather than lost.
  *
  * Auth/session state (Baileys creds + the learned contact map) persists under
  * WA_STATE_DIR so a restart never needs a re-scan.
  *
  * Config via environment (set by the systemd unit):
- *   WA_STATE_DIR   directory for creds + contacts.json   (default ./state)
- *   WA_HOST        HTTP bind address                      (default 127.0.0.1)
- *   WA_PORT        HTTP port                              (default 8788)
- *   WA_TOKEN       if set, require it in X-Token header
- *   NTFY_SERVER    ntfy base for incoming forward         (default https://ntfy.sh)
- *   NTFY_TOPIC     ntfy topic for incoming forward        (empty = no forward)
+ *   WA_STATE_DIR      directory for creds + contacts.json (default ./state)
+ *   WA_HOST           HTTP bind address                   (default 127.0.0.1)
+ *   WA_PORT           HTTP port                           (default 8788)
+ *   WA_TOKEN          if set, require it in X-Token header
+ *   VENOM_NOTIFY_URL  local hub ingest (default http://127.0.0.1:8789/notify)
  */
 
 'use strict';
@@ -53,8 +54,9 @@ const STATE_DIR = process.env.WA_STATE_DIR || path.join(__dirname, 'state');
 const HOST = process.env.WA_HOST || '127.0.0.1';
 const PORT = parseInt(process.env.WA_PORT || '8788', 10);
 const TOKEN = (process.env.WA_TOKEN || '').trim();
-const NTFY_SERVER = (process.env.NTFY_SERVER || 'https://ntfy.sh').replace(/\/+$/, '');
-const NTFY_TOPIC = (process.env.NTFY_TOPIC || '').trim();
+// Incoming messages are delivered to Venom's notification hub over loopback —
+// no public ntfy round-trip, so message contents never leave the Pi.
+const NOTIFY_URL = (process.env.VENOM_NOTIFY_URL || 'http://127.0.0.1:8789/notify').trim();
 
 // Auto-reply mode: when on, the bridge answers incoming 1:1 messages itself
 // with a short Gemini-composed reply on the user's behalf.
@@ -297,22 +299,49 @@ function messageText(msg) {
   ).trim();
 }
 
-async function forwardIncoming(jid, sender, text) {
-  if (!NTFY_TOPIC || !text) return;
+// Deliver an incoming message to Venom's local notification hub. The daemon
+// restarts occasionally (settings change / crash); rather than lose a message
+// that lands in that window, queue it here (the bridge stays up) and retry
+// until the hub accepts it. Dedupe is by `id` on the hub side, so retries and
+// replays are harmless.
+const notifyQueue = []; // [{title, message, id}] awaiting delivery
+let draining = false;
+
+function enqueueNotify(sender, text, id) {
+  if (!text) return;
+  notifyQueue.push({
+    title: (sender || 'WhatsApp').slice(0, 120),
+    message: text.slice(0, 2000),
+    id: id || '',
+  });
+  if (notifyQueue.length > 200) notifyQueue.shift(); // bound memory; drop oldest
+  drainNotifyQueue();
+}
+
+async function drainNotifyQueue() {
+  if (draining) return;
+  draining = true;
   try {
-    await fetch(`${NTFY_SERVER}/${NTFY_TOPIC}`, {
-      method: 'POST',
-      headers: {
-        Title: (sender || 'WhatsApp').slice(0, 120),
-        // Group under one ntfy tag so Venom's hub reads them as WhatsApp.
-        Tags: 'speech_balloon',
-      },
-      body: text.slice(0, 2000),
-    });
+    while (notifyQueue.length) {
+      const item = notifyQueue[0];
+      const resp = await fetch(NOTIFY_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(item),
+      });
+      if (!resp.ok) throw new Error(`notify HTTP ${resp.status}`);
+      notifyQueue.shift(); // delivered — drop it
+    }
   } catch (err) {
-    logger.warn({ err }, 'ntfy forward failed');
+    // Hub down (daemon restarting) — keep the queue and retry on the interval.
+    logger.warn({ err: err.message }, 'local notify delivery failed, will retry');
+  } finally {
+    draining = false;
   }
 }
+
+// Retry loop for anything stranded while the daemon was down.
+setInterval(() => { if (notifyQueue.length) drainNotifyQueue(); }, 3000).unref();
 
 // ── Baileys connection lifecycle ─────────────────────────────────────────────
 async function start() {
@@ -418,7 +447,7 @@ async function start() {
       const text = messageText(msg);
       const sender = msg.pushName || contacts.get(lastChatJid) || jid.split('@')[0];
       if (text) {
-        await forwardIncoming(jid, sender, text);
+        enqueueNotify(sender, text, msg.key.id);
         await maybeAutoReply(lastChatJid, text, Number(msg.messageTimestamp) || 0);
       }
     }
@@ -552,9 +581,7 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, HOST, () => {
   console.log(`[venom-whatsapp] HTTP API on http://${HOST}:${PORT}`);
   console.log(`[venom-whatsapp] state dir: ${STATE_DIR}`);
-  if (NTFY_TOPIC) {
-    console.log(`[venom-whatsapp] forwarding incoming to ${NTFY_SERVER}/${NTFY_TOPIC}`);
-  }
+  console.log(`[venom-whatsapp] delivering incoming to ${NOTIFY_URL}`);
 });
 
 start().catch((err) => {

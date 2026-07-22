@@ -16,8 +16,9 @@ RestartSec=5
 Environment=WA_HOST=127.0.0.1
 Environment=WA_PORT=8788
 Environment=WA_STATE_DIR=/var/lib/venom/whatsapp
-Environment=NTFY_SERVER=https://ntfy.sh
-# NTFY_TOPIC (incoming forward) is written here by provision.sh from venom.toml.
+# Incoming messages are delivered to the local notification hub over loopback
+# (VENOM_NOTIFY_URL default: http://127.0.0.1:8789/notify). GEMINI_API_KEY +
+# AUTO_REPLY_USER for auto-reply are written by provision.sh.
 EnvironmentFile=-/etc/venom/whatsapp.env
 
 StateDirectory=venom

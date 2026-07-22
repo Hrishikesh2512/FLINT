@@ -1,14 +1,17 @@
-"""Phone notifications → Venom, over ntfy (the reverse of find-my-phone).
+"""Incoming phone notifications → Venom, delivered locally.
 
-On the phone, an automation (MacroDroid / Tasker) watches the apps YOU pick —
-WhatsApp for now — and POSTs each notification to an ntfy topic. Here a
-background thread subscribes to that topic's JSON stream: every arrival plays a
-distinct "message" chime through the headset (via PipeWire's pw-play, so it
-works even when no conversation is open), and the text is held so Venom can read
-it out only when asked.
+WhatsApp messages arrive at the self-hosted Baileys bridge (venom-whatsapp),
+which runs on this same Pi. Instead of shipping each message out to a public
+ntfy topic and reading it back — which put your message contents through a
+third-party server — the bridge now POSTs them straight to this hub over
+loopback (127.0.0.1). Every arrival plays a distinct "message" chime through
+the headset (via PipeWire's pw-play, so it works even when no conversation is
+open), and the text is held so Venom can read it out only when asked.
 
 Design: chime on arrival, explain on demand. Nothing is spoken automatically.
-The chime is suppressed while Do-Not-Disturb is on.
+The chime is suppressed while Do-Not-Disturb is on. The ingest listener binds
+loopback only, so nothing off-box can reach it; the bridge retries on its side
+if a message lands while the voice daemon is mid-restart, so none are lost.
 """
 
 from __future__ import annotations
@@ -18,15 +21,19 @@ import logging
 import subprocess
 import threading
 import time
-import urllib.request
 import wave
 from collections import deque
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 log = logging.getLogger("venom.notifications")
 
 CHIME_WAV = Path("/run/venom/notif_chime.wav")
 SAMPLE_RATE = 24000
+
+# Loopback ingest endpoint the WhatsApp bridge POSTs incoming messages to.
+DEFAULT_BIND = "127.0.0.1"
+DEFAULT_PORT = 8789
 
 
 def _write_chime(path: Path = CHIME_WAV) -> Path | None:
@@ -57,11 +64,14 @@ def _write_chime(path: Path = CHIME_WAV) -> Path | None:
 
 
 class NotificationHub:
-    """Subscribes to the phone's notification topic; chimes + holds messages."""
+    """Receives incoming messages from the WhatsApp bridge over loopback;
+    chimes on arrival and holds them for on-demand reading."""
 
-    def __init__(self, server: str, topic: str, is_dnd=None, on_arrival=None):
-        self._server = (server or "https://ntfy.sh").rstrip("/")
-        self._topic = (topic or "").strip()
+    def __init__(self, is_dnd=None, on_arrival=None, bind: str = DEFAULT_BIND,
+                 port: int = DEFAULT_PORT, enabled: bool = True):
+        self._bind = bind or DEFAULT_BIND
+        self._port = port
+        self._enabled = enabled
         self._is_dnd = is_dnd or (lambda: False)
         # Called (off the network thread) with the sender name when a message
         # arrives and DND is off — lets the voice loop announce it proactively.
@@ -74,50 +84,70 @@ class NotificationHub:
 
     @property
     def enabled(self) -> bool:
-        return bool(self._topic)
+        return self._enabled
 
-    # ── background subscriber ────────────────────────────────────────────────
+    # ── loopback ingest server ───────────────────────────────────────────────
     def start(self) -> None:
         if not self.enabled:
             return
-        threading.Thread(target=self._subscribe, daemon=True,
-                         name="venom-notifs").start()
-        log.info("notification hub subscribed to %s/%s", self._server, self._topic)
+        hub = self
 
-    def _subscribe(self) -> None:
-        url = f"{self._server}/{self._topic}/json"
-        backoff = 2
-        while True:
-            try:
-                with urllib.request.urlopen(url, timeout=75) as resp:
-                    backoff = 2  # a clean connect resets the retry delay
-                    for raw in resp:
-                        line = raw.decode("utf-8", "replace").strip()
-                        if line:
-                            self._handle(line)
-            except Exception as exc:  # network drop / timeout → reconnect
-                log.debug("notif stream reconnecting (%s)", exc)
-                time.sleep(backoff)
-                backoff = min(backoff * 2, 60)
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *args):  # keep journald quiet
+                pass
 
-    def _handle(self, line: str) -> None:
+            def do_POST(self):
+                if self.path != "/notify":
+                    self.send_response(404)
+                    self.end_headers()
+                    return
+                try:
+                    size = int(self.headers.get("Content-Length", 0))
+                    body = self.rfile.read(size) or b"{}"
+                except (ValueError, OSError):
+                    body = b"{}"
+                ok = hub.ingest_json(body.decode("utf-8", "replace"))
+                self.send_response(200 if ok else 400)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+
         try:
-            obj = json.loads(line)
+            server = ThreadingHTTPServer((self._bind, self._port), Handler)
+        except OSError as exc:  # port busy (stale instance) — degrade, don't crash
+            log.warning("notification ingest could not bind %s:%d (%s)",
+                        self._bind, self._port, exc)
+            return
+        threading.Thread(target=server.serve_forever, daemon=True,
+                         name="venom-notify").start()
+        log.info("notification ingest on http://%s:%d/notify",
+                 self._bind, self._port)
+
+    # ── ingest ───────────────────────────────────────────────────────────────
+    def ingest_json(self, body: str) -> bool:
+        """Parse a bridge POST ({title, message, id}) and hand it to ingest()."""
+        try:
+            obj = json.loads(body)
         except ValueError:
+            return False
+        self.ingest(str(obj.get("title", "")).strip(),
+                    str(obj.get("message", "")).strip(),
+                    str(obj.get("id", "")).strip())
+        return True
+
+    def ingest(self, title: str, message: str, mid: str = "") -> None:
+        """Record a message, dedupe by id, chime (unless DND), and notify."""
+        if not message:
             return
-        if obj.get("event") != "message":  # skip open/keepalive/poll_request
-            return
-        mid = obj.get("id", "")
         with self._lock:
             if mid and mid in self._seen:
-                return  # already processed (reconnect replayed the cache)
+                return  # already processed (a bridge retry replayed it)
             if mid:
                 self._seen.append(mid)
             entry = {
                 "app": "WhatsApp",
-                "title": (obj.get("title") or "").strip(),   # sender / chat
-                "message": (obj.get("message") or "").strip(),
-                "ts": obj.get("time") or time.time(),
+                "title": title,          # sender / chat
+                "message": message,
+                "ts": time.time(),
             }
             self._recent.append(entry)
             self._unread += 1
@@ -127,7 +157,7 @@ class NotificationHub:
             if self._on_arrival:
                 try:
                     self._on_arrival(entry["title"] or "Someone")
-                except Exception as exc:  # never let a hook kill the subscriber
+                except Exception as exc:  # never let a hook kill the ingest
                     log.debug("on_arrival hook failed: %s", exc)
 
     def _chime(self) -> None:

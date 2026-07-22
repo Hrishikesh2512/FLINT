@@ -314,9 +314,9 @@ class PhoneConfig:
 
     ntfy_server: str = "https://ntfy.sh"
     ntfy_topic: str = ""
-    # A SEPARATE topic for phone→Pi notifications (WhatsApp etc.), forwarded by a
-    # MacroDroid/Tasker automation on the phone. Off until set. Keep distinct
-    # from ntfy_topic so find-my-phone alerts aren't read back as messages.
+    # DEPRECATED / unused: incoming WhatsApp is now delivered locally by the
+    # bridge over loopback (no public ntfy round-trip), so nothing subscribes to
+    # this topic anymore. Kept only so an old venom.toml still parses.
     notify_topic: str = ""
 
     @property

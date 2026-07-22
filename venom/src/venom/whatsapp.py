@@ -3,7 +3,7 @@
 The bridge (venom/whatsapp-service, a small Node service) owns the WhatsApp
 Web session and does the actual sending; this is just a thin HTTP client to
 its localhost API. Incoming messages don't come through here — the bridge
-forwards those to Venom's ntfy topic, where the existing NotificationHub
+delivers those to Venom's NotificationHub over loopback (127.0.0.1), where it
 chimes and reads them. So this module is send-only.
 
 Design mirrors gmail.py: every call is short-lived, failures degrade into a
