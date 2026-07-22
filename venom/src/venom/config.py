@@ -263,6 +263,28 @@ class WhatsAppConfig:
 
 
 @dataclass(frozen=True)
+class LightsConfig:
+    """Voice control for Tuya / Smart Life smart bulbs over the LAN (venom/
+    lights.py). `registry_path` points at a tinytuya-shaped devices JSON (name,
+    id, local key, ip) extracted once with `python -m tinytuya wizard`. Ready
+    only when enabled AND that file exists with at least one keyed bulb, so an
+    unconfigured box simply never offers the light tools."""
+
+    enabled: bool = True
+    registry_path: Path = Path("/var/lib/venom/lights.json")
+
+    @property
+    def ready(self) -> bool:
+        if not self.enabled:
+            return False
+        try:
+            from venom.lights import LightsController
+            return LightsController(self.registry_path).has_devices()
+        except Exception:  # never let a bad file block startup
+            return False
+
+
+@dataclass(frozen=True)
 class AmbientConfig:
     """Ambient awareness — whether Venom is allowed to speak first.
 
@@ -355,6 +377,7 @@ class VenomConfig:
     buttons: ButtonsConfig = field(default_factory=ButtonsConfig)
     phone: PhoneConfig = field(default_factory=PhoneConfig)
     whatsapp: WhatsAppConfig = field(default_factory=WhatsAppConfig)
+    lights: LightsConfig = field(default_factory=LightsConfig)
     ambient: AmbientConfig = field(default_factory=AmbientConfig)
 
     def __post_init__(self) -> None:
@@ -443,6 +466,7 @@ def load_config(path: Path | None = None) -> VenomConfig:
     buttons = data.get("buttons", {})
     phone = data.get("phone", {})
     whatsapp = data.get("whatsapp", {})
+    lights = data.get("lights", {})
     ambient = data.get("ambient", {})
     raw_brains = data.get("brain", [])
 
@@ -549,6 +573,11 @@ def load_config(path: Path | None = None) -> VenomConfig:
             port=int(whatsapp.get("port", 8788)),
             token=str(whatsapp.get("token", "")).strip(),
             timeout=float(whatsapp.get("timeout", 20.0)),
+        ),
+        lights=LightsConfig(
+            enabled=bool(lights.get("enabled", True)),
+            registry_path=Path(
+                lights.get("registry_path", "/var/lib/venom/lights.json")),
         ),
         # Every ambient knob falls back to the dataclass default, so an empty
         # [ambient] section (or none at all) is the tuned configuration.

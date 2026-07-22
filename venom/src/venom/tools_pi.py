@@ -321,7 +321,7 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
                       reminders=None, notes=None, lists=None,
                       location=None, chess=None, notifications=None,
                       receiver=None, calendar=None, mailbox=None,
-                      whatsapp=None, connections=None) -> ToolRegistry:
+                      whatsapp=None, connections=None, lights=None) -> ToolRegistry:
     reg = ToolRegistry(platform="linux")
 
     if calendar is not None:
@@ -690,6 +690,102 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
         )
         def disconnect_bluetooth_audio() -> str:
             return receiver.disconnect_all()
+
+    if lights is not None:
+        @reg.tool(
+            description=(
+                "Turns the user's smart lights ON or OFF. `where` names a room "
+                "or a single light ('bedroom', 'kitchen lamp'); leave it EMPTY "
+                "for every light. Use for 'lights on/off', 'turn off the "
+                "bedroom', 'lights band karo', 'sab lights on kar do'."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "on": {"type": "boolean",
+                           "description": "true to switch on, false to switch off"},
+                    "where": {"type": "string",
+                              "description": "Room or light name; omit for all lights"},
+                },
+                "required": ["on"],
+            },
+        )
+        def set_lights(on: bool, where: str = "") -> str:
+            return lights.power(on, where)
+
+        @reg.tool(
+            description=(
+                "Sets smart-light BRIGHTNESS to an absolute level (also turns "
+                "the light on). Use for 'dim the lights', 'bedroom 20%', 'full "
+                "brightness', 'thoda tez/kam kar do'. For relative nudges pick a "
+                "sensible new percent. `where` omitted = all lights."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "percent": {"type": "integer",
+                                "description": "Brightness 1-100"},
+                    "where": {"type": "string",
+                              "description": "Room or light name; omit for all lights"},
+                },
+                "required": ["percent"],
+            },
+        )
+        def set_light_brightness(percent: int, where: str = "") -> str:
+            return lights.brightness(percent, where)
+
+        @reg.tool(
+            description=(
+                "Sets smart-light COLOUR or white tone (also turns it on). Pass "
+                "a colour name — red, orange, yellow, green, teal, cyan, blue, "
+                "indigo, violet, purple, magenta, pink — or a white: 'warm', "
+                "'neutral', 'cool'/'daylight'. Map the user's spoken colour onto "
+                "the closest of these. Use for 'make it blue', 'warm white kar "
+                "do', 'lights red kar do'. `where` omitted = all lights."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "color": {"type": "string",
+                              "description": "A colour name, or warm/neutral/cool white"},
+                    "where": {"type": "string",
+                              "description": "Room or light name; omit for all lights"},
+                },
+                "required": ["color"],
+            },
+        )
+        def set_light_color(color: str, where: str = "") -> str:
+            return lights.colour(color, where)
+
+        @reg.tool(
+            description=(
+                "Applies a preset lighting SCENE (colour + brightness together). "
+                "Known scenes: relax, reading, movie, focus, night, party, "
+                "romantic, sunset. Use when the user names a mood/scene like "
+                "'movie mode', 'reading light', 'party lights', 'night mode'. "
+                "`where` omitted = all lights."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "scene": {"type": "string",
+                              "description": "relax|reading|movie|focus|night|party|romantic|sunset"},
+                    "where": {"type": "string",
+                              "description": "Room or light name; omit for all lights"},
+                },
+                "required": ["scene"],
+            },
+        )
+        def set_light_scene(scene: str, where: str = "") -> str:
+            return lights.scene(scene, where)
+
+        @reg.tool(
+            description=("Lists the smart lights the user has set up, by name and "
+                         "room. Use for 'what lights do you control', 'list my "
+                         "lights', 'kaun kaun si lights hain'."),
+        )
+        def list_lights() -> str:
+            return lights.list_lights()
 
     @reg.tool(
         description=(

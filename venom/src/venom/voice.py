@@ -178,6 +178,12 @@ class VoiceOrchestrator:
             from venom.whatsapp import WhatsAppClient
 
             self.whatsapp = WhatsAppClient(config.whatsapp)
+        # Tuya / Smart Life smart bulbs, driven locally over the LAN.
+        self.lights = None
+        if config.lights.ready:
+            from venom.lights import LightsController
+
+            self.lights = LightsController(config.lights.registry_path)
         self.registry = build_pi_registry(config, self.memory, self.timers,
                                           music=self.music,
                                           reminders=self.reminders,
@@ -189,7 +195,8 @@ class VoiceOrchestrator:
                                           calendar=self.calwatch,
                                           mailbox=self.mailbox,
                                           whatsapp=self.whatsapp,
-                                          connections=self.connections)
+                                          connections=self.connections,
+                                          lights=self.lights)
         self._detector: WakeWordDetector | None = None
         # True while we've paused our own music for a live conversation, so we
         # only resume what *we* paused (not a track the user paused by hand).

@@ -88,6 +88,34 @@ bind = "127.0.0.1"
 ntfy_server = "https://ntfy.sh"
 ntfy_topic  = ""   # set a long random topic ON THE DEVICE; keep it out of git
 
+# ── Smart lights (Tuya / Smart Life) ─────────────────────────────────────────
+# Voice control of Tuya/Smart Life colour+brightness bulbs (Wipro, Syska,
+# Halonix, Havells, most generic Wi-Fi bulbs), driven LOCALLY over your Wi-Fi —
+# no cloud round-trip. Say "lights on", "bedroom 20%", "make it warm white",
+# "movie mode", "sab lights off".
+#
+# ONE-TIME SETUP (extract each bulb's local key — Tuya encrypts LAN control):
+#   1. Make a free Tuya IoT Cloud project at iot.tuya.com and link your
+#      Smart Life app account to it (Devices → Link App Account → scan the QR
+#      in Smart Life → Me → Tuya Developer). This is the fiddly part; it's a
+#      one-time account link, done off the Pi.
+#   2. On any computer: `pip install tinytuya` then `python -m tinytuya wizard`.
+#      Enter the project's API ID/Secret + your region; it writes devices.json
+#      (and snapshot.json) holding each bulb's id, local key and IP.
+#   3. Copy that file to the Pi as the registry_path below, e.g.
+#        scp devices.json <user>@venom.local:/tmp/ &&
+#        sudo mv /tmp/devices.json /var/lib/venom/lights.json &&
+#        sudo chown venom:venom /var/lib/venom/lights.json
+#   4. Optional: add a "room" field to each entry (e.g. "room": "bedroom") so
+#      "turn off the bedroom" groups the right bulbs. You can name lights too.
+#
+# SECURITY: the local keys grant control of your bulbs — keep lights.json on the
+# Pi only, never in git. Lights are OFF (tools hidden) until the file exists
+# with at least one keyed bulb. Set enabled = false to hard-disable.
+[lights]
+enabled       = true
+registry_path = "/var/lib/venom/lights.json"
+
 # ── Screen reading (OCR) ─────────────────────────────────────────────────────
 # Run laptop/screen_server.py on your laptop, then say "look at my screen" and
 # Jarvis reads the on-screen text (local OCR — fast, no vision API, text only).
