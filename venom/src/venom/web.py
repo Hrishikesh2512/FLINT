@@ -350,7 +350,7 @@ text-transform:uppercase;box-shadow:0 0 0 3px rgba(240,168,36,.09) inset;border-
 <text><textPath href=#arc startOffset=1%>VIRTUAL ENHANCED NEURAL OPTIMIZATION MODEL ·</textPath></text>
 </svg>
 <div class=id><div class=org>Virtual Enhanced Neural Optimization Model</div><h1>VENOM</h1>
-<div class=sub>j.a.r.v.i.s. core &middot; stark industries &middot; case <span id=case>VEN-0000</span>
+<div class=sub>j.a.r.v.i.s. core &middot; case <span id=case>VEN-0000</span>
 &middot; build <span id=ver>?</span></div></div>
 <div class=clockbox><div id=clock>--:--:--</div><div class=tzl>sacred timeline</div></div>
 </header>
@@ -440,7 +440,7 @@ manage this over Tailscale so a change can&rsquo;t lock you out.</div></div></de
 LED to stop before unplugging &mdash; never pull power live.</div></div></details>
 </div>
 <div class=foot><div class=stamp>approved for all time</div>
-<div class=lbl>stark industries &middot; j.a.r.v.i.s. core &middot; for all time. always.</div></div>
+<div class=lbl>j.a.r.v.i.s. core &middot; for all time. always.</div></div>
 </div>
 <script>
 const $=id=>document.getElementById(id),H=s=>(s+'').replace(/[<&]/g,c=>c=='<'?'&lt;':'&amp;');
@@ -460,7 +460,7 @@ document.body.classList.toggle('live',s.voice=='conversation');
 $('status').innerHTML=chip('vox',s.voice,s.voice!='reconnecting')
 +chip('net',s.internet?'online':'offline',s.internet)
 +chip('mic',s.headset?'linked':'none',!!s.headset)
-+chip('core',s.brain||'none',!!s.brain);
++chip('core',s.brain?'jarvis':'offline',!!s.brain);
 $('np').textContent=s.now_playing?'\\u266a '+s.now_playing:'\\u2014 idle \\u2014';
 if(s.volume!=null)$('volbar').style.width=Math.round(s.volume*100)+'%';
 $('timers').innerHTML=(s.timers&&s.timers.length)?s.timers.map(t=>
