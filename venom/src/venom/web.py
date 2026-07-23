@@ -75,140 +75,352 @@ def write_override(section: str, values: dict,
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines))
 
-BANNER = (
-    " ██╗   ██╗███████╗███╗   ██╗ ██████╗ ███╗   ███╗\n"
-    " ██║   ██║██╔════╝████╗  ██║██╔═══██╗████╗ ████║\n"
-    " ██║   ██║█████╗  ██╔██╗ ██║██║   ██║██╔████╔██║\n"
-    " ╚██╗ ██╔╝██╔══╝  ██║╚██╗██║██║   ██║██║╚██╔╝██║\n"
-    "  ╚████╔╝ ███████╗██║ ╚████║╚██████╔╝██║ ╚═╝ ██║\n"
-    "   ╚═══╝  ╚══════╝╚═╝  ╚═══╝ ╚═════╝ ╚═╝     ╚═╝"
-)
-
 PAGE = """<!doctype html><meta charset=utf-8>
-<meta name=viewport content="width=device-width,initial-scale=1">
-<title>VENOM // console</title><style>
-:root{--g:#00ff9c;--dim:#0b4433;--amber:#ffb000;--red:#ff2e4d;--bg:#020604}
+<meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name=theme-color content="#03110a">
+<title>VENOM // TVA CONSOLE</title><style>
+:root{
+--grn:#22e07d;--grn2:#8dffc4;--grn-d:#0f4a2e;--grn-x:#06170f;--grn-h:rgba(34,224,125,.30);
+--amber:#f0a824;--tan:#c9b892;--red:#ff4242;--red-d:#4a0f14;
+--bg:#020705;--pnl:rgba(5,17,11,.87);--pnl2:rgba(8,28,18,.90);--ink:#d6f6e6;--dim:#5c8f77;
+--tab:#08201512;--r:3px}
 *{box-sizing:border-box}
-::selection{background:var(--g);color:#000}
-body{margin:0 auto;max-width:780px;padding:14px;background:var(--bg);color:var(--g);
-font:13px/1.5 'Courier New',ui-monospace,monospace;text-shadow:0 0 4px currentColor}
+::selection{background:var(--grn);color:#001208}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;padding:0 0 40px;background:var(--bg);color:var(--ink);
+font:13px/1.55 ui-monospace,'Courier New',monospace;letter-spacing:.2px;
+text-shadow:0 0 5px rgba(34,224,125,.20);overflow-x:hidden}
+.page{max-width:1180px;margin:0 auto;padding:10px 12px;position:relative;z-index:2}
+/* ── yggdrasil: the world tree the timelines grow into ── */
+#tree{position:fixed;inset:-4% -2%;z-index:0;pointer-events:none;opacity:.9;
+animation:breathe 8s ease-in-out infinite}
+#tree path{fill:none;stroke:var(--grn);stroke-linecap:round;stroke-opacity:.75;
+stroke-dasharray:900;stroke-dashoffset:900;animation:grow 3.4s ease-out forwards}
+#tree .lim{stroke-width:2.2}
+#tree .arm{stroke-width:1.4;animation-delay:.5s}
+#tree .twig{stroke-width:.8;stroke-opacity:.4;animation-delay:1.1s}
+#tree .root{stroke-width:1.6;stroke-opacity:.34;animation-delay:.2s}
+#tree .ember{stroke:var(--amber);stroke-opacity:.5;animation-delay:1.4s}
+#tree circle{fill:var(--grn);animation:spark 5s ease-in-out infinite}
+#tree .core{fill:url(#halo)}
+@keyframes grow{to{stroke-dashoffset:0}}
+@keyframes breathe{50%{opacity:.72}}
+@keyframes spark{0%,100%{opacity:.15}50%{opacity:.7}}
+/* ── CRT dressing ── */
 body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:9;
-background:repeating-linear-gradient(0deg,rgba(0,0,0,.16) 0 1px,transparent 1px 3px);
+background:repeating-linear-gradient(0deg,rgba(0,0,0,.20) 0 1px,transparent 1px 3px);
 animation:flick .12s infinite}
 body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:8;
-background:radial-gradient(ellipse at center,transparent 60%,rgba(0,0,0,.5))}
-@keyframes flick{50%{opacity:.9}}
-.wrap{overflow-x:auto}
-.banner{white-space:pre;margin:0;font-size:9px;line-height:1.05;color:var(--g);
-filter:drop-shadow(0 0 6px var(--g))}
-.lbl{color:#3fae86;font-size:10px;letter-spacing:2px;text-transform:uppercase}
-.bar{border:1px solid var(--dim);padding:9px 11px;margin:9px 0;
-background:linear-gradient(180deg,rgba(0,255,156,.03),transparent)}
-.led{display:inline-block;padding:2px 8px;border:1px solid var(--dim);margin:3px 5px 3px 0}
-.on{color:var(--g);border-color:var(--g);box-shadow:0 0 9px rgba(0,255,156,.4)}
-.off{color:var(--red);border-color:var(--red);text-shadow:0 0 4px var(--red)}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:7px 14px;margin-top:6px}
-.v{display:flex;align-items:center;gap:8px}.v span:first-child{min-width:52px}
-.meter{height:9px;flex:1;background:#04160f;border:1px solid var(--dim);overflow:hidden}
-.meter i{display:block;height:100%;width:0;background:var(--g);box-shadow:0 0 8px var(--g);
-transition:width .5s}.hot i{background:var(--amber)}.crit i{background:var(--red)}
-#log{background:#03100b;border:1px solid var(--dim);height:240px;overflow-y:auto;padding:8px;
-font-size:12.5px}#log div{white-space:pre-wrap;word-break:break-word;margin:1px 0}
-.you{color:#7fffd4}.jarvis{color:var(--g)}.sys{color:var(--amber);opacity:.9}
-input,button,select{font:inherit;background:#03100b;color:var(--g);border:1px solid var(--dim);
-padding:7px 10px;text-shadow:inherit;outline:none}
-button{cursor:pointer}button:hover{background:var(--dim);box-shadow:0 0 8px rgba(0,255,156,.3)}
+background:radial-gradient(ellipse at 50% 40%,transparent 52%,rgba(0,0,0,.72))}
+@keyframes flick{50%{opacity:.88}}
+/* ── header: TVA case plate ── */
+.hdr{display:flex;align-items:center;gap:13px;padding:10px 0 12px;
+border-bottom:1px solid var(--grn-d);position:relative}
+.hdr::after{content:'';position:absolute;left:0;right:0;bottom:-4px;height:2px;
+background:repeating-linear-gradient(90deg,var(--grn-d) 0 14px,transparent 14px 22px)}
+.seal{flex:0 0 auto;width:66px;height:66px;filter:drop-shadow(0 0 8px var(--grn-h))}
+.seal .ring{fill:none;stroke:var(--grn);stroke-width:1.1;opacity:.85}
+.seal .tick{stroke:var(--grn);stroke-width:1;opacity:.5}
+.seal text{fill:var(--grn2);font:600 5.6px ui-monospace,monospace;letter-spacing:1.9px}
+.seal .hand{stroke:var(--amber);stroke-width:1.5;stroke-linecap:round}
+.seal .hub{fill:var(--amber)}
+body.live .seal{animation:aura 1.9s ease-in-out infinite}
+@keyframes aura{50%{filter:drop-shadow(0 0 17px var(--grn))}}
+.id{flex:1;min-width:0}
+.org{color:var(--tan);font-size:8.5px;letter-spacing:3.4px;text-transform:uppercase;opacity:.82}
+h1{margin:1px 0 2px;font-size:clamp(21px,6.4vw,32px);line-height:1;letter-spacing:9px;
+color:var(--grn2);text-shadow:0 0 16px var(--grn-h),0 0 3px var(--grn);font-weight:700}
+.sub{color:var(--dim);font-size:9.5px;letter-spacing:1.4px;white-space:nowrap;
+overflow:hidden;text-overflow:ellipsis}
+.clockbox{text-align:right;flex:0 0 auto}
+#clock{color:var(--amber);font-size:clamp(13px,3.6vw,17px);letter-spacing:2.4px;
+text-shadow:0 0 10px rgba(240,168,36,.5)}
+.tzl{color:var(--dim);font-size:8px;letter-spacing:2.2px;text-transform:uppercase}
+/* ── panels ── */
+.bar{border:1px solid var(--grn-d);background:
+linear-gradient(180deg,rgba(34,224,125,.045),rgba(0,0,0,0) 60%),var(--pnl);
+padding:11px 12px 12px;margin:10px 0;position:relative;border-radius:var(--r)}
+.bar::before,.bar::after{content:'';position:absolute;width:7px;height:7px;
+border:1px solid var(--grn);opacity:.55}
+.bar::before{top:-1px;left:-1px;border-right:0;border-bottom:0}
+.bar::after{bottom:-1px;right:-1px;border-left:0;border-top:0}
+.tab{margin:-20px 0 10px -1px;display:inline-block;font-size:9px;letter-spacing:3.2px;
+text-transform:uppercase;color:#03150c;background:var(--grn);padding:2px 11px 2px 9px;
+font-weight:700;text-shadow:none;clip-path:polygon(0 0,100% 0,calc(100% - 7px) 100%,0 100%)}
+.tab b{color:#03150c;opacity:.55;font-weight:700;margin-right:5px}
+.lbl{color:var(--dim);font-size:9px;letter-spacing:2.2px;text-transform:uppercase}
+.note{color:var(--dim);font-size:9.5px;letter-spacing:.6px;line-height:1.5;margin-top:7px}
+.note b{color:var(--tan);font-weight:400}
+/* ── layout ── */
+.top{display:grid;gap:10px;grid-template-columns:1fr}
+.cols{display:grid;gap:10px;grid-template-columns:1fr}
+@media(min-width:880px){
+.top{grid-template-columns:minmax(300px,.85fr) 1.15fr;align-items:start}
+.cols{grid-template-columns:1fr 1fr}}
+@media(min-width:1180px){.cols{grid-template-columns:1fr 1fr 1fr}}
+.top>.bar,.cols>details{margin:0}
+/* ── status chips: rubber-stamped clearances ── */
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chip{border:1px solid var(--grn-d);background:var(--grn-x);padding:4px 10px;
+font-size:10px;letter-spacing:1.6px;text-transform:uppercase;color:var(--dim);
+border-radius:2px;display:flex;gap:7px;align-items:center;flex:1 1 auto;justify-content:center}
+.chip i{width:6px;height:6px;border-radius:50%;background:var(--dim);flex:0 0 auto}
+.chip b{font-weight:400;color:var(--ink)}
+.chip.on{border-color:var(--grn);color:var(--grn2);box-shadow:0 0 11px rgba(34,224,125,.20) inset}
+.chip.on i{background:var(--grn);box-shadow:0 0 8px var(--grn);animation:pulse 2.4s infinite}
+.chip.off{border-color:var(--red);color:var(--red)}
+.chip.off i{background:var(--red);box-shadow:0 0 8px var(--red)}
+@keyframes pulse{50%{opacity:.35}}
+/* ── gauges ── */
+.grid{display:grid;grid-template-columns:1fr;gap:8px}
+.v{display:flex;align-items:center;gap:9px}
+.v>span:first-child{min-width:44px;flex:0 0 auto}
+.meter{position:relative;height:11px;flex:1;background:#02120b;
+border:1px solid var(--grn-d);overflow:hidden;border-radius:1px}
+.meter::after{content:'';position:absolute;inset:0;pointer-events:none;
+background:repeating-linear-gradient(90deg,transparent 0 9px,rgba(34,224,125,.22) 9px 10px)}
+.meter i{display:block;height:100%;width:0;background:
+linear-gradient(90deg,var(--grn-d),var(--grn));box-shadow:0 0 10px var(--grn);
+transition:width .55s cubic-bezier(.4,0,.2,1)}
+.hot i{background:linear-gradient(90deg,#5a3c00,var(--amber));box-shadow:0 0 10px var(--amber)}
+.crit i{background:linear-gradient(90deg,#4a0f14,var(--red));box-shadow:0 0 10px var(--red)}
+.val{min-width:52px;text-align:right;color:var(--amber);font-size:11.5px;flex:0 0 auto}
+/* ── uplink log ── */
+#log{background:rgba(1,14,8,.93);border:1px solid var(--grn-d);height:clamp(210px,34vh,330px);
+overflow-y:auto;padding:9px 10px;font-size:12.5px;border-radius:2px;
+background-image:linear-gradient(180deg,rgba(34,224,125,.05),transparent 90px)}
+#log div{white-space:pre-wrap;word-break:break-word;margin:2px 0}
+#log b{font-weight:400;opacity:.62;letter-spacing:1.4px;font-size:10px}
+.you{color:var(--tan)}.jarvis{color:var(--grn2)}.sys{color:var(--amber)}
+#log::-webkit-scrollbar,pre::-webkit-scrollbar{width:8px;height:8px}
+#log::-webkit-scrollbar-thumb,pre::-webkit-scrollbar-thumb{background:var(--grn-d)}
+/* ── controls ── */
+.row{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:8px 0 0}
+input,button,select{font:inherit;background:#02120b;color:var(--ink);
+border:1px solid var(--grn-d);padding:8px 11px;text-shadow:inherit;outline:none;
+border-radius:2px;min-height:38px}
+input::placeholder{color:#3f6b58}
+input:focus{border-color:var(--grn);box-shadow:0 0 0 1px rgba(34,224,125,.28)}
+button{cursor:pointer;color:var(--grn2);letter-spacing:1.5px;text-transform:uppercase;
+font-size:10.5px;background:linear-gradient(180deg,var(--grn-x),#020d08);
+border-color:var(--grn-d);white-space:nowrap}
+button:hover{border-color:var(--grn);box-shadow:0 0 12px rgba(34,224,125,.25);color:#fff}
 button:active{transform:translateY(1px)}
-.row{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:6px 0}
-input:focus{border-color:var(--g);box-shadow:0 0 8px rgba(0,255,156,.3)}
-#say input{flex:1;min-width:120px}#say span{color:var(--g)}
-details{border:1px solid var(--dim);margin:7px 0;padding:5px 10px}
-summary{cursor:pointer;user-select:none;letter-spacing:1px}
-pre{white-space:pre-wrap;font-size:11px;background:#03100b;border:1px solid var(--dim);
-padding:8px;overflow-x:auto}
-.np{color:var(--g);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+button.warn{color:var(--amber);border-color:#5a4212}
+button.warn:hover{border-color:var(--amber);box-shadow:0 0 12px rgba(240,168,36,.25)}
+button.danger{color:var(--red);border-color:#5a1c1c}
+button.danger:hover{border-color:var(--red);box-shadow:0 0 12px rgba(255,66,66,.3)}
+#say{display:flex;gap:6px;margin-top:9px}
+#say input{flex:1;min-width:100px}
+#say span{color:var(--grn);align-self:center;letter-spacing:2px;font-size:11px}
+/* ── audio ── */
+.np{color:var(--grn2);font-size:12px;letter-spacing:1px;overflow:hidden;
+text-overflow:ellipsis;white-space:nowrap;padding:5px 9px;border:1px dashed var(--grn-d);
+background:#02120b;border-radius:2px}
+/* ── nexus event / SOS ── */
+.nexus{border-color:#5a1c1c}
+.nexus[open]{border-color:var(--red);background:
+linear-gradient(180deg,rgba(255,66,66,.07),transparent 130px),var(--pnl2)}
+.nexus summary{color:#ff9a9a}
+.nexus summary::before{border-color:var(--red)}
+.nexus[open] summary{color:var(--red);border-bottom-color:#5a1c1c}
+.nexus[open] summary::before{background:var(--red);box-shadow:0 0 9px var(--red)}
+.badge{margin-left:auto;font-size:8.5px;letter-spacing:2px;color:var(--dim);
+border:1px solid var(--grn-d);padding:2px 8px;border-radius:2px;white-space:nowrap}
+.badge.armed{color:#fff;background:var(--red);border-color:var(--red);animation:pulse 1s infinite}
+.tape{height:7px;background:repeating-linear-gradient(45deg,var(--amber) 0 9px,#0b0703 9px 18px);
+opacity:.5}
+#sosstate{font-size:10.5px;letter-spacing:1.8px;text-transform:uppercase;color:var(--dim);
+display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+#sosstate .ok{color:var(--grn2)}
+#sosstate .alarm{color:var(--red);font-weight:700;animation:pulse 1s infinite}
+.case{display:flex;gap:7px;align-items:center;margin:7px 0;padding:6px 9px;
+border:1px solid var(--grn-d);border-left:3px solid var(--grn);background:var(--grn-x);
+border-radius:2px;flex-wrap:wrap}
+.case.pausedc{border-left-color:var(--dim);opacity:.62}
+.case .who{flex:1;min-width:120px;font-size:12px;color:var(--ink)}
+.case .who small{color:var(--tan);opacity:.75;letter-spacing:1px;font-size:9.5px}
+.case .who em{color:var(--dim);font-style:normal;font-size:10.5px}
+.case button{padding:5px 9px;min-height:30px;font-size:9.5px}
+.sosbtn{flex:1;min-width:150px;color:#fff;border-color:var(--red);
+background:linear-gradient(180deg,#3a0d10,#180405);font-weight:700;letter-spacing:2.6px}
+.sosbtn:hover{box-shadow:0 0 20px rgba(255,66,66,.5);border-color:#ff8a8a}
+body.alert{animation:redshift 1.4s ease-in-out infinite}
+@keyframes redshift{50%{box-shadow:inset 0 0 130px rgba(255,66,66,.16)}}
+/* ── folders ── */
+details{border:1px solid var(--grn-d);background:var(--pnl);border-radius:var(--r);
+overflow:hidden}
+details[open]{background:var(--pnl2);border-color:#1c6b45}
+summary{cursor:pointer;user-select:none;list-style:none;padding:10px 12px;
+font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--tan);
+display:flex;align-items:center;gap:9px;min-height:40px}
+summary::-webkit-details-marker{display:none}
+summary::before{content:'';width:9px;height:9px;border:1px solid var(--grn);
+flex:0 0 auto;transition:.2s}
+details[open] summary::before{background:var(--grn);box-shadow:0 0 9px var(--grn)}
+details[open] summary{color:var(--grn2);border-bottom:1px dashed var(--grn-d)}
+.body{padding:10px 12px 13px}
+pre{white-space:pre-wrap;font-size:11px;background:rgba(1,14,8,.93);border:1px solid var(--grn-d);
+padding:9px;overflow-x:auto;color:var(--dim);border-radius:2px;margin:0}
+#term{height:250px;overflow-y:auto;color:var(--grn2)}
+#cwd{color:var(--amber);align-self:center;font-size:11px}
+#termform{display:flex;gap:6px;margin-top:7px}
+#termin{flex:1;min-width:100px}
+/* ── footer stamp ── */
+.foot{display:flex;justify-content:space-between;align-items:center;gap:12px;
+margin-top:18px;padding-top:12px;border-top:1px dashed var(--grn-d);flex-wrap:wrap}
+.stamp{border:2px solid var(--amber);color:var(--amber);opacity:.62;
+padding:5px 12px;transform:rotate(-3.2deg);font-size:9.5px;letter-spacing:3px;
+text-transform:uppercase;box-shadow:0 0 0 3px rgba(240,168,36,.09) inset;border-radius:2px}
+.foot .lbl{font-size:8.5px}
+@media(prefers-reduced-motion:reduce){*{animation:none!important}}
 </style>
-<div class=wrap><pre class=banner>__BANNER__</pre></div>
-<div class=lbl>personal voice node // <span id=clock>--:--:--</span> //
-build <span id=ver>?</span></div>
-<div class=bar id=status></div>
-<div class=bar><div class=lbl>system vitals</div><div class=grid id=vitals></div></div>
-<div class=bar><div class=lbl>uplink log</div><div id=log></div>
-<form class=row id=say><span>&gt;</span>
-<input id=text placeholder="transmit to venom..." autocomplete=off>
-<button>SEND</button></form></div>
-<div class=bar><div class=lbl>audio</div>
-<div class=row><span class=np id=np>— idle —</span></div>
-<div class=row><input id=song placeholder="track / artist" style=max-width:220px>
-<button onclick="music('play',song.value)">&#9654; PLAY</button>
+<svg id="tree" viewBox="0 0 800 640" preserveAspectRatio="xMidYMid meet">
+<defs><radialGradient id="halo"><stop offset="0%" stop-color="#22e07d" stop-opacity=".35"/>
+<stop offset="100%" stop-color="#22e07d" stop-opacity="0"/></radialGradient></defs>
+<circle class="core" cx="400" cy="400" r="260"></circle>
+<path class="root" d="M400 640 C 350 616 300 606 226 600"></path>
+<path class="root" d="M400 640 C 450 616 500 606 574 600"></path>
+<path class="root" d="M400 640 C 372 620 330 622 286 636"></path>
+<path class="root" d="M400 640 C 428 620 470 622 514 636"></path>
+<path class="lim" d="M400 640 C 402 560 398 500 400 452"></path>
+<path class="lim" d="M400 452 C 360 414 322 392 248 352"></path>
+<path class="lim" d="M400 452 C 440 414 478 392 552 352"></path>
+<path class="lim" d="M400 452 C 372 398 352 356 302 288"></path>
+<path class="lim" d="M400 452 C 428 398 448 356 498 288"></path>
+<path class="lim" d="M400 452 C 400 372 400 296 400 196"></path>
+<path class="arm" d="M400 452 C 386 392 368 330 350 246"></path>
+<path class="arm" d="M400 452 C 414 392 432 330 450 246"></path>
+<path class="arm ember" d="M248 352 C 208 322 190 292 148 272"></path>
+<path class="arm" d="M248 352 C 232 312 214 268 202 224"></path>
+<path class="arm ember" d="M552 352 C 592 322 610 292 652 272"></path>
+<path class="arm" d="M552 352 C 568 312 586 268 598 224"></path>
+<path class="arm" d="M302 288 C 274 252 252 226 212 190"></path>
+<path class="arm" d="M302 288 C 300 246 296 214 288 168"></path>
+<path class="arm" d="M498 288 C 526 252 548 226 588 190"></path>
+<path class="arm" d="M498 288 C 500 246 504 214 512 168"></path>
+<path class="twig" d="M350 246 C 340 208 330 182 308 140"></path>
+<path class="twig" d="M450 246 C 460 208 470 182 492 140"></path>
+<path class="twig" d="M400 196 C 398 156 388 126 366 88"></path>
+<path class="twig" d="M400 196 C 404 156 418 124 442 92"></path>
+<path class="twig" d="M202 224 C 192 190 178 166 156 138"></path>
+<path class="twig" d="M598 224 C 608 190 622 166 644 138"></path>
+<path class="twig" d="M288 168 C 280 136 270 114 250 88"></path>
+<path class="twig" d="M512 168 C 520 136 530 114 550 88"></path>
+<circle cx="308" cy="140" r="2.4"></circle><circle cx="492" cy="140" r="2.4"></circle>
+<circle cx="366" cy="88" r="2"></circle><circle cx="442" cy="92" r="2"></circle>
+<circle cx="148" cy="272" r="2.2" fill="#f0a824"></circle>
+<circle cx="652" cy="272" r="2.2" fill="#f0a824"></circle>
+<circle cx="212" cy="190" r="1.8"></circle><circle cx="588" cy="190" r="1.8"></circle>
+<circle cx="250" cy="88" r="1.8"></circle><circle cx="550" cy="88" r="1.8"></circle>
+</svg>
+<div class=page>
+<header class=hdr>
+<svg class=seal viewBox="0 0 100 100">
+<defs><path id=arc d="M50 50 m-38 0 a38 38 0 1 1 76 0 a38 38 0 1 1 -76 0"/></defs>
+<circle class="ring" cx="50" cy="50" r="47"></circle>
+<circle class="ring" cx="50" cy="50" r="31" opacity=".5"></circle>
+<g class="tick"><line x1="50" y1="21" x2="50" y2="26"></line>
+<line x1="79" y1="50" x2="74" y2="50"></line>
+<line x1="50" y1="79" x2="50" y2="74"></line>
+<line x1="21" y1="50" x2="26" y2="50"></line></g>
+<text><textPath href=#arc startOffset=2%>TEMPORAL VARIANCE AUTHORITY · VENOM ·</textPath></text>
+<line class="hand" id="hh" x1="50" y1="50" x2="50" y2="36"></line>
+<line class="hand" id="mh" x1="50" y1="50" x2="50" y2="28" opacity=".8"></line>
+<circle class="hub" cx="50" cy="50" r="2.4"></circle></svg>
+<div class=id><div class=org>Temporal Variance Authority</div><h1>VENOM</h1>
+<div class=sub>personal voice node &middot; case <span id=case>TVA-0000</span>
+&middot; build <span id=ver>?</span></div></div>
+<div class=clockbox><div id=clock>--:--:--</div><div class=tzl>sacred timeline</div></div>
+</header>
+<section class="bar chips" id=status></section>
+<div class=top>
+<section class=bar><h2 class=tab><b>01</b>vitals</h2><div class=grid id=vitals></div>
+<div class=row style=margin-top:11px><span class=lbl>output</span>
+<div class=meter style=flex:1><i id=volbar></i></div>
+<button onclick="vol(-10)">&minus;</button><button onclick="vol(10)">+</button></div>
+<div class=np id=np style=margin-top:9px>&mdash; idle &mdash;</div>
+<div class=row><input id=song placeholder="track / artist" style=flex:1;min-width:110px>
+<button onclick="music('play',song.value)">&#9654;</button>
 <button onclick="music('pause')">&#10074;&#10074;</button>
-<button onclick="music('resume')">&#9654;</button>
-<button onclick="music('next')">&#9654;&#9654; NEXT</button>
-<button onclick="music('stop')">&#9632; STOP</button></div>
-<div class=v><span class=lbl>vol</span><div class=meter><i id=volbar></i></div>
-<button onclick="vol(-10)">&minus;</button><button onclick="vol(10)">+</button></div></div>
-<details ontoggle="if(this.open)loadSos()"><summary>[+] EMERGENCY SOS</summary>
-<div id=sosstate class=lbl>&mdash;</div>
-<div id=soslist></div>
-<div class=row><input id=sname placeholder="name" style=max-width:118px>
-<input id=sto placeholder="+91… number / WhatsApp name" style=max-width:196px>
-<input id=slabel placeholder="who (father…)" style=max-width:118px>
+<button onclick="music('resume')">&#9654;&#9654;</button>
+<button onclick="music('next')">next</button>
+<button onclick="music('stop')" class=warn>stop</button></div></section>
+<section class=bar><h2 class=tab><b>02</b>uplink</h2><div id=log></div>
+<form id=say><span>&gt;</span>
+<input id=text placeholder="transmit to venom..." autocomplete=off>
+<button>send</button></form></section>
+</div>
+<div class=cols>
+<details class=nexus id=sospanel ontoggle="if(this.open)loadSos()" style=grid-column:1/-1>
+<summary>nexus event &mdash; emergency sos <span id=sosbadge class=badge>standby</span></summary>
+<div class=tape></div><div class=body>
+<div id=sosstate>&mdash;</div>
+<div id=soslist style=margin-top:9px></div>
+<div class=row><input id=sname placeholder=name style=flex:1;min-width:110px>
+<input id=sto placeholder="+91 number / whatsapp name" style=flex:2;min-width:150px>
+<input id=slabel placeholder="who (father...)" style=flex:1;min-width:110px>
 <button onclick="sosAdd()">add / update</button></div>
 <div class=row><input id=snote placeholder="what's happening (optional)"
-style="flex:1;min-width:130px">
-<button onclick="sosAct('trigger')" style=border-color:var(--red);color:var(--red)>
-&#9888; SEND SOS</button>
+style=flex:1;min-width:140px>
+<button class=sosbtn onclick="sosAct('trigger')">&#9888; send sos</button>
 <button onclick="sosAct('stop')">all clear</button>
-<button onclick="sosAct('test')">test</button></div>
-<div id=sosmsg class=sys></div>
-<div class=lbl style=margin-top:4px>everyone here gets a WhatsApp with your approximate
-location and the time, re-sent every few minutes until you call it off &mdash; a list of
-its own, so the SOS can reach different people than you usually message. by voice:
-&ldquo;add my father to my emergency contacts&rdquo; &middot; &ldquo;SOS&rdquo; &middot;
-&ldquo;I&rsquo;m safe&rdquo;.</div></details>
-<details><summary>[+] BLUETOOTH</summary><div class=row>
-<button onclick="bt(0)">paired</button><button onclick="bt(1)">scan 8s</button></div>
-<div id=btlist></div></details>
-<details ontoggle="if(this.open)loadWifi()"><summary>[+] NETWORK</summary>
-<div id=wifinow class=lbl>—</div>
-<div id=wifisaved></div>
-<div class=row>
-<input id=wssid placeholder="SSID" autocomplete=off style=max-width:150px>
-<input id=wpass placeholder="password" type=password autocomplete=off style=max-width:150px>
-<input id=wprio placeholder="prio" autocomplete=off style=max-width:56px>
-<button onclick="wifiAdd()">add / update</button>
-<button onclick="wifiScan()">scan</button></div>
-<div id=wifimsg class=sys></div><div id=wifiscan class=lbl></div>
-<div class=lbl style=margin-top:4px>base = the network the Pi always prefers (your phone
-hotspot). It auto-connects to the highest-priority network in range and falls back on its
-own &mdash; tip: manage this over Tailscale so a change can't lock you out.</div></details>
-<details><summary>[+] TIMERS</summary><div id=timers class=lbl>—</div></details>
-<details ontoggle="if(this.open)loadSettings()"><summary>[+] SETTINGS</summary>
+<button class=warn onclick="sosAct('test')">test</button></div>
+<div id=sosmsg class=note style=color:var(--amber)></div>
+<div class=note>everyone here gets a WhatsApp with your approximate location and the time,
+re-sent every few minutes until you call it off &mdash; <b>a list of its own</b>, so the SOS
+can reach different people than you usually message. by voice: <b>&ldquo;add my father to my
+emergency contacts&rdquo;</b> &middot; <b>&ldquo;SOS&rdquo;</b> &middot;
+<b>&ldquo;I&rsquo;m safe&rdquo;</b>.</div></div></details>
+
+<details><summary>bluetooth</summary><div class=body>
+<div class=row style=margin-top:0><button onclick="bt(0)">paired</button>
+<button onclick="bt(1)">scan 8s</button></div><div id=btlist></div></div></details>
+<details ontoggle="if(this.open)loadWifi()"><summary>network</summary><div class=body>
+<div id=wifinow class=lbl>&mdash;</div><div id=wifisaved></div>
+<div class=row><input id=wssid placeholder=SSID autocomplete=off style=flex:1;min-width:110px>
+<input id=wpass placeholder=password type=password autocomplete=off
+style=flex:1;min-width:110px>
+<input id=wprio placeholder=prio autocomplete=off style=max-width:70px>
+<button onclick="wifiAdd()">add</button><button onclick="wifiScan()">scan</button></div>
+<div id=wifimsg class=note style=color:var(--amber)></div><div id=wifiscan class=lbl></div>
+<div class=note><b>base</b> = the network the Pi always prefers (your phone hotspot). It
+auto-connects to the highest-priority network in range and falls back on its own &mdash;
+manage this over Tailscale so a change can&rsquo;t lock you out.</div></div></details>
+<details><summary>timers</summary><div class=body><div id=timers class=lbl>&mdash;</div>
+</div></details>
+<details ontoggle="if(this.open)loadSettings()"><summary>settings</summary><div class=body>
 <div id=settings></div>
-<div class=row><button onclick="saveSettings()">save &amp; restart</button></div></details>
-<details ontoggle="if(this.open)loadMem()"><summary>[+] MEMORY</summary>
-<pre id=mem>...</pre>
-<div class=lbl>edit in the terminal: <b>memory set &lt;category&gt; &lt;key&gt; &lt;value&gt;</b>
- &middot; <b>memory del &lt;category&gt; &lt;key&gt;</b> &middot; <b>memory categories</b></div></details>
-<details ontoggle="if(this.open)loadConn()"><summary>[+] CONNECTIONS</summary>
-<pre id=conn>...</pre>
-<div class=lbl>edit in the terminal: <b>connections add &lt;name&gt; phone=.. nick=.. insta=.. interest=.. note=..</b>
- &middot; <b>connections del &lt;name&gt;</b> &middot; <b>connections show &lt;name&gt;</b></div></details>
-<details ontoggle="if(this.open)loadLogs()"><summary>[+] LOGS</summary>
-<div class=row><button onclick="loadLogs()">refresh</button></div><pre id=logs></pre></details>
-<details ontoggle="if(this.open)termInit()"><summary>[+] TERMINAL</summary>
-<pre id=term style=height:230px;overflow-y:auto;margin:6px 0></pre>
-<form class=row id=termform><span id=cwd style=color:var(--amber)>~</span>
-<input id=termin autocomplete=off spellcheck=false autocapitalize=off
-style="flex:1;min-width:120px"></form></details>
-<details><summary>[+] SYSTEM</summary><div class=row>
-<button onclick="sys('update')">&#11015; update</button>
+<div class=row><button class=warn onclick="saveSettings()">save &amp; restart</button></div>
+</div></details>
+<details ontoggle="if(this.open)loadMem()"><summary>memory</summary><div class=body>
+<pre id=mem>...</pre><div class=note>edit in the terminal:
+<b>memory set &lt;category&gt; &lt;key&gt; &lt;value&gt;</b> &middot;
+<b>memory del &lt;category&gt; &lt;key&gt;</b> &middot; <b>memory categories</b></div>
+</div></details>
+<details ontoggle="if(this.open)loadConn()"><summary>connections</summary><div class=body>
+<pre id=conn>...</pre><div class=note>edit in the terminal:
+<b>connections add &lt;name&gt; phone=.. nick=.. insta=..</b> &middot;
+<b>connections del &lt;name&gt;</b> &middot; <b>connections show &lt;name&gt;</b></div>
+</div></details>
+<details ontoggle="if(this.open)loadLogs()"><summary>logs</summary><div class=body>
+<div class=row style=margin-top:0><button onclick="loadLogs()">refresh</button></div>
+<pre id=logs></pre></div></details>
+<details ontoggle="if(this.open)termInit()"><summary>terminal</summary><div class=body>
+<pre id=term></pre><form id=termform><span id=cwd>~</span>
+<input id=termin autocomplete=off spellcheck=false autocapitalize=off></form></div></details>
+<details><summary>system</summary><div class=body>
+<div class=row style=margin-top:0><button onclick="sys('update')">&#11015; update</button>
 <button onclick="sys('restart')">&#8635; restart</button>
-<button onclick="sys('reboot')">&#9888; reboot</button>
-<button onclick="sys('poweroff')" style=border-color:var(--red)>&#9211; power off</button>
+<button class=warn onclick="sys('reboot')">&#9888; reboot</button>
+<button class=danger onclick="sys('poweroff')">&#9211; power off</button>
 <button onclick="localStorage.removeItem('vtok');location.reload()">lock</button></div>
-<div class=lbl style=margin-top:6px>always power off here (or ssh + `sudo poweroff`) and wait
-for the green LED to stop before unplugging &mdash; never pull power live</div></details>
+<div class=note>always power off here (or ssh + <b>sudo poweroff</b>) and wait for the green
+LED to stop before unplugging &mdash; never pull power live.</div></div></details>
+</div>
+<div class=foot><div class=stamp>approved for all time</div>
+<div class=lbl>tva form 88-d &middot; for all time. always.</div></div>
+</div>
 <script>
 const $=id=>document.getElementById(id),H=s=>(s+'').replace(/[<&]/g,c=>c=='<'?'&lt;':'&amp;');
 let n=0;
@@ -217,41 +429,41 @@ async function api(p,b){
 const o=b?{method:'POST',body:JSON.stringify(b)}:{};
 o.headers={'Authorization':'Bearer '+tok()};
 const r=await fetch(p,o);
-if(r.status==401){const t=prompt('ACCESS PIN:');
+if(r.status==401){const t=prompt('TVA CLEARANCE PIN:');
 if(t){localStorage.setItem('vtok',t.trim());return api(p,b)}}
 return r}
-function led(k,v,ok){return `<span class="led ${ok?'on':'off'}">${k}:${H(v)}</span>`}
+function chip(k,v,ok){return `<span class="chip ${ok?'on':'off'}"><i></i>${k}<b>${H(v)}</b></span>`}
 async function tick(){try{const s=await(await api('/api/state')).json();
 $('ver').textContent=s.version||'?';
-$('status').innerHTML=led('VOX',s.voice,s.voice!='reconnecting')
-+led('NET',s.internet?'online':'offline',s.internet)
-+led('MIC',s.headset?'linked':'none',!!s.headset)
-+led('CPU',s.brain||'none',!!s.brain);
-$('np').textContent=s.now_playing?'♪ '+s.now_playing:'— idle —';
-if(s.volume!=null){const i=$('volbar');i.style.width=Math.round(s.volume*100)+'%';
-i.parentNode.parentNode.className='v'}
+document.body.classList.toggle('live',s.voice=='conversation');
+$('status').innerHTML=chip('vox',s.voice,s.voice!='reconnecting')
++chip('net',s.internet?'online':'offline',s.internet)
++chip('mic',s.headset?'linked':'none',!!s.headset)
++chip('core',s.brain||'none',!!s.brain);
+$('np').textContent=s.now_playing?'\\u266a '+s.now_playing:'\\u2014 idle \\u2014';
+if(s.volume!=null)$('volbar').style.width=Math.round(s.volume*100)+'%';
 $('timers').innerHTML=(s.timers&&s.timers.length)?s.timers.map(t=>
 `&#9202; ${H(t.label)} &mdash; ${t.mins}m`).join('<br>'):'no active timers';
 if(s.transcript.length!=n){n=s.transcript.length;
 $('log').innerHTML=s.transcript.map(([w,t])=>{
 const c=w.startsWith('you')?'you':w=='jarvis'?'jarvis':'sys';
-const p=c=='you'?'&gt; ':c=='jarvis'?'jarvis&#9002; ':'&#9679; ';
-return `<div class=${c}>${p}${H(t)}</div>`}).join('');
+const p=c=='you'?'variant':c=='jarvis'?'venom':'tva';
+return `<div class=${c}><b>${p} &#9656;</b> ${H(t)}</div>`}).join('');
 $('log').scrollTop=1e9}}catch(e){}}
 function meter(lbl,pct,txt,warn,crit){
 let cls=pct>=crit?'crit':pct>=warn?'hot':'';
 return `<div class="v ${cls}"><span class=lbl>${lbl}</span>`+
-(pct==null?`<span>${H(txt)}</span>`:
+(pct==null?`<span class=val style=text-align:left>${H(txt)}</span>`:
 `<div class=meter><i style=width:${Math.max(0,Math.min(100,pct))}%></i></div>`+
-`<span style=min-width:44px>${H(txt)}</span>`)+`</div>`}
+`<span class=val>${H(txt)}</span>`)+`</div>`}
 async function vtick(){try{const v=await(await api('/api/vitals')).json();
 const w=v.wifi||{},sig=w.dbm!=null?Math.max(0,Math.min(100,(w.dbm+90)*2.5)):null;
 $('vitals').innerHTML=[
 meter('cpu',v.cpu_pct,(v.cpu_pct??'?')+'%',70,90),
-meter('temp',v.temp_c,(v.temp_c??'?')+'°C',65,80),
+meter('temp',v.temp_c,(v.temp_c??'?')+'\\u00b0C',65,80),
 meter('ram',v.mem_pct,(v.mem_pct??'?')+'%',75,90),
 meter('disk',v.disk_pct,(v.disk_pct??'?')+'%',80,92),
-meter('wifi',sig,w.dbm!=null?w.dbm+'dBm':'n/a',-1,-1),
+meter('wifi',sig,w.dbm!=null?w.dbm+'dBm':'n/a',101,101),
 meter('up',null,v.uptime||'?')
 ].join('')}catch(e){}}
 $('say').onsubmit=e=>{e.preventDefault();const t=$('text').value.trim();
@@ -262,26 +474,26 @@ function sys(a){if(a=='reboot'&&!confirm('REBOOT the Pi?'))return;
 if(a=='poweroff'&&!confirm('POWER OFF the Pi? Wait for the green LED to stop, then unplug.'))return;
 if(a=='update'&&!confirm('Pull latest from GitHub and reinstall?'))return;
 api('/api/system',{action:a}).then(async r=>{if(a=='poweroff')alert((await r.json()).result)})}
+const jsx=s=>(s+'').replace(/'/g,"\\\\'");
 async function bt(scan){$('btlist').innerHTML='<div class=lbl>scanning...</div>';
 const d=await(await api('/api/bluetooth'+(scan?'/scan':''))).json();
-$('btlist').innerHTML=d.map(x=>`<div class=row><span class="led ${x.connected?'on':''}">`+
-`${H(x.name)} ${x.connected?'&#10003;':''}</span>`+
+$('btlist').innerHTML=d.map(x=>`<div class=case><span class=who>${H(x.name)} `+
+`${x.connected?'<em>&#10003; linked</em>':''}</span>`+
 `<button onclick="btUse('${x.mac}','${H(x.name).replace(/'/g,'')}')">use</button></div>`
 ).join('')||'<div class=lbl>none found</div>'}
 function btUse(m,n){if(confirm('Switch headset to '+n+'? Venom restarts.'))
 api('/api/bluetooth',{mac:m,name:n})}
-const jsx=s=>(s+'').replace(/'/g,"\\\\'");
 async function loadWifi(){let d;try{d=await(await api('/api/wifi')).json()}catch(e){return}
 if(!d.nm){$('wifinow').textContent='NetworkManager not available on this box.';
 $('wifisaved').innerHTML='';return}
 $('wifinow').innerHTML='&#9679; on: '+(d.current.name?H(d.current.name)+
 (d.current.signal!=null?' ('+d.current.signal+'%)':''):'&mdash;');
-$('wifisaved').innerHTML=d.saved.map(n=>`<div class=row>`+
-`<span class="led ${n.active?'on':''}" style=min-width:150px>${H(n.name)} `+
-`${n.active?'&#10003;':''} <small style=opacity:.55>p${n.priority}</small></span>`+
+$('wifisaved').innerHTML=d.saved.map(n=>`<div class="case ${n.active?'':'pausedc'}">`+
+`<span class=who>${H(n.name)} ${n.active?'<em>&#10003; active</em>':''} `+
+`<small>p${n.priority}</small></span>`+
 `<button onclick="wifiAct('connect','${jsx(n.name)}')">use</button>`+
 `<button onclick="wifiAct('base','${jsx(n.name)}')">base</button>`+
-`<button onclick="wifiAct('remove','${jsx(n.name)}')" style=border-color:var(--red)>del</button>`+
+`<button class=danger onclick="wifiAct('remove','${jsx(n.name)}')">del</button>`+
 `</div>`).join('')||'<div class=lbl>no saved networks yet</div>'}
 async function wifiAct(action,name){if(action=='remove'&&!confirm('Remove '+name+'?'))return;
 $('wifimsg').textContent='working...';
@@ -296,22 +508,30 @@ $('wifimsg').textContent=r.result||'';$('wpass').value='';loadWifi()}
 async function wifiScan(){$('wifiscan').textContent='scanning...';
 let d;try{d=await(await api('/api/wifi')).json()}catch(e){return}
 $('wifiscan').innerHTML=(d.available||[]).map(a=>
-`<span class=led style=cursor:pointer onclick="$('wssid').value='${jsx(a.ssid)}';`+
+`<span class=chip style=cursor:pointer onclick="$('wssid').value='${jsx(a.ssid)}';`+
 `$('wssid').focus()">${H(a.ssid)} ${a.signal}%${a.known?' &#10003;':''}</span>`
 ).join(' ')||'<span class=lbl>none found</span>'}
 async function loadSos(){let d;try{d=await(await api('/api/sos')).json()}catch(e){return}
+document.body.classList.toggle('alert',!!d.active);
+$('sosbadge').className='badge'+(d.active?' armed':'');
+$('sosbadge').textContent=d.active?'⚠ live':((d.contacts||[]).length
+?(d.contacts.filter(c=>c.enabled).length+' on call'):'no contacts');
+if(d.active)$('sospanel').open=true;
 $('sosstate').innerHTML=d.active
-?'<span class="led off">&#9888; EMERGENCY MODE ON</span> '+H(d.summary||'')
-:'<span class=led>standby</span> '+(d.offline
-?'not live &mdash; contacts editable, nothing can be sent':'');
-$('soslist').innerHTML=(d.contacts||[]).map(c=>`<div class=row>`+
-`<span class="led ${c.enabled?'on':''}" style=min-width:180px>${H(c.name)}`+
-`${c.label?' <small style=opacity:.6>'+H(c.label)+'</small>':''}`+
-`${c.to?' &rarr; '+H(c.to):''}</span>`+
+?`<span class=alarm>&#9888; nexus event &mdash; emergency mode live</span>`+
+`<span class=lbl>${H(d.summary||'')}</span>`
+:`<span class=ok>&#9679; sacred timeline nominal</span>`+
+`<span class=lbl>${d.offline?'not live &mdash; contacts editable, nothing can be sent'
+:'standby &middot; resend every '+(d.repeat_minutes||10)+' min once armed'}</span>`;
+$('soslist').innerHTML=(d.contacts||[]).map(c=>
+`<div class="case ${c.enabled?'':'pausedc'}"><span class=who>${H(c.name)} `+
+`${c.label?'<small>'+H(c.label)+'</small> ':''}`+
+`${c.to?'<em>&rarr; '+H(c.to)+'</em>':'<em>&rarr; by name</em>'}`+
+`${c.enabled?'':' <em>[paused]</em>'}</span>`+
 `<button onclick="sosAct('${c.enabled?'disable':'enable'}','${jsx(c.name)}')">`+
 `${c.enabled?'pause':'resume'}</button>`+
-`<button onclick="sosAct('remove','${jsx(c.name)}')" style=border-color:var(--red)>`+
-`del</button></div>`).join('')||'<div class=lbl>no emergency contacts yet</div>'}
+`<button class=danger onclick="sosAct('remove','${jsx(c.name)}')">del</button></div>`
+).join('')||'<div class=lbl>no emergency contacts yet</div>'}
 async function sosAct(action,name){
 if(action=='trigger'&&!confirm('Send the EMERGENCY SOS to every contact right now?'))return;
 if(action=='remove'&&!confirm('Remove '+name+' from your emergency contacts?'))return;
@@ -327,8 +547,8 @@ $('sosmsg').textContent=r.result||'';
 $('sname').value=$('sto').value=$('slabel').value='';loadSos()}
 async function loadSettings(){const s=await(await api('/api/settings')).json();
 $('settings').innerHTML=Object.entries(s).map(([k,v])=>
-`<div class=row><span class=lbl style=min-width:150px>${k}</span>`+
-`<input data-k=${k} value="${H(v)}"></div>`).join('')}
+`<div class=row style=margin-top:5px><span class=lbl style=min-width:130px>${k}</span>`+
+`<input data-k=${k} value="${H(v)}" style=flex:1;min-width:110px></div>`).join('')}
 async function saveSettings(){const b={};document.querySelectorAll('#settings input')
 .forEach(i=>b[i.dataset.k]=i.value);
 if(!confirm('Save and restart Venom?'))return;
@@ -352,9 +572,17 @@ if(c.trim()){hist.push(c);hp=hist.length;runTerm(c)}$('termin').value=''};
 $('termin').onkeydown=e=>{if(e.key=='ArrowUp'&&hp>0){$('termin').value=hist[--hp];
 e.preventDefault()}else if(e.key=='ArrowDown'){hp=Math.min(hist.length,hp+1);
 $('termin').value=hist[hp]||''}};
-setInterval(()=>$('clock').textContent=new Date().toLocaleTimeString(),1000);
+function faceClock(){const d=new Date();
+$('clock').textContent=d.toLocaleTimeString();
+const m=d.getMinutes()+d.getSeconds()/60,h=(d.getHours()%12)+m/60;
+$('mh').setAttribute('transform',`rotate(${m*6} 50 50)`);
+$('hh').setAttribute('transform',`rotate(${h*30} 50 50)`)}
+$('case').textContent='TVA-'+(new Date().getFullYear()+'').slice(2)+
+('0'+(new Date().getMonth()+1)).slice(-2)+('0'+new Date().getDate()).slice(-2);
+setInterval(faceClock,1000);faceClock();
 setInterval(tick,1500);setInterval(vtick,3000);tick();vtick();
-</script>""".replace("__BANNER__", BANNER)
+setInterval(()=>{if(document.body.classList.contains('alert'))loadSos()},5000);loadSos();
+</script>"""
 
 
 class WebConsole:
