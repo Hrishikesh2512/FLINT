@@ -97,14 +97,9 @@ animation:breathe 9s ease-in-out infinite}
 #tree path{fill:none;stroke:url(#strand);stroke-linecap:round;
 animation:grow 2.6s cubic-bezier(.25,.9,.3,1) backwards}
 #tree .neb{filter:blur(18px)}
+#tree .heart{animation:pyre 4.5s ease-in-out infinite;transform-origin:600px 300px}
+@keyframes pyre{50%{opacity:.72;transform:scale(1.08)}}
 #tree circle.tip{fill:#bfffe0;animation:spark 4.5s ease-in-out infinite}
-#figure path,#figure circle{animation:rise 2.2s ease-out backwards}
-#figure .robe{fill:rgba(2,7,5,.75);stroke:var(--grn2);stroke-width:1.6;stroke-opacity:.85}
-#figure .lim2{stroke:var(--grn2);stroke-width:2.4;stroke-opacity:.85}
-#figure .horn{fill:rgba(2,7,5,.88);stroke:var(--grn2);stroke-width:1.8;stroke-opacity:.95;
-filter:drop-shadow(0 0 8px var(--grn))}
-#figure .head{fill:rgba(2,7,5,.9);stroke:var(--grn2);stroke-width:1.8}
-#figure .hand{fill:var(--grn2);filter:drop-shadow(0 0 8px var(--grn))}
 @keyframes grow{from{stroke-dashoffset:var(--len)}to{stroke-dashoffset:0}}
 @keyframes rise{from{opacity:0}to{opacity:1}}
 @keyframes breathe{50%{opacity:.74}}
@@ -318,6 +313,10 @@ text-transform:uppercase;box-shadow:0 0 0 3px rgba(240,168,36,.09) inset;border-
 <radialGradient id="halo"><stop offset="0%" stop-color="#8dffc4" stop-opacity=".24"/>
 <stop offset="45%" stop-color="#22e07d" stop-opacity=".07"/>
 <stop offset="100%" stop-color="#22e07d" stop-opacity="0"/></radialGradient>
+<radialGradient id="heart"><stop offset="0%" stop-color="#eaffef" stop-opacity=".85"/>
+<stop offset="18%" stop-color="#8dffc4" stop-opacity=".45"/>
+<stop offset="52%" stop-color="#22e07d" stop-opacity=".16"/>
+<stop offset="100%" stop-color="#22e07d" stop-opacity="0"/></radialGradient>
 <radialGradient id="neb1"><stop offset="0%" stop-color="#7b4ddb" stop-opacity=".26"/>
 <stop offset="100%" stop-color="#7b4ddb" stop-opacity="0"/></radialGradient>
 <radialGradient id="neb2"><stop offset="0%" stop-color="#2f6bd8" stop-opacity=".22"/>
@@ -327,18 +326,9 @@ text-transform:uppercase;box-shadow:0 0 0 3px rgba(240,168,36,.09) inset;border-
 <ellipse class="neb" cx="900" cy="330" rx="430" ry="250" fill="url(#neb2)"></ellipse>
 <ellipse class="neb" cx="600" cy="300" rx="600" ry="200" fill="url(#neb1)" opacity=".55"></ellipse>
 <circle class="core" cx="600" cy="300" r="300"></circle>
+<circle class="heart" cx="600" cy="300" r="150" fill="url(#heart)"></circle>
 <g id="canopy"></g>
-<g id="figure">
-<path class="robe" d="M600 314 C 578 320 566 332 562 350 C 555 404 551 462 555 522
-L645 522 C 649 462 645 404 638 350 C 634 332 622 320 600 314 Z"></path>
-<path class="lim2" d="M567 346 C 532 334 498 314 468 301"></path>
-<path class="lim2" d="M633 346 C 668 334 702 314 732 301"></path>
-<circle class="head" cx="600" cy="292" r="15"></circle>
-<path class="horn" d="M589 281 C 566 251 556 214 566 176 C 578 212 590 244 600 275 Z"></path>
-<path class="horn" d="M611 281 C 634 251 644 214 634 176 C 622 212 610 244 600 275 Z"></path>
-<circle class="hand" cx="466" cy="300" r="4.5"></circle>
-<circle class="hand" cx="734" cy="300" r="4.5"></circle>
-</g></svg>
+</svg>
 <div class=hudf><span></span><span></span><span></span><span></span></div>
 <div class=page>
 <header class=hdr>
@@ -649,7 +639,7 @@ const tau=(j+.5)/N*Math.PI*2+rnd()*.03;
 const dx=Math.cos(tau),dy=Math.sin(tau)*.34;
 const ang=Math.atan2(dx,-dy);
 const flat=Math.abs(dx);
-const r0=14+rnd()*26;                 // start just off the knot, not on it
+const r0=4+rnd()*16;                 // start just off the knot, not on it
 const sx=CX+Math.sin(ang)*r0,sy=CY-Math.cos(ang)*r0;
 const dep=flat>.82?3:(flat>.5?2:1);
 limb(sx,sy,ang,110+flat*140+rnd()*34,1.4+flat*2,dep)}
