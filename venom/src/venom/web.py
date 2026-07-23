@@ -78,7 +78,7 @@ def write_override(section: str, values: dict,
 PAGE = """<!doctype html><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name=theme-color content="#03110a">
-<title>VENOM // TVA CONSOLE</title><style>
+<title>VENOM // CONSOLE</title><style>
 :root{
 --grn:#22e07d;--grn2:#8dffc4;--grn-d:#0f4a2e;--grn-x:#06170f;--grn-h:rgba(34,224,125,.30);
 --amber:#f0a824;--tan:#c9b892;--red:#ff4242;--red-d:#4a0f14;
@@ -91,21 +91,31 @@ body{margin:0;padding:0 0 40px;background:var(--bg);color:var(--ink);
 font:13px/1.55 ui-monospace,'Courier New',monospace;letter-spacing:.2px;
 text-shadow:0 0 5px rgba(34,224,125,.20);overflow-x:hidden}
 .page{max-width:1180px;margin:0 auto;padding:10px 12px;position:relative;z-index:2}
-/* ── yggdrasil: the world tree the timelines grow into ── */
-#tree{position:fixed;inset:-4% -2%;z-index:0;pointer-events:none;opacity:.9;
-animation:breathe 8s ease-in-out infinite}
-#tree path{fill:none;stroke:var(--grn);stroke-linecap:round;stroke-opacity:.75;
-stroke-dasharray:900;stroke-dashoffset:900;animation:grow 3.4s ease-out forwards}
-#tree .lim{stroke-width:2.2}
-#tree .arm{stroke-width:1.4;animation-delay:.5s}
-#tree .twig{stroke-width:.8;stroke-opacity:.4;animation-delay:1.1s}
-#tree .root{stroke-width:1.6;stroke-opacity:.34;animation-delay:.2s}
-#tree .ember{stroke:var(--amber);stroke-opacity:.5;animation-delay:1.4s}
-#tree circle{fill:var(--grn);animation:spark 5s ease-in-out infinite}
-#tree .core{fill:url(#halo)}
-@keyframes grow{to{stroke-dashoffset:0}}
-@keyframes breathe{50%{opacity:.72}}
-@keyframes spark{0%,100%{opacity:.15}50%{opacity:.7}}
+/* ── the world tree: crowned at the centre, timelines out of both hands ── */
+#tree{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.72;
+animation:breathe 9s ease-in-out infinite}
+#tree path{fill:none;stroke:url(#strand);stroke-linecap:round;
+animation:grow 2.6s cubic-bezier(.25,.9,.3,1) backwards}
+#tree .neb{filter:blur(18px)}
+#tree circle.tip{fill:#bfffe0;animation:spark 4.5s ease-in-out infinite}
+#figure path,#figure circle{animation:rise 2.2s ease-out backwards}
+#figure .robe{fill:rgba(2,7,5,.75);stroke:var(--grn2);stroke-width:1.6;stroke-opacity:.85}
+#figure .lim2{stroke:var(--grn2);stroke-width:2.4;stroke-opacity:.85}
+#figure .horn{fill:rgba(2,7,5,.88);stroke:var(--grn2);stroke-width:1.8;stroke-opacity:.95;
+filter:drop-shadow(0 0 8px var(--grn))}
+#figure .head{fill:rgba(2,7,5,.9);stroke:var(--grn2);stroke-width:1.8}
+#figure .hand{fill:var(--grn2);filter:drop-shadow(0 0 8px var(--grn))}
+@keyframes grow{from{stroke-dashoffset:var(--len)}to{stroke-dashoffset:0}}
+@keyframes rise{from{opacity:0}to{opacity:1}}
+@keyframes breathe{50%{opacity:.74}}
+@keyframes spark{0%,100%{opacity:.12}50%{opacity:.75}}
+/* ── HUD targeting frame ── */
+.hudf{position:fixed;inset:7px;z-index:7;pointer-events:none}
+.hudf span{position:absolute;width:22px;height:22px;border:1px solid var(--grn);opacity:.45}
+.hudf span:nth-child(1){top:0;left:0;border-right:0;border-bottom:0}
+.hudf span:nth-child(2){top:0;right:0;border-left:0;border-bottom:0}
+.hudf span:nth-child(3){bottom:0;left:0;border-right:0;border-top:0}
+.hudf span:nth-child(4){bottom:0;right:0;border-left:0;border-top:0}
 /* ── CRT dressing ── */
 body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:9;
 background:repeating-linear-gradient(0deg,rgba(0,0,0,.20) 0 1px,transparent 1px 3px);
@@ -113,17 +123,21 @@ animation:flick .12s infinite}
 body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:8;
 background:radial-gradient(ellipse at 50% 40%,transparent 52%,rgba(0,0,0,.72))}
 @keyframes flick{50%{opacity:.88}}
-/* ── header: TVA case plate ── */
-.hdr{display:flex;align-items:center;gap:13px;padding:10px 0 12px;
+/* ── header: case plate ── */
+.hdr{display:flex;align-items:center;gap:13px;padding:10px 12px 12px;margin:0 -12px;background:linear-gradient(180deg,rgba(2,7,5,.94),rgba(2,7,5,.62));backdrop-filter:blur(2px);
 border-bottom:1px solid var(--grn-d);position:relative}
 .hdr::after{content:'';position:absolute;left:0;right:0;bottom:-4px;height:2px;
 background:repeating-linear-gradient(90deg,var(--grn-d) 0 14px,transparent 14px 22px)}
-.seal{flex:0 0 auto;width:66px;height:66px;filter:drop-shadow(0 0 8px var(--grn-h))}
-.seal .ring{fill:none;stroke:var(--grn);stroke-width:1.1;opacity:.85}
-.seal .tick{stroke:var(--grn);stroke-width:1;opacity:.5}
-.seal text{fill:var(--grn2);font:600 5.6px ui-monospace,monospace;letter-spacing:1.9px}
-.seal .hand{stroke:var(--amber);stroke-width:1.5;stroke-linecap:round}
-.seal .hub{fill:var(--amber)}
+.seal{flex:0 0 auto;width:70px;height:70px;filter:drop-shadow(0 0 9px var(--grn-h))}
+.seal .ring{fill:none;stroke:var(--grn);stroke-width:1.1;opacity:.8}
+.seal .spin{fill:none;stroke:var(--grn2);stroke-width:1.6;opacity:.6;stroke-dasharray:2 7;
+transform-origin:50% 50%;animation:spin 18s linear infinite}
+.seal .coils path{fill:var(--grn);opacity:.5}
+.seal .glow{fill:url(#core);transform-origin:50% 50%;animation:reactor 3.2s ease-in-out infinite}
+.seal .hub{fill:#eaffef;filter:drop-shadow(0 0 7px var(--grn2))}
+.seal text{fill:var(--grn2);font:600 4.9px ui-monospace,monospace;letter-spacing:1.05px}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes reactor{50%{opacity:.75;transform:scale(1.1)}}
 body.live .seal{animation:aura 1.9s ease-in-out infinite}
 @keyframes aura{50%{filter:drop-shadow(0 0 17px var(--grn))}}
 .id{flex:1;min-width:0}
@@ -171,8 +185,27 @@ border-radius:2px;display:flex;gap:7px;align-items:center;flex:1 1 auto;justify-
 .chip.off{border-color:var(--red);color:var(--red)}
 .chip.off i{background:var(--red);box-shadow:0 0 8px var(--red)}
 @keyframes pulse{50%{opacity:.35}}
-/* ── gauges ── */
-.grid{display:grid;grid-template-columns:1fr;gap:8px}
+/* ── HUD dials ── */
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(64px,1fr));gap:7px}
+.dial{text-align:center;position:relative}
+.dial svg{width:100%;max-width:86px;aspect-ratio:1;display:block;margin:0 auto}
+.dial .tk{fill:none;stroke:var(--grn);stroke-width:9;opacity:.12;stroke-dasharray:1 4}
+.dial .trk{fill:none;stroke:var(--grn-d);stroke-width:4}
+.dial .arcv{fill:none;stroke:var(--grn);stroke-width:4;stroke-linecap:round;
+transform:rotate(-90deg);transform-origin:50% 50%;
+transition:stroke-dasharray .6s cubic-bezier(.4,0,.2,1);
+filter:drop-shadow(0 0 5px var(--grn-h))}
+.dial.hot .arcv{stroke:var(--amber);filter:drop-shadow(0 0 5px rgba(240,168,36,.5))}
+.dial.crit .arcv{stroke:var(--red);filter:drop-shadow(0 0 6px rgba(255,66,66,.5))}
+.dial .dv{position:absolute;top:44%;left:0;right:0;transform:translateY(-50%);
+font-size:12.5px;color:var(--grn2)}
+.dial.hot .dv{color:var(--amber)}.dial.crit .dv{color:var(--red)}
+.dial .dl{font-size:8.5px;letter-spacing:2.4px;color:var(--dim);text-transform:uppercase;
+margin-top:-3px}
+.readout{display:flex;justify-content:space-between;gap:8px;padding:6px 10px;margin-top:9px;
+border:1px solid var(--grn-d);background:var(--grn-x);border-radius:2px;font-size:11px}
+.readout b{font-weight:400;color:var(--amber)}
+.v{display:flex;align-items:center;gap:9px}
 .v{display:flex;align-items:center;gap:9px}
 .v>span:first-child{min-width:44px;flex:0 0 auto}
 .meter{position:relative;height:11px;flex:1;background:#02120b;
@@ -275,67 +308,65 @@ text-transform:uppercase;box-shadow:0 0 0 3px rgba(240,168,36,.09) inset;border-
 .foot .lbl{font-size:8.5px}
 @media(prefers-reduced-motion:reduce){*{animation:none!important}}
 </style>
-<svg id="tree" viewBox="0 0 800 640" preserveAspectRatio="xMidYMid meet">
-<defs><radialGradient id="halo"><stop offset="0%" stop-color="#22e07d" stop-opacity=".35"/>
-<stop offset="100%" stop-color="#22e07d" stop-opacity="0"/></radialGradient></defs>
-<circle class="core" cx="400" cy="400" r="260"></circle>
-<path class="root" d="M400 640 C 350 616 300 606 226 600"></path>
-<path class="root" d="M400 640 C 450 616 500 606 574 600"></path>
-<path class="root" d="M400 640 C 372 620 330 622 286 636"></path>
-<path class="root" d="M400 640 C 428 620 470 622 514 636"></path>
-<path class="lim" d="M400 640 C 402 560 398 500 400 452"></path>
-<path class="lim" d="M400 452 C 360 414 322 392 248 352"></path>
-<path class="lim" d="M400 452 C 440 414 478 392 552 352"></path>
-<path class="lim" d="M400 452 C 372 398 352 356 302 288"></path>
-<path class="lim" d="M400 452 C 428 398 448 356 498 288"></path>
-<path class="lim" d="M400 452 C 400 372 400 296 400 196"></path>
-<path class="arm" d="M400 452 C 386 392 368 330 350 246"></path>
-<path class="arm" d="M400 452 C 414 392 432 330 450 246"></path>
-<path class="arm ember" d="M248 352 C 208 322 190 292 148 272"></path>
-<path class="arm" d="M248 352 C 232 312 214 268 202 224"></path>
-<path class="arm ember" d="M552 352 C 592 322 610 292 652 272"></path>
-<path class="arm" d="M552 352 C 568 312 586 268 598 224"></path>
-<path class="arm" d="M302 288 C 274 252 252 226 212 190"></path>
-<path class="arm" d="M302 288 C 300 246 296 214 288 168"></path>
-<path class="arm" d="M498 288 C 526 252 548 226 588 190"></path>
-<path class="arm" d="M498 288 C 500 246 504 214 512 168"></path>
-<path class="twig" d="M350 246 C 340 208 330 182 308 140"></path>
-<path class="twig" d="M450 246 C 460 208 470 182 492 140"></path>
-<path class="twig" d="M400 196 C 398 156 388 126 366 88"></path>
-<path class="twig" d="M400 196 C 404 156 418 124 442 92"></path>
-<path class="twig" d="M202 224 C 192 190 178 166 156 138"></path>
-<path class="twig" d="M598 224 C 608 190 622 166 644 138"></path>
-<path class="twig" d="M288 168 C 280 136 270 114 250 88"></path>
-<path class="twig" d="M512 168 C 520 136 530 114 550 88"></path>
-<circle cx="308" cy="140" r="2.4"></circle><circle cx="492" cy="140" r="2.4"></circle>
-<circle cx="366" cy="88" r="2"></circle><circle cx="442" cy="92" r="2"></circle>
-<circle cx="148" cy="272" r="2.2" fill="#f0a824"></circle>
-<circle cx="652" cy="272" r="2.2" fill="#f0a824"></circle>
-<circle cx="212" cy="190" r="1.8"></circle><circle cx="588" cy="190" r="1.8"></circle>
-<circle cx="250" cy="88" r="1.8"></circle><circle cx="550" cy="88" r="1.8"></circle>
-</svg>
+<svg id="tree" viewBox="0 0 1200 640" preserveAspectRatio="xMidYMid meet">
+<defs>
+<radialGradient id="strand" cx="600" cy="300" r="620" gradientUnits="userSpaceOnUse">
+<stop offset="0%" stop-color="#dcffee"/><stop offset="14%" stop-color="#5bffb0"/>
+<stop offset="34%" stop-color="#22e07d"/><stop offset="54%" stop-color="#19c6b4"/>
+<stop offset="74%" stop-color="#3d7fe4"/><stop offset="100%" stop-color="#9b6bff"/>
+</radialGradient>
+<radialGradient id="halo"><stop offset="0%" stop-color="#8dffc4" stop-opacity=".24"/>
+<stop offset="45%" stop-color="#22e07d" stop-opacity=".07"/>
+<stop offset="100%" stop-color="#22e07d" stop-opacity="0"/></radialGradient>
+<radialGradient id="neb1"><stop offset="0%" stop-color="#7b4ddb" stop-opacity=".26"/>
+<stop offset="100%" stop-color="#7b4ddb" stop-opacity="0"/></radialGradient>
+<radialGradient id="neb2"><stop offset="0%" stop-color="#2f6bd8" stop-opacity=".22"/>
+<stop offset="100%" stop-color="#2f6bd8" stop-opacity="0"/></radialGradient>
+</defs>
+<ellipse class="neb" cx="300" cy="270" rx="430" ry="250" fill="url(#neb1)"></ellipse>
+<ellipse class="neb" cx="900" cy="330" rx="430" ry="250" fill="url(#neb2)"></ellipse>
+<ellipse class="neb" cx="600" cy="300" rx="600" ry="200" fill="url(#neb1)" opacity=".55"></ellipse>
+<circle class="core" cx="600" cy="300" r="300"></circle>
+<g id="canopy"></g>
+<g id="figure">
+<path class="robe" d="M600 314 C 578 320 566 332 562 350 C 555 404 551 462 555 522
+L645 522 C 649 462 645 404 638 350 C 634 332 622 320 600 314 Z"></path>
+<path class="lim2" d="M567 346 C 532 334 498 314 468 301"></path>
+<path class="lim2" d="M633 346 C 668 334 702 314 732 301"></path>
+<circle class="head" cx="600" cy="292" r="15"></circle>
+<path class="horn" d="M589 281 C 566 251 556 214 566 176 C 578 212 590 244 600 275 Z"></path>
+<path class="horn" d="M611 281 C 634 251 644 214 634 176 C 622 212 610 244 600 275 Z"></path>
+<circle class="hand" cx="466" cy="300" r="4.5"></circle>
+<circle class="hand" cx="734" cy="300" r="4.5"></circle>
+</g></svg>
+<div class=hudf><span></span><span></span><span></span><span></span></div>
 <div class=page>
 <header class=hdr>
 <svg class=seal viewBox="0 0 100 100">
-<defs><path id=arc d="M50 50 m-38 0 a38 38 0 1 1 76 0 a38 38 0 1 1 -76 0"/></defs>
+<defs><path id=arc d="M50 50 m-38 0 a38 38 0 1 1 76 0 a38 38 0 1 1 -76 0"/>
+<radialGradient id="core"><stop offset="0%" stop-color="#eaffef" stop-opacity="1"/>
+<stop offset="45%" stop-color="#8dffc4" stop-opacity=".85"/>
+<stop offset="100%" stop-color="#22e07d" stop-opacity="0"/></radialGradient></defs>
 <circle class="ring" cx="50" cy="50" r="47"></circle>
-<circle class="ring" cx="50" cy="50" r="31" opacity=".5"></circle>
-<g class="tick"><line x1="50" y1="21" x2="50" y2="26"></line>
-<line x1="79" y1="50" x2="74" y2="50"></line>
-<line x1="50" y1="79" x2="50" y2="74"></line>
-<line x1="21" y1="50" x2="26" y2="50"></line></g>
-<text><textPath href=#arc startOffset=2%>TEMPORAL VARIANCE AUTHORITY · VENOM ·</textPath></text>
-<line class="hand" id="hh" x1="50" y1="50" x2="50" y2="36"></line>
-<line class="hand" id="mh" x1="50" y1="50" x2="50" y2="28" opacity=".8"></line>
-<circle class="hub" cx="50" cy="50" r="2.4"></circle></svg>
-<div class=id><div class=org>Temporal Variance Authority</div><h1>VENOM</h1>
-<div class=sub>personal voice node &middot; case <span id=case>TVA-0000</span>
+<circle class="spin" cx="50" cy="50" r="41"></circle>
+<circle class="ring" cx="50" cy="50" r="30" opacity=".55"></circle>
+<g class="coils">
+<path d="M50 22 L57 33 L43 33 Z"></path><path d="M78 50 L67 57 L67 43 Z"></path>
+<path d="M50 78 L43 67 L57 67 Z"></path><path d="M22 50 L33 43 L33 57 Z"></path>
+<path d="M70 30 L67 42 L58 33 Z"></path><path d="M70 70 L58 67 L67 58 Z"></path>
+<path d="M30 70 L33 58 L42 67 Z"></path><path d="M30 30 L42 33 L33 42 Z"></path></g>
+<circle class="glow" cx="50" cy="50" r="19"></circle>
+<circle class="hub" cx="50" cy="50" r="7"></circle>
+<text><textPath href=#arc startOffset=1%>VIRTUAL ENHANCED NEURAL OPTIMIZATION MODEL ·</textPath></text>
+</svg>
+<div class=id><div class=org>Virtual Enhanced Neural Optimization Model</div><h1>VENOM</h1>
+<div class=sub>j.a.r.v.i.s. core &middot; stark industries &middot; case <span id=case>VEN-0000</span>
 &middot; build <span id=ver>?</span></div></div>
 <div class=clockbox><div id=clock>--:--:--</div><div class=tzl>sacred timeline</div></div>
 </header>
 <section class="bar chips" id=status></section>
 <div class=top>
-<section class=bar><h2 class=tab><b>01</b>vitals</h2><div class=grid id=vitals></div>
+<section class=bar><h2 class=tab><b>01</b>vitals</h2><div class=grid id=vitals></div><div class=readout id=uptime><span class=lbl>uptime</span><b>&mdash;</b></div>
 <div class=row style=margin-top:11px><span class=lbl>output</span>
 <div class=meter style=flex:1><i id=volbar></i></div>
 <button onclick="vol(-10)">&minus;</button><button onclick="vol(10)">+</button></div>
@@ -346,7 +377,7 @@ text-transform:uppercase;box-shadow:0 0 0 3px rgba(240,168,36,.09) inset;border-
 <button onclick="music('resume')">&#9654;&#9654;</button>
 <button onclick="music('next')">next</button>
 <button onclick="music('stop')" class=warn>stop</button></div></section>
-<section class=bar><h2 class=tab><b>02</b>uplink</h2><div id=log></div>
+<section class=bar><h2 class=tab><b>02</b>j.a.r.v.i.s. uplink</h2><div id=log></div>
 <form id=say><span>&gt;</span>
 <input id=text placeholder="transmit to venom..." autocomplete=off>
 <button>send</button></form></section>
@@ -419,7 +450,7 @@ manage this over Tailscale so a change can&rsquo;t lock you out.</div></div></de
 LED to stop before unplugging &mdash; never pull power live.</div></div></details>
 </div>
 <div class=foot><div class=stamp>approved for all time</div>
-<div class=lbl>tva form 88-d &middot; for all time. always.</div></div>
+<div class=lbl>stark industries &middot; j.a.r.v.i.s. core &middot; for all time. always.</div></div>
 </div>
 <script>
 const $=id=>document.getElementById(id),H=s=>(s+'').replace(/[<&]/g,c=>c=='<'?'&lt;':'&amp;');
@@ -429,7 +460,7 @@ async function api(p,b){
 const o=b?{method:'POST',body:JSON.stringify(b)}:{};
 o.headers={'Authorization':'Bearer '+tok()};
 const r=await fetch(p,o);
-if(r.status==401){const t=prompt('TVA CLEARANCE PIN:');
+if(r.status==401){const t=prompt('VENOM ACCESS PIN:');
 if(t){localStorage.setItem('vtok',t.trim());return api(p,b)}}
 return r}
 function chip(k,v,ok){return `<span class="chip ${ok?'on':'off'}"><i></i>${k}<b>${H(v)}</b></span>`}
@@ -447,25 +478,28 @@ $('timers').innerHTML=(s.timers&&s.timers.length)?s.timers.map(t=>
 if(s.transcript.length!=n){n=s.transcript.length;
 $('log').innerHTML=s.transcript.map(([w,t])=>{
 const c=w.startsWith('you')?'you':w=='jarvis'?'jarvis':'sys';
-const p=c=='you'?'variant':c=='jarvis'?'venom':'tva';
+const p=c=='you'?'variant':c=='jarvis'?'jarvis':'node';
 return `<div class=${c}><b>${p} &#9656;</b> ${H(t)}</div>`}).join('');
 $('log').scrollTop=1e9}}catch(e){}}
-function meter(lbl,pct,txt,warn,crit){
-let cls=pct>=crit?'crit':pct>=warn?'hot':'';
-return `<div class="v ${cls}"><span class=lbl>${lbl}</span>`+
-(pct==null?`<span class=val style=text-align:left>${H(txt)}</span>`:
-`<div class=meter><i style=width:${Math.max(0,Math.min(100,pct))}%></i></div>`+
-`<span class=val>${H(txt)}</span>`)+`</div>`}
+function dial(lbl,pct,txt,warn,crit){
+const C=2*Math.PI*30,cls=pct>=crit?'crit':pct>=warn?'hot':'';
+const p=Math.max(0,Math.min(100,pct||0));
+return `<div class="dial ${cls}"><svg viewBox="0 0 80 80">`+
+`<circle class=tk cx=40 cy=40 r=34></circle>`+
+`<circle class=trk cx=40 cy=40 r=30></circle>`+
+`<circle class=arcv cx=40 cy=40 r=30 stroke-dasharray="${C*p/100} ${C}"></circle>`+
+`</svg><div class=dv>${H(txt)}</div><div class=dl>${lbl}</div></div>`}
 async function vtick(){try{const v=await(await api('/api/vitals')).json();
 const w=v.wifi||{},sig=w.dbm!=null?Math.max(0,Math.min(100,(w.dbm+90)*2.5)):null;
 $('vitals').innerHTML=[
-meter('cpu',v.cpu_pct,(v.cpu_pct??'?')+'%',70,90),
-meter('temp',v.temp_c,(v.temp_c??'?')+'\\u00b0C',65,80),
-meter('ram',v.mem_pct,(v.mem_pct??'?')+'%',75,90),
-meter('disk',v.disk_pct,(v.disk_pct??'?')+'%',80,92),
-meter('wifi',sig,w.dbm!=null?w.dbm+'dBm':'n/a',101,101),
-meter('up',null,v.uptime||'?')
-].join('')}catch(e){}}
+dial('cpu',v.cpu_pct,(v.cpu_pct??'?')+'%',70,90),
+dial('temp',v.temp_c,(v.temp_c??'?')+'\u00b0',65,80),
+dial('ram',v.mem_pct,(v.mem_pct??'?')+'%',75,90),
+dial('disk',v.disk_pct,(v.disk_pct??'?')+'%',80,92),
+dial('wifi',sig,w.dbm!=null?w.dbm:'n/a',101,101)
+].join('');
+$('uptime').innerHTML=`<span class=lbl>uptime</span><b>${H(v.uptime||'?')}</b>`;
+}catch(e){}}
 $('say').onsubmit=e=>{e.preventDefault();const t=$('text').value.trim();
 if(t)api('/api/prompt',{text:t});$('text').value=''};
 function music(a,q){api('/api/music',{action:a,query:q||''})}
@@ -572,12 +606,69 @@ if(c.trim()){hist.push(c);hp=hist.length;runTerm(c)}$('termin').value=''};
 $('termin').onkeydown=e=>{if(e.key=='ArrowUp'&&hp>0){$('termin').value=hist[--hp];
 e.preventDefault()}else if(e.key=='ArrowDown'){hp=Math.min(hist.length,hp+1);
 $('termin').value=hist[hp]||''}};
+function growTree(){
+const g=document.getElementById('canopy');if(!g)return;
+const NS='http://www.w3.org/2000/svg';let seed=20231026,made=0;
+const rnd=()=>(seed=(seed*1103515245+12345)&0x7fffffff)/0x7fffffff;
+const frag=document.createDocumentFragment();
+const CAP=1900;                       // a phone still has to paint this
+// angle 0 points straight up; +PI/2 is right, -PI/2 is left
+function limb(x,y,ang,len,w,depth){
+if(made++>CAP)return;
+const bow=(rnd()-.5)*.38;
+const mx=x+Math.sin(ang+bow)*len*.55,my=y-Math.cos(ang+bow)*len*.55;
+const ex=x+Math.sin(ang)*len,ey=y-Math.cos(ang)*len;
+const el=document.createElementNS(NS,'path');
+el.setAttribute('d',`M${x.toFixed(1)} ${y.toFixed(1)} Q${mx.toFixed(1)} ${my.toFixed(1)} `+
+`${ex.toFixed(1)} ${ey.toFixed(1)}`);
+el.setAttribute('stroke-width',w.toFixed(2));
+el.setAttribute('stroke-opacity',(.16+depth*.055).toFixed(2));
+if(depth<=1&&rnd()>.93)el.setAttribute('stroke','#f0c674');
+const L=Math.round(len*1.3);
+el.style.setProperty('--len',L);el.style.strokeDasharray=L;
+el.style.animationDelay=(1.5-depth*.2+rnd()*.25).toFixed(2)+'s';
+frag.appendChild(el);
+if(depth<=0){
+if(rnd()>(Math.abs(ex-600)>300?.42:.8)){const c=document.createElementNS(NS,'circle');
+c.setAttribute('class','tip');c.setAttribute('cx',ex.toFixed(1));
+c.setAttribute('cy',ey.toFixed(1));c.setAttribute('r',(.8+rnd()*1.3).toFixed(1));
+if(Math.abs(ex-600)>340)c.setAttribute('fill','#9b6bff');
+c.style.animationDelay=(rnd()*4).toFixed(1)+'s';frag.appendChild(c)}
+return}
+const kids=rnd()>.5?3:2;
+for(let i=0;i<kids;i++){
+const a=ang+(i-(kids-1)/2)*(.44-depth*.02)+(rnd()-.5)*.22;
+limb(ex,ey,a,len*(.7+rnd()*.14),Math.max(.32,w*.6),depth-1)}}
+// every strand leaves the same knot at the centre, on an ellipse that keeps
+// the spread horizontal — the shape only reads as the tree from the side
+const N=96,CX=600,CY=300;
+for(let i=0;i<N;i++){
+// walk the ellipse in mirrored pairs, so any budget cut stays symmetric
+const j=(i%2?N-1-(i>>1):(i>>1));
+const tau=(j+.5)/N*Math.PI*2+rnd()*.03;
+const dx=Math.cos(tau),dy=Math.sin(tau)*.34;
+const ang=Math.atan2(dx,-dy);
+const flat=Math.abs(dx);
+const r0=14+rnd()*26;                 // start just off the knot, not on it
+const sx=CX+Math.sin(ang)*r0,sy=CY-Math.cos(ang)*r0;
+const dep=flat>.82?3:(flat>.5?2:1);
+limb(sx,sy,ang,110+flat*140+rnd()*34,1.4+flat*2,dep)}
+// a brighter armful either side, where the hands actually hold them
+[[466,300,-Math.PI/2],[734,300,Math.PI/2]].forEach(([hx,hy,base])=>{
+for(let i=0;i<5;i++){
+const a=base+(i-2)*.26*(base<0?1:-1)+(rnd()-.5)*.08;
+limb(hx,hy,a,130+rnd()*45,2.6,3)}});
+g.appendChild(frag)}
+growTree();
+// fill the screen on a laptop, keep both hands in frame on a phone
+function fitTree(){const s=document.getElementById('tree');if(!s)return;
+s.setAttribute('preserveAspectRatio',
+innerWidth/innerHeight>1.25?'xMidYMid slice':'xMidYMid meet')}
+fitTree();addEventListener('resize',fitTree);
 function faceClock(){const d=new Date();
 $('clock').textContent=d.toLocaleTimeString();
-const m=d.getMinutes()+d.getSeconds()/60,h=(d.getHours()%12)+m/60;
-$('mh').setAttribute('transform',`rotate(${m*6} 50 50)`);
-$('hh').setAttribute('transform',`rotate(${h*30} 50 50)`)}
-$('case').textContent='TVA-'+(new Date().getFullYear()+'').slice(2)+
+}
+$('case').textContent='VEN-'+(new Date().getFullYear()+'').slice(2)+
 ('0'+(new Date().getMonth()+1)).slice(-2)+('0'+new Date().getDate()).slice(-2);
 setInterval(faceClock,1000);faceClock();
 setInterval(tick,1500);setInterval(vtick,3000);tick();vtick();
