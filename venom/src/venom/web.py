@@ -619,7 +619,7 @@ el.style.setProperty('--len',L);el.style.strokeDasharray=L;
 el.style.animationDelay=(1.5-depth*.2+rnd()*.25).toFixed(2)+'s';
 frag.appendChild(el);
 if(depth<=0){
-if(rnd()>(Math.abs(ex-600)>300?.42:.8)){const c=document.createElementNS(NS,'circle');
+if(rnd()>(Math.abs(ex-600)>300?.10:.78)){const c=document.createElementNS(NS,'circle');
 c.setAttribute('class','tip');c.setAttribute('cx',ex.toFixed(1));
 c.setAttribute('cy',ey.toFixed(1));c.setAttribute('r',(.8+rnd()*1.3).toFixed(1));
 if(Math.abs(ex-600)>340)c.setAttribute('fill','#9b6bff');
@@ -648,6 +648,19 @@ limb(sx,sy,ang,110+flat*140+rnd()*34,1.4+flat*2,dep)}
 for(let i=0;i<5;i++){
 const a=base+(i-2)*.26*(base<0?1:-1)+(rnd()-.5)*.08;
 limb(hx,hy,a,130+rnd()*45,2.6,3)}});
+// loose motes hanging off both ends, thickest at the extremities
+for(let i=0;i<190;i++){
+const side=rnd()>.5?1:-1;
+const off=340+Math.pow(rnd(),.55)*320;
+const c=document.createElementNS(NS,'circle');
+c.setAttribute('class','tip');
+c.setAttribute('cx',(600+side*off).toFixed(1));
+c.setAttribute('cy',(300+(rnd()-.5)*330).toFixed(1));
+c.setAttribute('r',(.5+rnd()*1.5).toFixed(1));
+if(off>520)c.setAttribute('fill','#9b6bff');
+else if(off>420)c.setAttribute('fill','#5aa6ff');
+c.style.animationDelay=(rnd()*5).toFixed(1)+'s';
+frag.appendChild(c)}
 g.appendChild(frag)}
 growTree();
 // fill the screen on a laptop, keep both hands in frame on a phone
