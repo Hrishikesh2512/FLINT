@@ -147,6 +147,25 @@ build <span id=ver>?</span></div>
 <button onclick="music('stop')">&#9632; STOP</button></div>
 <div class=v><span class=lbl>vol</span><div class=meter><i id=volbar></i></div>
 <button onclick="vol(-10)">&minus;</button><button onclick="vol(10)">+</button></div></div>
+<details ontoggle="if(this.open)loadSos()"><summary>[+] EMERGENCY SOS</summary>
+<div id=sosstate class=lbl>&mdash;</div>
+<div id=soslist></div>
+<div class=row><input id=sname placeholder="name" style=max-width:118px>
+<input id=sto placeholder="+91… number / WhatsApp name" style=max-width:196px>
+<input id=slabel placeholder="who (father…)" style=max-width:118px>
+<button onclick="sosAdd()">add / update</button></div>
+<div class=row><input id=snote placeholder="what's happening (optional)"
+style="flex:1;min-width:130px">
+<button onclick="sosAct('trigger')" style=border-color:var(--red);color:var(--red)>
+&#9888; SEND SOS</button>
+<button onclick="sosAct('stop')">all clear</button>
+<button onclick="sosAct('test')">test</button></div>
+<div id=sosmsg class=sys></div>
+<div class=lbl style=margin-top:4px>everyone here gets a WhatsApp with your approximate
+location and the time, re-sent every few minutes until you call it off &mdash; a list of
+its own, so the SOS can reach different people than you usually message. by voice:
+&ldquo;add my father to my emergency contacts&rdquo; &middot; &ldquo;SOS&rdquo; &middot;
+&ldquo;I&rsquo;m safe&rdquo;.</div></details>
 <details><summary>[+] BLUETOOTH</summary><div class=row>
 <button onclick="bt(0)">paired</button><button onclick="bt(1)">scan 8s</button></div>
 <div id=btlist></div></details>
@@ -280,6 +299,32 @@ $('wifiscan').innerHTML=(d.available||[]).map(a=>
 `<span class=led style=cursor:pointer onclick="$('wssid').value='${jsx(a.ssid)}';`+
 `$('wssid').focus()">${H(a.ssid)} ${a.signal}%${a.known?' &#10003;':''}</span>`
 ).join(' ')||'<span class=lbl>none found</span>'}
+async function loadSos(){let d;try{d=await(await api('/api/sos')).json()}catch(e){return}
+$('sosstate').innerHTML=d.active
+?'<span class="led off">&#9888; EMERGENCY MODE ON</span> '+H(d.summary||'')
+:'<span class=led>standby</span> '+(d.offline
+?'not live &mdash; contacts editable, nothing can be sent':'');
+$('soslist').innerHTML=(d.contacts||[]).map(c=>`<div class=row>`+
+`<span class="led ${c.enabled?'on':''}" style=min-width:180px>${H(c.name)}`+
+`${c.label?' <small style=opacity:.6>'+H(c.label)+'</small>':''}`+
+`${c.to?' &rarr; '+H(c.to):''}</span>`+
+`<button onclick="sosAct('${c.enabled?'disable':'enable'}','${jsx(c.name)}')">`+
+`${c.enabled?'pause':'resume'}</button>`+
+`<button onclick="sosAct('remove','${jsx(c.name)}')" style=border-color:var(--red)>`+
+`del</button></div>`).join('')||'<div class=lbl>no emergency contacts yet</div>'}
+async function sosAct(action,name){
+if(action=='trigger'&&!confirm('Send the EMERGENCY SOS to every contact right now?'))return;
+if(action=='remove'&&!confirm('Remove '+name+' from your emergency contacts?'))return;
+$('sosmsg').textContent='working...';
+const b={action};if(name)b.name=name;if(action=='trigger')b.note=$('snote').value.trim();
+const r=await(await api('/api/sos',b)).json();
+$('sosmsg').textContent=r.result||'';loadSos()}
+async function sosAdd(){const name=$('sname').value.trim();if(!name)return;
+$('sosmsg').textContent='working...';
+const r=await(await api('/api/sos',{action:'add',name,to:$('sto').value.trim(),
+label:$('slabel').value.trim()})).json();
+$('sosmsg').textContent=r.result||'';
+$('sname').value=$('sto').value=$('slabel').value='';loadSos()}
 async function loadSettings(){const s=await(await api('/api/settings')).json();
 $('settings').innerHTML=Object.entries(s).map(([k,v])=>
 `<div class=row><span class=lbl style=min-width:150px>${k}</span>`+
@@ -494,6 +539,80 @@ class WebConsole:
             return self._connections_cmd(store, ["list"])
         except Exception as exc:
             return f"(connections unavailable: {exc})"
+
+    # ── emergency SOS ────────────────────────────────────────────────────────
+    # Contacts can be edited with the voice loop down (they're just a file);
+    # firing or calling off an alert needs the live orchestrator, which owns
+    # WhatsApp and the location provider.
+    def _sos_store(self):
+        from venom.config import load_config
+        from venom.sos import SosStore
+
+        return SosStore(load_config().memory_path.parent / "sos.json")
+
+    def sos_snapshot(self) -> dict:
+        try:
+            orch = self.orchestrator
+            if orch is not None and getattr(orch, "sos", None) is not None:
+                return orch.sos.snapshot()
+            config = self._sos_store().config()
+            return {"active": False, "started_at": 0, "last_sent": 0,
+                    "summary": "", "contacts": config["contacts"],
+                    "repeat_minutes": config["repeat_minutes"],
+                    "include_location": config["include_location"],
+                    "offline": True}
+        except Exception as exc:
+            return {"active": False, "contacts": [], "error": str(exc)}
+
+    def sos_action(self, data: dict) -> str:
+        action = str(data.get("action", "")).strip().lower()
+        orch = self.orchestrator
+        live = getattr(orch, "sos", None) if orch is not None else None
+        try:
+            if action in ("trigger", "stop", "test", "status"):
+                if live is None:
+                    # Either the voice service is down or WhatsApp is off; both
+                    # mean the same thing here — nothing can leave the device.
+                    return ("SOS isn't live right now (voice service down, or "
+                            "WhatsApp disabled), so nothing can be sent — "
+                            "contacts can still be edited.")
+                if action == "trigger":
+                    return live.start(str(data.get("note", "")).strip())
+                if action == "stop":
+                    return live.stop(str(data.get("note", "")).strip())
+                if action == "test":
+                    return live.test()
+                return live.status()
+
+            from venom.sos import describe_contact
+
+            store = live.store if live is not None else self._sos_store()
+            name = str(data.get("name", "")).strip()
+            if action == "add":
+                if not name:
+                    return "a name is required"
+                entry = store.add(name, to=str(data.get("to", "")).strip(),
+                                  label=str(data.get("label", "")).strip(),
+                                  message=str(data.get("message", "")))
+                return "saved: " + describe_contact(entry)
+            if action == "remove":
+                return (f"removed {name}" if store.remove(name)
+                        else f"no SOS contact called '{name}'")
+            if action in ("enable", "disable"):
+                on = action == "enable"
+                if not store.set_enabled(name, on):
+                    return f"no SOS contact called '{name}'"
+                return f"{name} {'will' if on else 'will not'} be alerted"
+            if action == "settings":
+                repeat = data.get("repeat_minutes")
+                store.set_settings(
+                    repeat_minutes=None if repeat in (None, "") else float(repeat),
+                    include_location=data.get("include_location"))
+                return "settings saved"
+            return f"unknown action '{action}'"
+        except Exception as exc:
+            log.warning("sos action failed: %s", exc)
+            return f"error: {exc}"
 
     # ── console built-ins: edit Connections & Memory from the terminal ────────
     # Intercepted before the shell so neither needs hand-edited JSON. Return a
@@ -890,6 +1009,8 @@ class WebConsole:
                         {"text": console.connections_dump()}).encode())
                 elif self.path == "/api/wifi":
                     self._send(json.dumps(console.wifi_overview()).encode())
+                elif self.path == "/api/sos":
+                    self._send(json.dumps(console.sos_snapshot()).encode())
                 else:
                     self._send(PAGE.encode(), "text/html; charset=utf-8")
 
@@ -930,6 +1051,9 @@ class WebConsole:
                 elif self.path == "/api/wifi":
                     self._send(json.dumps(
                         {"result": console.wifi_action(data)}).encode())
+                elif self.path == "/api/sos":
+                    self._send(json.dumps(
+                        {"result": console.sos_action(data)}).encode())
                 else:
                     self._send(b"{}")
 

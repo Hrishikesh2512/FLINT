@@ -29,6 +29,15 @@ architecture with FLINT through `flint-core`, but it is its own product.
   be ("chhata le lena"), an 8 a.m. start told to you tonight, her own SD card
   filling up. Bounded by quiet hours, a per-topic cooldown and a daily cap —
   and she stays silent rather than ask a generic "sab theek?".
+- **Emergency SOS** — say "SOS" (or "help me", "bachao") and she WhatsApps
+  every emergency contact with what's happening, your approximate location and
+  the time, then *stays in emergency mode*, resending your location every few
+  minutes until you say you're safe. The SOS list is its own book — separate
+  from Connections and from whoever you last messaged — so it can reach
+  different people than you normally text, each with their own wording:
+  "add my father to my emergency contacts". Set it up by voice or in the
+  console's EMERGENCY SOS panel, and prove it works with a clearly-marked
+  test alert before you ever need it.
 - **Time & date**, **headset volume control** by voice.
 - **Long-term memory** — it quietly remembers who you are, what you like,
   what you're working on, and uses it naturally next time.
@@ -45,6 +54,7 @@ venom/src/venom/
 ├── live.py         # one Gemini Live session: audio duplex + tool dispatch
 ├── wake.py         # openWakeWord ("hey jarvis") + silence endpointing
 ├── tools_pi.py     # search, weather, timers, volume, memory, goodbye
+├── sos.py          # emergency contacts + the alert / emergency mode
 ├── ambient.py      # sense → judge → gate: when she opens the conversation
 ├── audio/          # USB headset auto-selection, mic/speaker streams, chimes
 ├── supervisor.py   # health monitors + voice loop, systemd watchdog

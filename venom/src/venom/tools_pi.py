@@ -321,7 +321,8 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
                       reminders=None, notes=None, lists=None,
                       location=None, chess=None, notifications=None,
                       receiver=None, calendar=None, mailbox=None,
-                      whatsapp=None, connections=None, lights=None) -> ToolRegistry:
+                      whatsapp=None, connections=None, lights=None,
+                      sos=None) -> ToolRegistry:
     reg = ToolRegistry(platform="linux")
 
     if calendar is not None:
@@ -568,6 +569,106 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
         )
         def auto_reply_mode(enable: bool) -> str:
             return whatsapp.set_auto_reply(enable)
+
+    if sos is not None:
+        @reg.tool(
+            description=(
+                "EMERGENCY SOS. WhatsApps every saved emergency contact that "
+                "the user needs help, with their approximate location and the "
+                "time, then stays in emergency mode and resends the location "
+                "every few minutes until it's called off. Call this the moment "
+                "the user asks for emergency help — 'SOS', 'emergency', 'help "
+                "me', 'bachao', 'I'm in danger', 'call for help', 'send my "
+                "location to my family' — in ANY language, and act first: alert "
+                "now, reassure while it sends. Do NOT call it for a drill or a "
+                "hypothetical ('what would happen if…', 'test the SOS') — use "
+                "emergency_contacts with action 'test' for that. If you are "
+                "genuinely unsure they mean it, ask one short question first. "
+                "Put anything they said about what's happening in `note` — it "
+                "goes to the contacts."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "note": {"type": "string",
+                             "description": "What's happening, in the user's "
+                                            "own words — sent to the contacts"},
+                },
+            },
+        )
+        def emergency_sos(note: str = "") -> str:
+            return sos.start(note)
+
+        @reg.tool(
+            description=(
+                "Ends emergency mode and sends an 'all clear — I'm safe' "
+                "WhatsApp to everyone who was alerted. Use for 'I'm safe', "
+                "'cancel the SOS', 'emergency over', 'call it off', 'main "
+                "theek hoon'."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "message": {"type": "string",
+                                "description": "Optional extra line for the "
+                                               "all-clear message"},
+                },
+            },
+        )
+        def end_emergency(message: str = "") -> str:
+            return sos.stop(message)
+
+        @reg.tool(
+            description=(
+                "Tells whether emergency mode is on and who the SOS would "
+                "alert. Use for 'is the SOS on?', 'who do you alert in an "
+                "emergency?'."
+            ),
+        )
+        def sos_status() -> str:
+            return sos.status()
+
+        @reg.tool(
+            description=(
+                "Manages WHO gets the emergency SOS — a contact list separate "
+                "from normal messaging, so the SOS can go to different people "
+                "than the user usually WhatsApps. Actions: 'add' (name, plus "
+                "`to` = their phone number with country code, or the exact "
+                "WhatsApp contact name; `label` = who they are, e.g. father), "
+                "'remove', 'list', 'enable'/'disable' (keep someone saved but "
+                "skip them), 'set_message' (custom SOS wording for that one "
+                "contact — leave `name` empty to change the wording everyone "
+                "gets), and 'test' (sends a clearly-marked drill to everyone so "
+                "the user can confirm it works). Use for 'add my father to my "
+                "emergency contacts', 'SOS mein Priya ko daal do', 'who's on my "
+                "SOS list', 'test the emergency alert'."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "action":  {"type": "string",
+                                "description": "add | remove | list | enable | "
+                                               "disable | set_message | test"},
+                    "name":    {"type": "string",
+                                "description": "The contact's name"},
+                    "to":      {"type": "string",
+                                "description": "Phone number with country code, "
+                                               "or exact WhatsApp contact name"},
+                    "label":   {"type": "string",
+                                "description": "Who they are: father, sister, "
+                                               "flatmate, doctor…"},
+                    "message": {"type": "string",
+                                "description": "Custom SOS wording (set_message)"},
+                },
+                "required": ["action"],
+            },
+        )
+        def emergency_contacts(action: str, name: str = "", to: str = "",
+                               label: str = "", message: str = "") -> str:
+            from venom.sos import manage_contacts
+
+            return manage_contacts(sos, action, name=name, to=to,
+                                   label=label, message=message)
 
     if connections is not None:
         @reg.tool(

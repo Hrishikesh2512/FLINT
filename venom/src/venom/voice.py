@@ -178,6 +178,17 @@ class VoiceOrchestrator:
             from venom.whatsapp import WhatsAppClient
 
             self.whatsapp = WhatsAppClient(config.whatsapp)
+        # Emergency SOS: its own contact book, alerted over the same WhatsApp
+        # bridge. Built whenever WhatsApp is, so contacts can be set up (and
+        # the drill run) long before anyone needs it.
+        self.sos = None
+        if self.whatsapp is not None:
+            from venom.sos import build_sos
+
+            self.sos = build_sos(state_dir, self.whatsapp,
+                                 location=self.location,
+                                 connections=self.connections,
+                                 user_name=config.voice.user_name)
         # Tuya / Smart Life smart bulbs, driven locally over the LAN.
         self.lights = None
         if config.lights.ready:
@@ -196,7 +207,8 @@ class VoiceOrchestrator:
                                           mailbox=self.mailbox,
                                           whatsapp=self.whatsapp,
                                           connections=self.connections,
-                                          lights=self.lights)
+                                          lights=self.lights,
+                                          sos=self.sos)
         self._detector: WakeWordDetector | None = None
         # True while we've paused our own music for a live conversation, so we
         # only resume what *we* paused (not a track the user paused by hand).

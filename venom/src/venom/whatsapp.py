@@ -53,9 +53,17 @@ class WhatsAppClient:
     def send(self, text: str, to: str = "") -> str:
         """Send `text` to `to` (a name, number, or blank to reply to the last
         chat). Returns a spoken-style confirmation or explanation."""
+        return self.send_detail(text, to)[1]
+
+    def send_detail(self, text: str, to: str = "") -> tuple[bool, str]:
+        """send() with an explicit delivered flag.
+
+        The spoken sentence alone can't be trusted by callers that must know
+        whether a message really landed (the SOS alert, above all) — every
+        failure here reads like prose. Returns (delivered, sentence)."""
         text = (text or "").strip()
         if not text:
-            return "There's no message to send."
+            return False, "There's no message to send."
         try:
             status, data = self._request(
                 "POST", "/send", {"to": to or "", "text": text})
@@ -67,21 +75,21 @@ class WhatsAppClient:
             status = exc.code
         except (urllib.error.URLError, OSError) as exc:
             log.warning("whatsapp send failed: %s", exc)
-            return ("I couldn't reach WhatsApp — the bridge isn't running or the "
-                    "phone lost its link.")
+            return False, ("I couldn't reach WhatsApp — the bridge isn't running "
+                           "or the phone lost its link.")
 
         if status == 200 and data.get("ok"):
             who = data.get("name") or "them"
-            return f"Sent to {who}."
+            return True, f"Sent to {who}."
         if status == 300 and data.get("candidates"):
             names = [c.get("name", "?") for c in data["candidates"][:4]]
-            return ("I found a few matching contacts — " + ", ".join(names)
-                    + ". Which one?")
+            return False, ("I found a few matching contacts — " + ", ".join(names)
+                           + ". Which one?")
         if status == 503:
-            return ("WhatsApp isn't linked yet — open the console and scan the "
-                    "QR under WhatsApp to pair it.")
+            return False, ("WhatsApp isn't linked yet — open the console and scan "
+                           "the QR under WhatsApp to pair it.")
         reason = data.get("error") or "something went wrong"
-        return f"I couldn't send that: {reason}."
+        return False, f"I couldn't send that: {reason}."
 
     def set_auto_reply(self, enabled: bool) -> str:
         """Turn auto-reply mode on/off. When on, the bridge answers incoming
