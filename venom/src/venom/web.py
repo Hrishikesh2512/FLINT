@@ -1,4 +1,4 @@
-"""Venom web console — manage and prompt the wearable from any browser.
+"""Venom web console - manage and prompt the wearable from any browser.
 
 A tiny stdlib HTTP server (no new dependencies) on the Pi serving one
 page: live status, conversation transcript, a text prompt box that
@@ -168,6 +168,10 @@ font-weight:700;text-shadow:none;clip-path:polygon(0 0,100% 0,calc(100% - 7px) 1
 .cols{grid-template-columns:1fr 1fr}}
 @media(min-width:1180px){.cols{grid-template-columns:1fr 1fr 1fr}}
 .top>.bar,.cols>details{margin:0}
+/* nexus + whatsapp ride side by side above the rest of the folders */
+.pair{display:grid;gap:10px;grid-template-columns:1fr}
+@media(min-width:880px){.pair{grid-template-columns:1fr 1fr}}
+.pair>details{margin:0;height:100%}
 /* ── status chips: rubber-stamped clearances ── */
 .chips{display:flex;flex-wrap:wrap;gap:7px}
 .chip{border:1px solid var(--grn-d);background:var(--grn-x);padding:4px 10px;
@@ -275,6 +279,19 @@ background:linear-gradient(180deg,#3a0d10,#180405);font-weight:700;letter-spacin
 .sosbtn:hover{box-shadow:0 0 20px rgba(255,66,66,.5);border-color:#ff8a8a}
 body.alert{animation:redshift 1.4s ease-in-out infinite}
 @keyframes redshift{50%{box-shadow:inset 0 0 130px rgba(255,66,66,.16)}}
+/* ── whatsapp relay ── */
+.wa[open]{border-color:#1c8a4e;background:
+linear-gradient(180deg,rgba(37,211,102,.06),transparent 130px),var(--pnl2)}
+.wa summary{color:#7ff0a8}
+.wa[open] summary{color:#5bff9e;border-bottom-color:#1c6b45}
+.wa .tape{background:repeating-linear-gradient(45deg,#25d366 0 9px,#0b0703 9px 18px)}
+.badge.good{color:#5bff9e;border-color:#1c8a4e;background:rgba(37,211,102,.10)}
+.badge.pairing{color:var(--amber);border-color:#5a4212;animation:pulse 1.6s infinite}
+#waqr{text-align:center;margin:4px 0}
+#waqr img{width:200px;max-width:64%;image-rendering:pixelated;
+border:7px solid #fff;border-radius:4px;background:#fff}
+#wastate .ok{color:#5bff9e}
+#walist .who small{color:var(--tan);opacity:.8;letter-spacing:.5px}
 /* ── folders ── */
 details{border:1px solid var(--grn-d);background:var(--pnl);border-radius:var(--r);
 overflow:hidden}
@@ -356,11 +373,11 @@ text-transform:uppercase;box-shadow:0 0 0 3px rgba(240,168,36,.09) inset;border-
 </header>
 <section class="bar chips" id=status></section>
 <div class=top>
-<section class=bar><h2 class=tab><b>01</b>vitals</h2><div class=grid id=vitals></div><div class=readout id=uptime><span class=lbl>uptime</span><b>&mdash;</b></div>
+<section class=bar><h2 class=tab><b>01</b>vitals</h2><div class=grid id=vitals></div><div class=readout id=uptime><span class=lbl>uptime</span><b>&middot;</b></div>
 <div class=row style=margin-top:11px><span class=lbl>output</span>
 <div class=meter style=flex:1><i id=volbar></i></div>
 <button onclick="vol(-10)">&minus;</button><button onclick="vol(10)">+</button></div>
-<div class=np id=np style=margin-top:9px>&mdash; idle &mdash;</div>
+<div class=np id=np style=margin-top:9px>&middot; idle &middot;</div>
 <div class=row><input id=song placeholder="track / artist" style=flex:1;min-width:110px>
 <button onclick="music('play',song.value)">&#9654;</button>
 <button onclick="music('pause')">&#10074;&#10074;</button>
@@ -373,10 +390,11 @@ text-transform:uppercase;box-shadow:0 0 0 3px rgba(240,168,36,.09) inset;border-
 <button>send</button></form></section>
 </div>
 <div class=cols>
-<details class=nexus id=sospanel ontoggle="if(this.open)loadSos()" style=grid-column:1/-1>
-<summary>nexus event &mdash; emergency sos <span id=sosbadge class=badge>standby</span></summary>
+<div class=pair style=grid-column:1/-1>
+<details class=nexus id=sospanel ontoggle="if(this.open)loadSos()">
+<summary>nexus event &middot; emergency sos <span id=sosbadge class=badge>standby</span></summary>
 <div class=tape></div><div class=body>
-<div id=sosstate>&mdash;</div>
+<div id=sosstate>&middot;</div>
 <div id=soslist style=margin-top:9px></div>
 <div class=row><input id=sname placeholder=name style=flex:1;min-width:110px>
 <input id=sto placeholder="+91 number / whatsapp name" style=flex:2;min-width:150px>
@@ -389,16 +407,40 @@ style=flex:1;min-width:140px>
 <button class=warn onclick="sosAct('test')">test</button></div>
 <div id=sosmsg class=note style=color:var(--amber)></div>
 <div class=note>everyone here gets a WhatsApp with your approximate location and the time,
-re-sent every few minutes until you call it off &mdash; <b>a list of its own</b>, so the SOS
+re-sent every few minutes until you call it off &middot; <b>a list of its own</b>, so the SOS
 can reach different people than you usually message. by voice: <b>&ldquo;add my father to my
 emergency contacts&rdquo;</b> &middot; <b>&ldquo;SOS&rdquo;</b> &middot;
 <b>&ldquo;I&rsquo;m safe&rdquo;</b>.</div></div></details>
+
+<details class=wa id=wapanel ontoggle="if(this.open)loadWa()">
+<summary>whatsapp relay <span id=wabadge class=badge>standby</span></summary>
+<div class=tape></div>
+<div class=body>
+<div id=wastate class=lbl>&middot;</div>
+<div id=waqr></div>
+<div class=row style=margin-top:9px><input id=wato placeholder="name / +number / blank = last chat"
+style=flex:1;min-width:150px></div>
+<div class=row><input id=watext placeholder="message" style=flex:1;min-width:150px>
+<button onclick="waSend()">send</button></div>
+<div id=wacand class=lbl></div>
+<div class=row style=margin-top:10px><input id=wacq placeholder="search saved whatsapp contacts"
+style=flex:1;min-width:150px autocomplete=off>
+<button onclick="waFind()">find</button></div>
+<div id=walist style=margin-top:7px></div>
+<div class=row style=margin-top:10px><button id=waauto onclick="waAuto()">auto-reply: &middot;</button>
+<button onclick="loadWa()">refresh</button></div>
+<div id=wamsg class=note style=color:var(--amber)></div>
+<div class=note>send hands-free too: <b>&ldquo;reply to Tushar, on my way&rdquo;</b>. auto-reply lets
+j.a.r.v.i.s. answer new chats in your own voice until you switch it off. not linked? scan the
+QR above from WhatsApp on your phone: <b>Linked Devices &middot; Link a device</b>.</div>
+</div></details>
+</div>
 
 <details><summary>bluetooth</summary><div class=body>
 <div class=row style=margin-top:0><button onclick="bt(0)">paired</button>
 <button onclick="bt(1)">scan 8s</button></div><div id=btlist></div></div></details>
 <details ontoggle="if(this.open)loadWifi()"><summary>network</summary><div class=body>
-<div id=wifinow class=lbl>&mdash;</div><div id=wifisaved></div>
+<div id=wifinow class=lbl>&middot;</div><div id=wifisaved></div>
 <div class=row><input id=wssid placeholder=SSID autocomplete=off style=flex:1;min-width:110px>
 <input id=wpass placeholder=password type=password autocomplete=off
 style=flex:1;min-width:110px>
@@ -406,9 +448,9 @@ style=flex:1;min-width:110px>
 <button onclick="wifiAdd()">add</button><button onclick="wifiScan()">scan</button></div>
 <div id=wifimsg class=note style=color:var(--amber)></div><div id=wifiscan class=lbl></div>
 <div class=note><b>base</b> = the network the Pi always prefers (your phone hotspot). It
-auto-connects to the highest-priority network in range and falls back on its own &mdash;
+auto-connects to the highest-priority network in range and falls back on its own &middot;
 manage this over Tailscale so a change can&rsquo;t lock you out.</div></div></details>
-<details><summary>timers</summary><div class=body><div id=timers class=lbl>&mdash;</div>
+<details><summary>timers</summary><div class=body><div id=timers class=lbl>&middot;</div>
 </div></details>
 <details ontoggle="if(this.open)loadSettings()"><summary>settings</summary><div class=body>
 <div id=settings></div>
@@ -437,7 +479,7 @@ manage this over Tailscale so a change can&rsquo;t lock you out.</div></div></de
 <button class=danger onclick="sys('poweroff')">&#9211; power off</button>
 <button onclick="localStorage.removeItem('vtok');location.reload()">lock</button></div>
 <div class=note>always power off here (or ssh + <b>sudo poweroff</b>) and wait for the green
-LED to stop before unplugging &mdash; never pull power live.</div></div></details>
+LED to stop before unplugging &middot; never pull power live.</div></div></details>
 </div>
 <div class=foot><div class=stamp>approved for all time</div>
 <div class=lbl>j.a.r.v.i.s. core &middot; for all time. always.</div></div>
@@ -461,10 +503,10 @@ $('status').innerHTML=chip('vox',s.voice,s.voice!='reconnecting')
 +chip('net',s.internet?'online':'offline',s.internet)
 +chip('mic',s.headset?'linked':'none',!!s.headset)
 +chip('core',s.brain?'jarvis':'offline',!!s.brain);
-$('np').textContent=s.now_playing?'\\u266a '+s.now_playing:'\\u2014 idle \\u2014';
+$('np').textContent=s.now_playing?'\\u266a '+s.now_playing:'\\u00b7 idle \\u00b7';
 if(s.volume!=null)$('volbar').style.width=Math.round(s.volume*100)+'%';
 $('timers').innerHTML=(s.timers&&s.timers.length)?s.timers.map(t=>
-`&#9202; ${H(t.label)} &mdash; ${t.mins}m`).join('<br>'):'no active timers';
+`&#9202; ${H(t.label)} &middot; ${t.mins}m`).join('<br>'):'no active timers';
 if(s.transcript.length!=n){n=s.transcript.length;
 $('log').innerHTML=s.transcript.map(([w,t])=>{
 const c=w.startsWith('you')?'you':w=='jarvis'?'jarvis':'sys';
@@ -511,7 +553,7 @@ async function loadWifi(){let d;try{d=await(await api('/api/wifi')).json()}catch
 if(!d.nm){$('wifinow').textContent='NetworkManager not available on this box.';
 $('wifisaved').innerHTML='';return}
 $('wifinow').innerHTML='&#9679; on: '+(d.current.name?H(d.current.name)+
-(d.current.signal!=null?' ('+d.current.signal+'%)':''):'&mdash;');
+(d.current.signal!=null?' ('+d.current.signal+'%)':''):'&middot;');
 $('wifisaved').innerHTML=d.saved.map(n=>`<div class="case ${n.active?'':'pausedc'}">`+
 `<span class=who>${H(n.name)} ${n.active?'<em>&#10003; active</em>':''} `+
 `<small>p${n.priority}</small></span>`+
@@ -542,10 +584,10 @@ $('sosbadge').textContent=d.active?'⚠ live':((d.contacts||[]).length
 ?(d.contacts.filter(c=>c.enabled).length+' on call'):'no contacts');
 if(d.active)$('sospanel').open=true;
 $('sosstate').innerHTML=d.active
-?`<span class=alarm>&#9888; nexus event &mdash; emergency mode live</span>`+
+?`<span class=alarm>&#9888; nexus event &middot; emergency mode live</span>`+
 `<span class=lbl>${H(d.summary||'')}</span>`
 :`<span class=ok>&#9679; sacred timeline nominal</span>`+
-`<span class=lbl>${d.offline?'not live &mdash; contacts editable, nothing can be sent'
+`<span class=lbl>${d.offline?'not live &middot; contacts editable, nothing can be sent'
 :'standby &middot; resend every '+(d.repeat_minutes||10)+' min once armed'}</span>`;
 $('soslist').innerHTML=(d.contacts||[]).map(c=>
 `<div class="case ${c.enabled?'':'pausedc'}"><span class=who>${H(c.name)} `+
@@ -569,6 +611,47 @@ const r=await(await api('/api/sos',{action:'add',name,to:$('sto').value.trim(),
 label:$('slabel').value.trim()})).json();
 $('sosmsg').textContent=r.result||'';
 $('sname').value=$('sto').value=$('slabel').value='';loadSos()}
+async function loadWa(){let d;try{d=await(await api('/api/whatsapp')).json()}catch(e){return}
+const badge=$('wabadge');
+if(d.enabled===false){$('wastate').textContent='WhatsApp is switched off in the config.';
+badge.className='badge';badge.textContent='off';$('waqr').innerHTML='';
+$('waauto').textContent='auto-reply: n/a';return}
+if(!d.ok){$('wastate').innerHTML='<span class=lbl>bridge offline &middot; the whatsapp '+
+'service is not running on the Pi.</span>';badge.className='badge';badge.textContent='offline';
+$('waqr').innerHTML='';return}
+const linked=!!d.loggedIn;
+if(linked){badge.className='badge good';
+badge.textContent=(d.contacts!=null?d.contacts+' contacts':'linked');
+const who=d.user?H((d.user+'').split(':')[0].split('@')[0]):'';
+$('wastate').innerHTML='<span class=ok>&#9679; linked</span> <span class=lbl>'+
+(who?who+' &middot; ':'')+(d.contacts||0)+' contacts</span>';
+$('waqr').innerHTML=''}
+else{badge.className='badge pairing';badge.textContent=d.hasQR?'scan to link':'connecting';
+$('wastate').innerHTML='<span class=lbl>not linked yet &middot; scan the QR with WhatsApp '+
+'on your phone to pair this device.</span>';
+$('waqr').innerHTML=d.qr?'<img src="'+d.qr+'" alt="whatsapp pairing code">':
+'<span class=lbl>waiting for a pairing code...</span>'}
+$('waauto').textContent='auto-reply: '+(d.autoReply?'ON':'off');
+$('waauto').className=d.autoReply?'':'warn'}
+async function waSend(){const text=$('watext').value.trim();if(!text)return;
+$('wamsg').textContent='sending...';$('wacand').textContent='';
+const r=await(await api('/api/whatsapp',{action:'send',
+to:$('wato').value.trim(),text})).json();
+$('wamsg').textContent=r.result||'';
+if(r.ok){$('watext').value=''}loadWa()}
+async function waFind(){const q=$('wacq').value.trim();
+$('walist').innerHTML='<div class=lbl>searching...</div>';
+const r=await(await api('/api/whatsapp',{action:'contacts',q})).json();
+const cs=r.contacts||[];
+$('walist').innerHTML=cs.length?cs.map(c=>`<div class=case><span class=who>${H(c.name)}`+
+`</span><button onclick="$('wato').value='${jsx(c.name)}';$('watext').focus()">use</button>`+
+`</div>`).join(''):'<div class=lbl>no matching contacts</div>'}
+async function waAuto(){$('wamsg').textContent='working...';
+const on=!/ON/.test($('waauto').textContent);
+if(on&&!confirm('Let j.a.r.v.i.s. auto-reply to new WhatsApp chats in your voice?'))
+{$('wamsg').textContent='';return}
+const r=await(await api('/api/whatsapp',{action:'auto',enabled:on})).json();
+$('wamsg').textContent=r.result||'';loadWa()}
 async function loadSettings(){const s=await(await api('/api/settings')).json();
 $('settings').innerHTML=Object.entries(s).map(([k,v])=>
 `<div class=row style=margin-top:5px><span class=lbl style=min-width:130px>${k}</span>`+
@@ -589,7 +672,7 @@ $('term').textContent+=$('cwd').textContent+'$ '+c+'\\n'+(r.out||'')+'\\n';
 $('cwd').textContent=r.cwd;$('term').scrollTop=1e9}
 function termInit(){setTimeout(()=>$('termin').focus(),60);
 if(!$('term').textContent){$('term').textContent=
-'venom root shell // full privileges \\u2014 mkdir/apt/sudo all work. \\u2191/\\u2193 = history\\n';
+'venom root shell // full privileges \\u00b7 mkdir/apt/sudo all work. \\u2191/\\u2193 = history\\n';
 runTerm('whoami; pwd')}}
 $('termform').onsubmit=e=>{e.preventDefault();const c=$('termin').value;
 if(c.trim()){hist.push(c);hp=hist.length;runTerm(c)}$('termin').value=''};
@@ -630,7 +713,7 @@ for(let i=0;i<kids;i++){
 const a=ang+(i-(kids-1)/2)*(.44-depth*.02)+(rnd()-.5)*.22;
 limb(ex,ey,a,len*(.7+rnd()*.14),Math.max(.32,w*.6),depth-1)}}
 // every strand leaves the same knot at the centre, on an ellipse that keeps
-// the spread horizontal — the shape only reads as the tree from the side
+// the spread horizontal - the shape only reads as the tree from the side
 const N=96,CX=600,CY=300;
 for(let i=0;i<N;i++){
 // walk the ellipse in mirrored pairs, so any budget cut stays symmetric
@@ -676,6 +759,7 @@ $('case').textContent='VEN-'+(new Date().getFullYear()+'').slice(2)+
 setInterval(faceClock,1000);faceClock();
 setInterval(tick,1500);setInterval(vtick,3000);tick();vtick();
 setInterval(()=>{if(document.body.classList.contains('alert'))loadSos()},5000);loadSos();
+setInterval(()=>{if($('wapanel').open)loadWa()},4000);
 </script>"""
 
 
@@ -718,7 +802,7 @@ class WebConsole:
                 self._auth_fails.pop(ip, None)  # clean slate on success
             return "ok"
         # An absent PIN is just an un-authenticated poll (the page fetches
-        # /api/state before the user types anything) — answer 401 so the UI
+        # /api/state before the user types anything), answer 401 so the UI
         # prompts, but don't let it burn the lockout budget. Only a supplied,
         # wrong PIN counts as a guess.
         if not supplied:
@@ -779,7 +863,7 @@ class WebConsole:
             return None
 
     def vitals(self) -> dict:
-        """Live system health for the dashboard — all from /proc and /sys."""
+        """Live system health for the dashboard, all from /proc and /sys."""
         v: dict = {}
 
         temp = self._read("/sys/class/thermal/thermal_zone0/temp").strip()
@@ -894,9 +978,9 @@ class WebConsole:
             if action in ("trigger", "stop", "test", "status"):
                 if live is None:
                     # Either the voice service is down or WhatsApp is off; both
-                    # mean the same thing here — nothing can leave the device.
+                    # mean the same thing here: nothing can leave the device.
                     return ("SOS isn't live right now (voice service down, or "
-                            "WhatsApp disabled), so nothing can be sent — "
+                            "WhatsApp disabled), so nothing can be sent; "
                             "contacts can still be edited.")
                 if action == "trigger":
                     return live.start(str(data.get("note", "")).strip())
@@ -935,6 +1019,88 @@ class WebConsole:
         except Exception as exc:
             log.warning("sos action failed: %s", exc)
             return f"error: {exc}"
+
+    # ── WhatsApp relay (self-hosted Baileys bridge) ──────────────────────────
+    # The bridge (venom/whatsapp-service) owns the WhatsApp Web session; this
+    # is a thin proxy so the console can pair it, send, look up contacts and
+    # flip auto-reply without a voice loop. Everything degrades to a sentence.
+    def _whatsapp_cfg(self):
+        from venom.config import load_config
+
+        return load_config().whatsapp
+
+    @staticmethod
+    def _wa_get(cfg, path: str, want_png: bool = False):
+        """One GET against the bridge. Returns parsed JSON, or a data: URI when
+        want_png (the pairing QR), or None on any failure."""
+        import base64
+        import urllib.error
+        import urllib.request
+
+        req = urllib.request.Request(f"http://{cfg.host}:{cfg.port}{path}")
+        if cfg.token:
+            req.add_header("X-Token", cfg.token)
+        try:
+            with urllib.request.urlopen(req, timeout=cfg.timeout) as resp:
+                if want_png:
+                    if not resp.getheader("Content-Type", "").startswith("image"):
+                        return None
+                    return ("data:image/png;base64,"
+                            + base64.b64encode(resp.read()).decode())
+                raw = resp.read().decode("utf-8", "replace")
+                return json.loads(raw) if raw else {}
+        except (urllib.error.URLError, OSError, ValueError):
+            return None
+
+    def whatsapp_snapshot(self) -> dict:
+        """Bridge health, plus the pairing QR as a data URI while unlinked."""
+        try:
+            cfg = self._whatsapp_cfg()
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+        if not cfg.enabled:
+            return {"ok": False, "enabled": False}
+        from venom.whatsapp import WhatsAppClient
+
+        health = WhatsAppClient(cfg).status()  # {} when the bridge is down
+        out = {"ok": bool(health), "enabled": True}
+        out.update(health or {})
+        if health and not health.get("loggedIn") and health.get("hasQR"):
+            qr = self._wa_get(cfg, "/qr.png", want_png=True)
+            if qr:
+                out["qr"] = qr
+        return out
+
+    def whatsapp_action(self, data: dict) -> dict:
+        action = str(data.get("action", "")).strip().lower()
+        try:
+            cfg = self._whatsapp_cfg()
+        except Exception as exc:
+            return {"ok": False, "result": f"error: {exc}"}
+        if not cfg.enabled:
+            return {"ok": False, "result": "WhatsApp is switched off in the config."}
+        from venom.whatsapp import WhatsAppClient
+
+        client = WhatsAppClient(cfg)
+        if action == "send":
+            delivered, sentence = client.send_detail(
+                str(data.get("text", "")), str(data.get("to", "")).strip())
+            if delivered and self.orchestrator is not None:
+                self.orchestrator.transcript.append(("system", sentence))
+            return {"ok": delivered, "result": sentence}
+        if action == "contacts":
+            import urllib.parse
+
+            q = urllib.parse.quote(str(data.get("q", "")).strip())
+            res = self._wa_get(cfg, "/contacts?q=" + q)
+            if res is None:
+                return {"contacts": [], "result": "couldn't reach the bridge."}
+            return {"contacts": res.get("contacts", [])}
+        if action == "auto":
+            enabled = bool(data.get("enabled"))
+            sentence = client.set_auto_reply(enabled)
+            return {"ok": True, "result": sentence, "enabled": enabled}
+        return {"ok": False, "result": f"unknown action '{action}'"}
 
     # ── console built-ins: edit Connections & Memory from the terminal ────────
     # Intercepted before the shell so neither needs hand-edited JSON. Return a
@@ -1084,11 +1250,11 @@ class WebConsole:
             CONTROL_REQUEST.write_text(action)
         except OSError as exc:
             return f"control channel unavailable: {exc}"
-        notes = {"update": "Updating from GitHub — takes a few minutes, "
+        notes = {"update": "Updating from GitHub, takes a few minutes, "
                            "then Venom restarts.",
                  "restart": "Restarting Venom...",
                  "reboot": "Rebooting the Pi...",
-                 "poweroff": "Shutting down cleanly — wait for the green LED "
+                 "poweroff": "Shutting down cleanly, wait for the green LED "
                              "to stop blinking, then it's safe to unplug."}
         if self.orchestrator is not None:
             self.orchestrator.transcript.append(("system", notes[action]))
@@ -1117,7 +1283,7 @@ class WebConsole:
         write_override("audio", {"output": "bluetooth",
                                  "bluetooth_mac": mac, "bluetooth_name": name})
         self.system("restart")
-        return f"Switching to {name or mac} — restarting Venom."
+        return f"Switching to {name or mac}, restarting Venom."
 
     def settings_get(self) -> dict:
         from venom.config import load_config
@@ -1134,13 +1300,13 @@ class WebConsole:
         # else crash-loops the voice stack (seen live with "hey_venom").
         allowed = ("hey_jarvis", "alexa", "hey_mycroft")
         if clean.get("wake_word") and clean["wake_word"] not in allowed:
-            return (f"wake_word must be one of {', '.join(allowed)} — "
+            return (f"wake_word must be one of {', '.join(allowed)}; "
                     "not saved")
         if not clean:
             return "nothing to change"
         write_override("voice", clean)
         self.system("restart")
-        return "Saved — restarting Venom to apply."
+        return "Saved, restarting Venom to apply."
 
     def _root_shell(self, cmd: str) -> dict | None:
         """Proxy the command to the root shell daemon (venom-shell.service)
@@ -1187,7 +1353,7 @@ class WebConsole:
         if not cmd:
             return {"out": "", "cwd": self._cwd}
 
-        # cd is a shell builtin — subprocess can't persist it, so handle it.
+        # cd is a shell builtin: subprocess can't persist it, so handle it.
         if cmd == "cd" or cmd.startswith("cd "):
             target = cmd[2:].strip() or "/"
             if target == "-":
@@ -1201,7 +1367,7 @@ class WebConsole:
 
         try:
             # A real bash login shell: pipes, globs, redirection, $VARS,
-            # command substitution, aliases in /etc/profile — the full set.
+            # command substitution, aliases in /etc/profile: the full set.
             r = subprocess.run(["/bin/bash", "-lc", cmd], cwd=self._cwd,
                                capture_output=True, text=True, timeout=30,
                                env={**os.environ, "TERM": "xterm-256color",
@@ -1218,7 +1384,7 @@ class WebConsole:
         """Run one nmcli command as root and return (rc, output). Goes through
         the root shell daemon (same channel as the terminal); on a dev box
         without the daemon it falls back to a direct call, which usually can't
-        modify connections — that's fine, it just reports the failure."""
+        modify connections, that's fine, it just reports the failure."""
         cmd = " ".join(shlex.quote(a) for a in argv)
         root = self._root_shell(cmd + '; printf "\\n__rc:%s" "$?"')
         if root is not None:
@@ -1263,7 +1429,7 @@ class WebConsole:
             if action == "priority":
                 return netman.set_priority(self._nm, name,
                                            _as_int(data.get("priority")) or 0)
-        except Exception as exc:  # noqa: BLE001 — surface, don't crash the thread
+        except Exception as exc:  # noqa: BLE001: surface, don't crash the thread
             log.warning("wifi action %s failed: %s", action, exc)
             return f"That didn't work: {exc}"
         return "Unknown Wi-Fi action."
@@ -1333,6 +1499,8 @@ class WebConsole:
                     self._send(json.dumps(console.wifi_overview()).encode())
                 elif self.path == "/api/sos":
                     self._send(json.dumps(console.sos_snapshot()).encode())
+                elif self.path == "/api/whatsapp":
+                    self._send(json.dumps(console.whatsapp_snapshot()).encode())
                 else:
                     self._send(PAGE.encode(), "text/html; charset=utf-8")
 
@@ -1376,6 +1544,8 @@ class WebConsole:
                 elif self.path == "/api/sos":
                     self._send(json.dumps(
                         {"result": console.sos_action(data)}).encode())
+                elif self.path == "/api/whatsapp":
+                    self._send(json.dumps(console.whatsapp_action(data)).encode())
                 else:
                     self._send(b"{}")
 
