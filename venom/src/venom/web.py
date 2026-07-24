@@ -464,7 +464,9 @@ manage this over Tailscale so a change can&rsquo;t lock you out.</div></div></de
 <details ontoggle="if(this.open)loadConn()"><summary>connections</summary><div class=body>
 <pre id=conn>...</pre><div class=note>edit in the terminal:
 <b>connections add &lt;name&gt; phone=.. nick=.. insta=..</b> &middot;
-<b>connections del &lt;name&gt;</b> &middot; <b>connections show &lt;name&gt;</b></div>
+<b>connections del &lt;name&gt;</b> &middot; <b>connections show &lt;name&gt;</b>.
+import your whole Google address book: export it at contacts.google.com (Export &middot; vCard),
+copy the file to the Pi, then <b>connections import &lt;path.vcf&gt;</b> in the terminal.</div>
 </div></details>
 <details ontoggle="if(this.open)loadLogs()"><summary>logs</summary><div class=body>
 <div class=row style=margin-top:0><button onclick="loadLogs()">refresh</button></div>
@@ -1166,6 +1168,14 @@ class WebConsole:
                 return "usage: connections del <name>"
             return f"removed {name}" if store.forget(name) \
                 else f"no match for '{name}'"
+        if sub in ("import", "load"):
+            if not rest:
+                return ("usage: connections import <path to .vcf or .csv>\n"
+                        "export from contacts.google.com (Export), copy the file "
+                        "to the Pi, then point this at it.")
+            from venom.contacts_import import import_file
+
+            return import_file(store, " ".join(rest))
         if sub in ("add", "set", "save", "edit"):
             kv: dict[str, str] = {}
             name_parts: list[str] = []
@@ -1189,7 +1199,8 @@ class WebConsole:
                 "  connections show <name>\n"
                 "  connections add <name> [phone=..] [nick=..] [insta=..] "
                 "[interest=..] [note=..]\n"
-                "  connections del <name>")
+                "  connections del <name>\n"
+                "  connections import <path to .vcf or .csv>")
 
     @staticmethod
     def _memory_cmd(mem, args: list[str]) -> str:
