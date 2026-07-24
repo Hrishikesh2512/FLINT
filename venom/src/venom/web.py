@@ -338,11 +338,15 @@ text-transform:uppercase;box-shadow:0 0 0 3px rgba(240,168,36,.09) inset;border-
 <stop offset="100%" stop-color="#7b4ddb" stop-opacity="0"/></radialGradient>
 <radialGradient id="neb2"><stop offset="0%" stop-color="#2f6bd8" stop-opacity=".22"/>
 <stop offset="100%" stop-color="#2f6bd8" stop-opacity="0"/></radialGradient>
+<radialGradient id="void"><stop offset="0%" stop-color="#020705" stop-opacity=".82"/>
+<stop offset="46%" stop-color="#020705" stop-opacity=".7"/>
+<stop offset="78%" stop-color="#03110a" stop-opacity=".34"/>
+<stop offset="100%" stop-color="#03110a" stop-opacity="0"/></radialGradient>
 </defs>
 <ellipse class="neb" cx="300" cy="270" rx="430" ry="250" fill="url(#neb1)"></ellipse>
 <ellipse class="neb" cx="900" cy="330" rx="430" ry="250" fill="url(#neb2)"></ellipse>
 <ellipse class="neb" cx="600" cy="300" rx="600" ry="200" fill="url(#neb1)" opacity=".55"></ellipse>
-<circle class="core" cx="600" cy="300" r="300"></circle>
+<circle class="core" cx="600" cy="300" r="340" fill="url(#void)"></circle>
 <circle class="heart" cx="600" cy="300" r="150" fill="url(#heart)"></circle>
 <g id="canopy"></g>
 </svg>
