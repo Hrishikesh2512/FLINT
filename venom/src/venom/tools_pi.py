@@ -416,10 +416,16 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
         def resume_music() -> str:
             return music.set_paused(False)
 
-        @reg.tool(description="Tells what music is currently playing, if any.")
+        @reg.tool(
+            description=(
+                "Tells what music is currently playing, if any — including "
+                "whether it's one of the user's favourites or saved offline. "
+                "Use for 'what's playing?', 'kaunsa gaana hai?', 'which song is "
+                "this?'."
+            ),
+        )
         def now_playing() -> str:
-            title = music.now_playing
-            return f"Now playing: {title}." if title else "Nothing is playing."
+            return music.status()
 
         @reg.tool(
             description=(
@@ -449,6 +455,123 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
         )
         def autoplay_similar(enable: bool) -> str:
             return music.set_autoplay(enable)
+
+        @reg.tool(
+            description=(
+                "Restarts the current song from the beginning. Use when the "
+                "user says 'restart', 'play it again', 'from the start', "
+                "'shuru se', 'wapas se chalao'."
+            ),
+        )
+        def restart_song() -> str:
+            return music.restart()
+
+        @reg.tool(
+            description=(
+                "Goes back to the previous song that played this session. Use "
+                "for 'previous', 'go back', 'pichla gaana', 'last song wapas', "
+                "'the one before this'."
+            ),
+        )
+        def previous_song() -> str:
+            return music.play_previous()
+
+        @reg.tool(
+            description=(
+                "Saves a song to the user's favourites. With no name, favourites "
+                "whatever is playing right now; with a name, finds and saves that "
+                "song. Use for 'add to favourites', 'favourite this', 'ise "
+                "favourite karo', 'save this song', 'I love this one'."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string",
+                             "description": "Optional song to favourite; omit to "
+                                            "favourite the current song"},
+                },
+            },
+        )
+        def add_favourite(name: str = "") -> str:
+            return music.add_favourite(name)
+
+        @reg.tool(
+            description=(
+                "Removes a song from the user's favourites by name. Use for "
+                "'remove from favourites', 'unfavourite', 'ye favourite se hata "
+                "do'."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string",
+                             "description": "The favourite to remove (by title)"},
+                },
+                "required": ["name"],
+            },
+        )
+        def remove_favourite(name: str) -> str:
+            return music.remove_favourite(name)
+
+        @reg.tool(
+            description=(
+                "Lists the user's favourite songs and how many are saved "
+                "offline. Use for 'what are my favourites?', 'meri favourite "
+                "list', 'which songs do I have saved?'."
+            ),
+        )
+        def list_favourites() -> str:
+            return music.list_favourites()
+
+        @reg.tool(
+            description=(
+                "Plays through all the user's favourite songs (offline copies "
+                "first, so it works with no signal), chaining to the next when "
+                "each finishes. Use for 'play my favourites', 'meri favourites "
+                "chalao', 'play my saved songs', 'play the songs I like'."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "shuffle": {"type": "boolean",
+                                "description": "Shuffle the order (default true)"},
+                },
+            },
+        )
+        def play_favourites(shuffle: bool = True) -> str:
+            return music.play_favourites(shuffle)
+
+        @reg.tool(
+            description=(
+                "Plays ONE specific saved favourite by name. Prefer this over "
+                "play_music when the user names a song they've favourited — it "
+                "needs no search, so it plays even offline with no signal (from "
+                "the downloaded copy). Use for 'play my saved Kesariya', 'play "
+                "that favourite', 'offline mein Kesariya chalao'."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string",
+                             "description": "The favourite song to play, by title"},
+                },
+                "required": ["name"],
+            },
+        )
+        def play_favourite(name: str) -> str:
+            return music.play_favourite(name)
+
+        @reg.tool(
+            description=(
+                "Downloads all of the user's favourite songs for offline play, "
+                "so they keep working through dead zones with no signal — do "
+                "this before a long trip. Runs in the background. Use for "
+                "'download my favourites', 'save my songs offline', 'make my "
+                "favourites available offline', 'offline ke liye download karo'."
+            ),
+        )
+        def download_favourites() -> str:
+            return music.download_favourites()
 
     if chess is not None:
         @reg.tool(

@@ -201,10 +201,15 @@ PERSONA = (
     "turn it is. If the tool says a move is illegal, tell him and ask again — "
     "do not proceed. When he's done, call resign_chess.\n\n"
 
-    "MUSIC CONTROL: to play, pause, resume, skip, or stop music, or change the "
-    "volume, ALWAYS call the matching tool (play_music, pause_music, "
-    "resume_music, next_song, stop_music, change_volume) — NEVER just say you "
-    "did it without calling the tool; nothing happens unless the tool runs. "
+    "MUSIC CONTROL: to play, pause, resume, skip, restart, go to the previous "
+    "song, stop music, or change the volume, ALWAYS call the matching tool "
+    "(play_music, pause_music, resume_music, next_song, restart_song, "
+    "previous_song, stop_music, change_volume) — NEVER just say you did it "
+    "without calling the tool; nothing happens unless the tool runs. "
+    "FAVOURITES: when he loves a song or says to save/favourite it, call "
+    "add_favourite (no name = the song playing now); play his saved set with "
+    "play_favourites, and before a trip call download_favourites so they work "
+    "offline with no signal. "
     "A bare 'laga diya maine' with no tool call behind it is a lie: he hears "
     "the same song still playing and has to ask you twice. So when you confirm "
     "a play or a skip, NAME what is now playing — the title comes back in the "
@@ -315,6 +320,8 @@ def collapse_doubled(text: str) -> str:
 # of the rendered window. Add new state-changing tools here.
 ACTION_TOOLS = frozenset({
     "play_music", "stop_music", "pause_music", "resume_music", "next_song",
+    "restart_song", "previous_song", "add_favourite", "remove_favourite",
+    "play_favourites", "play_favourite", "download_favourites",
     "set_volume", "change_volume", "send_whatsapp", "auto_reply_mode",
     "laptop_task", "set_timer", "set_reminder", "cancel_reminder",
     "add_note", "clear_notes", "add_to_list", "remove_from_list", "clear_list",

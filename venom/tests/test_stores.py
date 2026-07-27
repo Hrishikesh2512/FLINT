@@ -6,7 +6,7 @@ import time
 import pytest
 
 from venom.config import VenomConfig
-from venom.stores import ListStore, NoteStore, ReminderStore
+from venom.stores import FavouritesStore, ListStore, NoteStore, ReminderStore
 from venom.tools_pi import TimerBoard, build_pi_registry, parse_reminder_time
 
 
@@ -205,3 +205,37 @@ def test_conversation_log_renders_actions_as_proof(tmp_path):
     # an action is never mistaken for something she said out loud
     assert "you: play_music" not in rendered
     assert "him: play_music" not in rendered
+
+
+# ── FavouritesStore ───────────────────────────────────────────────────────────
+def test_favourites_add_dedupes_by_id(tmp_path):
+    f = FavouritesStore(tmp_path / "fav.json")
+    f.add("vid1", "Kesariya")
+    f.add("vid1", "Kesariya (different title)")  # same id → no duplicate
+    f.add("vid2", "Apna Bana Le")
+    assert [r["id"] for r in f.all()] == ["vid1", "vid2"]
+    assert f.is_favourite("vid1") and not f.is_favourite("nope")
+
+
+def test_favourites_find_by_id_and_title(tmp_path):
+    f = FavouritesStore(tmp_path / "fav.json")
+    f.add("vid1", "Kesariya")
+    assert f.find("vid1")["title"] == "Kesariya"
+    assert f.find("kesar")["id"] == "vid1"      # title substring, case-insensitive
+    assert f.find("missing") is None
+
+
+def test_favourites_remove_and_persist(tmp_path):
+    f = FavouritesStore(tmp_path / "fav.json")
+    f.add("vid1", "Kesariya")
+    f.add("vid2", "Apna Bana Le")
+    assert f.remove("kesariya") == 1
+    assert f.titles() == ["Apna Bana Le"]
+    # survives a reload (a reboot)
+    assert FavouritesStore(tmp_path / "fav.json").titles() == ["Apna Bana Le"]
+
+
+def test_favourites_add_ignores_blank_id(tmp_path):
+    f = FavouritesStore(tmp_path / "fav.json")
+    assert f.add("", "no id") is None
+    assert f.all() == []

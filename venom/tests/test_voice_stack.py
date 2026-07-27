@@ -240,6 +240,10 @@ def test_music_tools_registered_and_dispatch(tmp_path):
         def skip(self):
             return "Skipping — next song coming up."
 
+        def status(self):
+            return (f"Now playing: {self.now_playing}."
+                    if self.now_playing else "Nothing is playing.")
+
     config = VenomConfig(gemini_api_key="k", memory_path=tmp_path / "m.json")
     music = FakeMusic()
     registry = build_pi_registry(config, MemoryStore(config.memory_path),

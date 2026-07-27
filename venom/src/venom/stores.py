@@ -331,6 +331,70 @@ class ConnectionStore(_JsonStore):
         return True
 
 
+class FavouritesStore(_JsonStore):
+    """The user's favourite songs — YouTube video id + title, so a song can be
+    replayed by name and pre-downloaded for offline play on a dead-zone train
+    ride. One record per song, deduped by video id; newest last.
+
+    Record shape: {"id": "dQw4w9WgXcQ", "title": "…", "added": 1690000000.0}
+    """
+
+    def add(self, video_id: str, title: str) -> dict | None:
+        video_id = (video_id or "").strip()
+        if not video_id:
+            return None
+        with self._lock:
+            data = self._load([])
+            for rec in data:
+                if rec.get("id") == video_id:
+                    return rec  # already a favourite — idempotent
+            rec = {"id": video_id,
+                   "title": (title or "").strip() or video_id,
+                   "added": time.time()}
+            data.append(rec)
+            self._save(data)
+        return rec
+
+    def remove(self, query: str) -> int:
+        """Drop favourites matching `query` by exact id or title substring."""
+        needle = (query or "").strip().lower()
+        if not needle:
+            return 0
+        with self._lock:
+            data = self._load([])
+            keep = [r for r in data
+                    if r.get("id", "").lower() != needle
+                    and needle not in r.get("title", "").lower()]
+            removed = len(data) - len(keep)
+            if removed:
+                self._save(keep)
+        return removed
+
+    def all(self) -> list[dict]:
+        return self._load([])
+
+    def find(self, query: str) -> dict | None:
+        """Match by exact id first, then the first title-substring hit."""
+        needle = (query or "").strip().lower()
+        if not needle:
+            return None
+        data = self._load([])
+        for rec in data:
+            if rec.get("id", "").lower() == needle:
+                return rec
+        for rec in data:
+            if needle in rec.get("title", "").lower():
+                return rec
+        return None
+
+    def is_favourite(self, video_id: str) -> bool:
+        vid = (video_id or "").strip()
+        return bool(vid) and any(r.get("id") == vid for r in self._load([]))
+
+    def titles(self) -> list[str]:
+        return [r.get("title", "") for r in self._load([])]
+
+
 class ListStore(_JsonStore):
     """Named item lists — shopping, to-do, packing, etc."""
 

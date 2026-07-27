@@ -98,13 +98,16 @@ class VoiceOrchestrator:
         self.memory = MemoryStore(config.memory_path)
         self.timers = TimerBoard()
         # Persistent productivity stores live beside memory in the state dir.
-        from venom.stores import (ConnectionStore, ConversationLog, ListStore,
-                                  NoteStore, ReminderStore)
+        from venom.stores import (ConnectionStore, ConversationLog,
+                                  FavouritesStore, ListStore, NoteStore,
+                                  ReminderStore)
 
         state_dir = config.memory_path.parent
         self.reminders = ReminderStore(state_dir / "reminders.json")
         self.notes = NoteStore(state_dir / "notes.json")
         self.lists = ListStore(state_dir / "lists.json")
+        # Favourite songs + their offline copies — for long, signal-less rides.
+        self.favourites = FavouritesStore(state_dir / "favourites.json")
         # People she knows — numbers, nicknames, socials, interests — used to
         # contact them and to recall who they are.
         self.connections = ConnectionStore(state_dir / "connections.json")
@@ -124,7 +127,8 @@ class VoiceOrchestrator:
         self.location.warm()
         from venom.music import MusicPlayer
 
-        self.music = MusicPlayer()
+        self.music = MusicPlayer(favourites=self.favourites,
+                                 offline_dir=state_dir / "music")
         from venom.chess_game import ChessGame
 
         self.chess = ChessGame()
