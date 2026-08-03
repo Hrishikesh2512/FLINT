@@ -116,6 +116,36 @@ ntfy_topic  = ""   # set a long random topic ON THE DEVICE; keep it out of git
 enabled       = true
 registry_path = "/var/lib/venom/lights.json"
 
+# ── TV (Samsung / Tizen) ─────────────────────────────────────────────────────
+# Venom drives a Samsung smart TV over the LAN: power, volume, mute, remote
+# buttons, and opening apps ("Netflix kholo", "pause karo", "volume kam karo").
+#
+# SETUP
+#   1. host — the TV's IP. TV menu -> Settings -> General -> Network -> Network
+#      Status -> IP Settings. Give it a DHCP reservation on your router, since
+#      a moved TV just looks offline.
+#   2. mac — the MAC on that same screen. ONLY needed to switch the TV *on*:
+#      with the panel off its WebSocket is off too, so Wake-on-LAN is the only
+#      way in. Also turn ON Settings -> General -> Power and Energy Saving ->
+#      Network Standby, or the TV won't listen for the wake packet.
+#   3. First command prompts "Allow Venom to connect?" on the TV — accept it
+#      once. The token is saved to token_path so it never asks again. If it
+#      keeps asking: Settings -> General -> External Device Manager -> Device
+#      Connection Manager -> Access Notification -> "First Time Only".
+#   4. The Pi and the TV must be on the SAME subnet — Samsung refuses
+#      WebSocket connections across VLANs, and a guest Wi-Fi counts as one.
+#
+# Exact volume ("TV volume 20") goes over UPnP on port 9197, which not every
+# model serves; up/down always works. Tools are hidden until host is set.
+[tv]
+enabled    = true
+host       = ""            # e.g. "192.168.1.42"
+mac        = ""            # e.g. "AA:BB:CC:DD:EE:FF" — needed for power-on
+name       = "Venom"       # the name the TV shows in its device list
+port       = 8002          # 8002 = TLS (2018+ models); older sets use 8001
+timeout    = 5.0
+token_path = "/var/lib/venom/tv-token.txt"
+
 # ── Screen reading (OCR) ─────────────────────────────────────────────────────
 # Run laptop/screen_server.py on your laptop, then say "look at my screen" and
 # Jarvis reads the on-screen text (local OCR — fast, no vision API, text only).

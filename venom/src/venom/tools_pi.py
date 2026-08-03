@@ -322,7 +322,7 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
                       location=None, chess=None, notifications=None,
                       receiver=None, calendar=None, mailbox=None,
                       whatsapp=None, connections=None, lights=None,
-                      sos=None) -> ToolRegistry:
+                      tv=None, sos=None) -> ToolRegistry:
     reg = ToolRegistry(platform="linux")
 
     if calendar is not None:
@@ -1010,6 +1010,158 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
         )
         def list_lights() -> str:
             return lights.list_lights()
+
+    if tv is not None:
+        @reg.tool(
+            description=(
+                "Turns the user's TV ON or OFF. Use for 'TV on kar do', 'turn "
+                "off the TV', 'TV band karo'. Switching ON uses Wake-on-LAN and "
+                "takes a few seconds, so don't immediately follow it with "
+                "another TV command — give it a moment."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "on": {"type": "boolean",
+                           "description": "true to switch on, false to switch off"},
+                },
+                "required": ["on"],
+            },
+        )
+        def set_tv_power(on: bool) -> str:
+            return tv.power(on)
+
+        @reg.tool(
+            description=(
+                "Makes the TV LOUDER or QUIETER by a few steps. This is the "
+                "normal way to change TV volume — use it for 'volume up', "
+                "'thoda tez karo', 'turn it down', 'awaaz kam karo'. Only use "
+                "set_tv_volume when the user names an exact number."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "direction": {"type": "string",
+                                  "description": "'up' or 'down'"},
+                    "steps": {"type": "integer",
+                              "description": "How many notches, 1-30 (default 3)"},
+                },
+                "required": ["direction"],
+            },
+        )
+        def nudge_tv_volume(direction: str, steps: int = 3) -> str:
+            return tv.nudge_volume(direction, steps)
+
+        @reg.tool(
+            description=(
+                "Sets the TV to an EXACT volume level, 0-100. Only use when the "
+                "user names a number ('TV volume 20'). Not all TVs support "
+                "this; if it fails, fall back to nudge_tv_volume."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "percent": {"type": "integer", "description": "Volume 0-100"},
+                },
+                "required": ["percent"],
+            },
+        )
+        def set_tv_volume(percent: int) -> str:
+            return tv.set_volume(percent)
+
+        @reg.tool(
+            description=(
+                "Mutes or unmutes the TV. Omit `on` to simply toggle mute, "
+                "which is the most reliable. Use for 'mute the TV', 'chup "
+                "karao', 'unmute'."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "on": {"type": "boolean",
+                           "description": "true to mute, false to unmute; omit to toggle"},
+                },
+            },
+        )
+        def mute_tv(on: bool | None = None) -> str:
+            return tv.mute(on)
+
+        @reg.tool(
+            description=(
+                "Presses a button on the TV remote. Use for playback and "
+                "navigation: play, pause, stop, forward, rewind, up, down, "
+                "left, right, ok, back, home, menu, exit, source, channel up, "
+                "channel down. Handles 'pause karo', 'aage badhao', 'go back', "
+                "'thoda aage'. For skipping ahead, send forward a few times."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "key": {"type": "string",
+                            "description": "Button name, e.g. pause|forward|ok|back|home"},
+                    "times": {"type": "integer",
+                              "description": "How many presses, 1-20 (default 1)"},
+                },
+                "required": ["key"],
+            },
+        )
+        def press_tv_key(key: str, times: int = 1) -> str:
+            return tv.press(key, times)
+
+        @reg.tool(
+            description=(
+                "Opens an app on the TV: Netflix, YouTube, Prime Video, "
+                "Hotstar, Disney+, Spotify, Apple TV, JioCinema, SonyLIV, Zee5 "
+                "or the browser. Use for 'Netflix kholo', 'put on YouTube', "
+                "'open Prime on the TV'."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "app": {"type": "string",
+                            "description": "App name, e.g. netflix|youtube|prime video"},
+                },
+                "required": ["app"],
+            },
+        )
+        def open_tv_app(app: str) -> str:
+            return tv.launch_app(app)
+
+        @reg.tool(
+            description=(
+                "Tries to play a named title on a TV streaming app — 'play Dune "
+                "on Netflix', 'YouTube pe lo-fi lagao'. Jumping straight to a "
+                "title often isn't possible, in which case this opens the app "
+                "and says so; relay that honestly instead of claiming it's "
+                "playing. Default app is Netflix if the user didn't name one."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string",
+                              "description": "What to play, as the user said it"},
+                    "app": {"type": "string",
+                            "description": "App to play it on (default netflix)"},
+                },
+                "required": ["title"],
+            },
+        )
+        def play_on_tv(title: str, app: str = "netflix") -> str:
+            return tv.play_title(title, app)
+
+        @reg.tool(
+            description=("Lists the apps installed on the TV. Use for 'what "
+                         "apps are on the TV', 'TV pe kya kya hai'."),
+        )
+        def list_tv_apps() -> str:
+            return tv.list_apps()
+
+        @reg.tool(
+            description=("Checks whether the TV is on, in standby, or "
+                         "unreachable. Use for 'is the TV on?', 'TV chalu hai?'."),
+        )
+        def tv_status() -> str:
+            return tv.status()
 
     @reg.tool(
         description=(

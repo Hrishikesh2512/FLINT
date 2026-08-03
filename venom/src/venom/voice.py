@@ -199,6 +199,16 @@ class VoiceOrchestrator:
             from venom.lights import LightsController
 
             self.lights = LightsController(config.lights.registry_path)
+        # Samsung Tizen TV, driven over the LAN (Wake-on-LAN to switch it on).
+        self.tv = None
+        if config.tv.ready:
+            from venom.tv import TVController
+
+            self.tv = TVController(config.tv.host, mac=config.tv.mac,
+                                   name=config.tv.name,
+                                   token_path=config.tv.token_path,
+                                   port=config.tv.port,
+                                   timeout=config.tv.timeout)
         self.registry = build_pi_registry(config, self.memory, self.timers,
                                           music=self.music,
                                           reminders=self.reminders,
@@ -212,6 +222,7 @@ class VoiceOrchestrator:
                                           whatsapp=self.whatsapp,
                                           connections=self.connections,
                                           lights=self.lights,
+                                          tv=self.tv,
                                           sos=self.sos)
         self._detector: WakeWordDetector | None = None
         # True while we've paused our own music for a live conversation, so we

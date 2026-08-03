@@ -285,6 +285,31 @@ class LightsConfig:
 
 
 @dataclass(frozen=True)
+class TVConfig:
+    """Voice control for a Samsung (Tizen) smart TV over the LAN (venom/tv.py).
+
+    `host` is the TV's address — give it a DHCP reservation, because the token
+    the TV issues is tied to the client, not the address, and a moved TV just
+    looks offline. `mac` is only needed for power-ON: with the panel off the
+    TV's WebSocket is off too, so Wake-on-LAN is the only way back in. Ready
+    (and so offering its tools) as soon as a host is set — unlike lights there
+    is no registry file to check, and the TV may legitimately be off.
+    """
+
+    enabled: bool = True
+    host: str = ""
+    mac: str = ""
+    name: str = "Venom"
+    port: int = 8002
+    timeout: float = 5.0
+    token_path: Path = Path("/var/lib/venom/tv-token.txt")
+
+    @property
+    def ready(self) -> bool:
+        return bool(self.enabled and self.host.strip())
+
+
+@dataclass(frozen=True)
 class AmbientConfig:
     """Ambient awareness — whether Venom is allowed to speak first.
 
@@ -378,6 +403,7 @@ class VenomConfig:
     phone: PhoneConfig = field(default_factory=PhoneConfig)
     whatsapp: WhatsAppConfig = field(default_factory=WhatsAppConfig)
     lights: LightsConfig = field(default_factory=LightsConfig)
+    tv: TVConfig = field(default_factory=TVConfig)
     ambient: AmbientConfig = field(default_factory=AmbientConfig)
 
     def __post_init__(self) -> None:
@@ -467,6 +493,7 @@ def load_config(path: Path | None = None) -> VenomConfig:
     phone = data.get("phone", {})
     whatsapp = data.get("whatsapp", {})
     lights = data.get("lights", {})
+    tv = data.get("tv", {})
     ambient = data.get("ambient", {})
     raw_brains = data.get("brain", [])
 
@@ -578,6 +605,15 @@ def load_config(path: Path | None = None) -> VenomConfig:
             enabled=bool(lights.get("enabled", True)),
             registry_path=Path(
                 lights.get("registry_path", "/var/lib/venom/lights.json")),
+        ),
+        tv=TVConfig(
+            enabled=bool(tv.get("enabled", True)),
+            host=str(tv.get("host", "")).strip(),
+            mac=str(tv.get("mac", "")).strip(),
+            name=str(tv.get("name", "Venom")).strip() or "Venom",
+            port=int(tv.get("port", 8002)),
+            timeout=float(tv.get("timeout", 5.0)),
+            token_path=Path(tv.get("token_path", "/var/lib/venom/tv-token.txt")),
         ),
         # Every ambient knob falls back to the dataclass default, so an empty
         # [ambient] section (or none at all) is the tuned configuration.
