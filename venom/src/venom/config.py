@@ -310,6 +310,25 @@ class TVConfig:
 
 
 @dataclass(frozen=True)
+class WatchConfig:
+    """Delegated background watches — "tell me when X happens" (venom/watch.py).
+
+    Needs the Gemini key, since every check is a grounded search plus a small
+    verdict call. `tick_seconds` is only how often the loop *looks* for due
+    work; each watch carries its own interval, budget and expiry, and the hard
+    limits live on WatchStore because they exist to bound the bill, not to be
+    tuned casually.
+    """
+
+    enabled: bool = True
+    tick_seconds: float = 60.0
+
+    @property
+    def ready(self) -> bool:
+        return bool(self.enabled)
+
+
+@dataclass(frozen=True)
 class AmbientConfig:
     """Ambient awareness — whether Venom is allowed to speak first.
 
@@ -404,6 +423,7 @@ class VenomConfig:
     whatsapp: WhatsAppConfig = field(default_factory=WhatsAppConfig)
     lights: LightsConfig = field(default_factory=LightsConfig)
     tv: TVConfig = field(default_factory=TVConfig)
+    watch: WatchConfig = field(default_factory=WatchConfig)
     ambient: AmbientConfig = field(default_factory=AmbientConfig)
 
     def __post_init__(self) -> None:
@@ -494,6 +514,7 @@ def load_config(path: Path | None = None) -> VenomConfig:
     whatsapp = data.get("whatsapp", {})
     lights = data.get("lights", {})
     tv = data.get("tv", {})
+    watch = data.get("watch", {})
     ambient = data.get("ambient", {})
     raw_brains = data.get("brain", [])
 
@@ -614,6 +635,10 @@ def load_config(path: Path | None = None) -> VenomConfig:
             port=int(tv.get("port", 8002)),
             timeout=float(tv.get("timeout", 5.0)),
             token_path=Path(tv.get("token_path", "/var/lib/venom/tv-token.txt")),
+        ),
+        watch=WatchConfig(
+            enabled=bool(watch.get("enabled", True)),
+            tick_seconds=float(watch.get("tick_seconds", 60.0)),
         ),
         # Every ambient knob falls back to the dataclass default, so an empty
         # [ambient] section (or none at all) is the tuned configuration.

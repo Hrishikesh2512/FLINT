@@ -149,6 +149,8 @@ class VoiceOrchestrator:
         # own (see venom/ambient.py). Built in run(), where there's a loop.
         self.ambient = None
         self._ambient_task: asyncio.Task | None = None
+        self.watchloop = None
+        self._watch_task: asyncio.Task | None = None
         # Bluetooth receive: laptop/phone audio into the earphone. A process-
         # wide singleton — orchestrators are rebuilt after crashes, and two
         # receivers would bridge every stream twice (doubled audio).
@@ -209,6 +211,14 @@ class VoiceOrchestrator:
                                    token_path=config.tv.token_path,
                                    port=config.tv.port,
                                    timeout=config.tv.timeout)
+        # Delegated watches: jobs she goes away and does, then reports back on.
+        # The store is built whenever there's a key to check with, so a watch
+        # survives a reboot even if the loop itself fails to start.
+        self.watches = None
+        if config.watch.enabled and config.gemini_api_key:
+            from venom.watch import WatchStore
+
+            self.watches = WatchStore(state_dir / "watches.json")
         self.registry = build_pi_registry(config, self.memory, self.timers,
                                           music=self.music,
                                           reminders=self.reminders,
@@ -223,6 +233,7 @@ class VoiceOrchestrator:
                                           connections=self.connections,
                                           lights=self.lights,
                                           tv=self.tv,
+                                          watches=self.watches,
                                           sos=self.sos)
         self._detector: WakeWordDetector | None = None
         # True while we've paused our own music for a live conversation, so we
@@ -278,6 +289,7 @@ class VoiceOrchestrator:
         # Ambient awareness — she watches the world and speaks first when it's
         # worth it. Keep a reference (asyncio holds tasks weakly).
         self._ambient_task = self._start_ambient()
+        self._watch_task = self._start_watches()
 
         first_cycle = True
         died_streak = 0
@@ -561,6 +573,32 @@ class VoiceOrchestrator:
                  self.config.ambient.quiet_end_hour)
         return asyncio.create_task(self.ambient.run())
 
+    # ── delegated watches (she reports back) ─────────────────────────────────
+    def _start_watches(self) -> asyncio.Task | None:
+        """Launch the watch loop, if there's anything to check with. Additive:
+        a failure here leaves every other way of talking to her intact."""
+        if self.watches is None:
+            return None
+        try:
+            from flint_core.llm.providers import GeminiProvider
+
+            from venom.ambient import in_quiet_hours
+            from venom.watch import WatchLoop
+
+            self.watchloop = WatchLoop(
+                self.watches,
+                provider_factory=lambda: GeminiProvider(self.config.gemini_api_key),
+                speak=self.queue_proactive,
+                is_busy=self._ambient_busy,
+                tick_seconds=self.config.watch.tick_seconds,
+                in_quiet_hours=lambda: in_quiet_hours(self.config.ambient))
+        except Exception:
+            log.exception("watch loop failed to start — continuing without it")
+            return None
+        log.info("delegated watches on (tick %.0fs, %d active)",
+                 self.config.watch.tick_seconds, len(self.watches.active()))
+        return asyncio.create_task(self.watchloop.run())
+
     def shutdown(self) -> None:
         """Stop the background tasks this orchestrator owns.
 
@@ -571,6 +609,9 @@ class VoiceOrchestrator:
         if self._ambient_task is not None:
             self._ambient_task.cancel()
             self._ambient_task = None
+        if self._watch_task is not None:
+            self._watch_task.cancel()
+            self._watch_task = None
 
     def _ambient_busy(self) -> bool:
         """True whenever she must not open her mouth unprompted: DND, a live

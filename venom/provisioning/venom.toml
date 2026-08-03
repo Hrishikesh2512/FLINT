@@ -146,6 +146,23 @@ port       = 8002          # 8002 = TLS (2018+ models); older sets use 8001
 timeout    = 5.0
 token_path = "/var/lib/venom/tv-token.txt"
 
+# ── Delegated watches (she goes away and reports back) ───────────────────────
+# "Tell me when the match turns." "Batao jab result aa jaye." She checks on a
+# schedule in the background and OPENS a conversation the moment it happens —
+# then forgets the watch. Say "what are you watching?" / "stop watching X".
+#
+# COSTS MONEY: every check is a grounded web search plus a small verdict call,
+# so the limits are deliberately tight and live in venom/watch.py (WatchStore):
+# at most 5 watches at once, never faster than every 2 minutes, 120 checks and
+# 24 hours per watch by default. A watch that never fires dies quietly.
+#
+# A watch that fires during [ambient] quiet hours holds its result and delivers
+# it when quiet hours end — unless it was set up as urgent. Needs the Gemini
+# key; off automatically without one.
+[watch]
+enabled      = true
+tick_seconds = 60.0        # how often the loop looks for due work
+
 # ── Screen reading (OCR) ─────────────────────────────────────────────────────
 # Run laptop/screen_server.py on your laptop, then say "look at my screen" and
 # Jarvis reads the on-screen text (local OCR — fast, no vision API, text only).

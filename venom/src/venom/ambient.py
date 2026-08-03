@@ -277,6 +277,22 @@ def judge(world: World, cfg: AmbientConfig,
 
 
 # ── the gate: whether to speak at all ────────────────────────────────────────
+def in_quiet_hours(cfg: AmbientConfig, now: float | None = None) -> bool:
+    """The hours she stays silent unless spoken to.
+
+    Module-level because it isn't really an ambient rule — it's the house
+    rule for *any* unprompted speech, and `watch.py` holds its results to it
+    too rather than keeping a second copy of the wrap-around arithmetic.
+    """
+    hour = time.localtime(time.time() if now is None else now).tm_hour
+    start, end = cfg.quiet_start_hour, cfg.quiet_end_hour
+    if start == end:
+        return False
+    if start < end:                 # e.g. 01:00 -> 07:00
+        return start <= hour < end
+    return hour >= start or hour < end   # the usual 23:00 -> 07:00 wrap
+
+
 class AmbientState(_JsonStore):
     """What she has already brought up, on disk.
 
@@ -345,14 +361,7 @@ class AmbientGate:
         self._clock = clock
 
     def in_quiet_hours(self, now: float | None = None) -> bool:
-        now = self._clock() if now is None else now
-        hour = time.localtime(now).tm_hour
-        start, end = self._cfg.quiet_start_hour, self._cfg.quiet_end_hour
-        if start == end:
-            return False
-        if start < end:                 # e.g. 01:00 -> 07:00
-            return start <= hour < end
-        return hour >= start or hour < end   # the usual 23:00 -> 07:00 wrap
+        return in_quiet_hours(self._cfg, self._clock() if now is None else now)
 
     def choose(self, nudges: Sequence[Nudge],
                now: float | None = None) -> Nudge | None:

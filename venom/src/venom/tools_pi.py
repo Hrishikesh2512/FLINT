@@ -322,7 +322,7 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
                       location=None, chess=None, notifications=None,
                       receiver=None, calendar=None, mailbox=None,
                       whatsapp=None, connections=None, lights=None,
-                      tv=None, sos=None) -> ToolRegistry:
+                      tv=None, watches=None, sos=None) -> ToolRegistry:
     reg = ToolRegistry(platform="linux")
 
     if calendar is not None:
@@ -1162,6 +1162,86 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
         )
         def tv_status() -> str:
             return tv.status()
+
+    if watches is not None:
+        @reg.tool(
+            description=(
+                "Takes on a background job: keep checking something on the web "
+                "and INTERRUPT the user later, on your own, the moment it "
+                "happens. Use whenever he delegates something with a 'tell me "
+                "when' / 'let me know if' / 'keep an eye on' shape — 'tell me "
+                "when the match turns', 'batao jab result aa jaye', 'let me "
+                "know if the price drops'.\n"
+                "`what` must be self-contained enough to search for on its own "
+                "hours from now — resolve 'it' and 'that' into real names "
+                "before calling. `condition` is what makes it worth "
+                "interrupting him for; leave it EMPTY to be told on any real "
+                "change. Set `urgent` only if he wants waking at night.\n"
+                "Each check costs a web search, so pick an honest "
+                "`check_every_minutes`: minutes for a live match, an hour for "
+                "a result that lands sometime today. Tell him you'll come back "
+                "to him — do NOT keep checking within this conversation."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "what": {"type": "string",
+                             "description": "What to keep checking, self-contained"},
+                    "condition": {"type": "string",
+                                  "description": "What makes it worth telling him; "
+                                                 "omit to fire on any real change"},
+                    "check_every_minutes": {
+                        "type": "integer",
+                        "description": "Minutes between checks (min 2, default 10)"},
+                    "for_hours": {"type": "number",
+                                  "description": "Give up after this long (default 24)"},
+                    "urgent": {"type": "boolean",
+                               "description": "true to interrupt even at night"},
+                },
+                "required": ["what"],
+            },
+        )
+        def watch_for(what: str, condition: str = "",
+                      check_every_minutes: int = 10, for_hours: float = 24.0,
+                      urgent: bool = False) -> str:
+            try:
+                entry = watches.add(what, condition,
+                                    interval=max(2, int(check_every_minutes or 10)) * 60,
+                                    ttl_hours=for_hours, urgent=urgent)
+            except ValueError as exc:
+                return str(exc)
+            every = int(entry["interval"] // 60)
+            return (f"Watching that now — checking every {every} minutes. "
+                    "I'll come back to you when it happens.")
+
+        @reg.tool(
+            description=("Says what background watches are running. Use for "
+                         "'what are you watching?', 'kya track kar rahi ho?'."),
+        )
+        def list_watches() -> str:
+            return watches.summary()
+
+        @reg.tool(
+            description=(
+                "Stops a background watch. Pass a few words of the thing being "
+                "watched; omit `what` to stop every watch. Use for 'stop "
+                "watching the match', 'sab band kar do'."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "what": {"type": "string",
+                             "description": "Words identifying the watch; omit for all"},
+                },
+            },
+        )
+        def stop_watching(what: str = "") -> str:
+            dropped = watches.cancel(what)
+            if not dropped:
+                return "I wasn't watching anything matching that."
+            if not what.strip():
+                return f"Stopped all {dropped} watches."
+            return f"Stopped {dropped} watch{'es' if dropped > 1 else ''}."
 
     @reg.tool(
         description=(
