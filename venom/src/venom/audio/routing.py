@@ -67,8 +67,17 @@ def pick_headset_profile(profiles: list[dict]) -> dict | None:
     headset = [p for p in profiles if "headset-head-unit" in str(p.get("name", ""))]
     if not headset:
         return None
-    # prefer mSBC (16 kHz — matches our pipeline) over CVSD when offered
-    headset.sort(key=lambda p: ("msbc" not in str(p.get("name", "")),))
+
+    def rank(p) -> int:
+        """mSBC (16 kHz, matches our pipeline) > plain > CVSD (8 kHz)."""
+        name = str(p.get("name", ""))
+        if "msbc" in name:
+            return 0
+        if name.endswith("cvsd"):
+            return 2      # narrowband — last resort, speech suffers audibly
+        return 1          # plain 'headset-head-unit': PipeWire picks the codec
+
+    headset.sort(key=rank)
     return headset[0]
 
 

@@ -124,3 +124,19 @@ def test_force_skips_the_mic_already_live_fast_path(monkeypatch):
     # and it must target the headset profile, not A2DP
     headset = routing.pick_headset_profile(routing.enum_profiles(GRAPH, 70))
     assert str(headset["index"]) in profile_calls[0]
+
+
+def test_headset_profile_prefers_wideband_over_cvsd():
+    """The glasses offer headset-head-unit and headset-head-unit-cvsd but no
+    mSBC. CVSD is 8 kHz narrowband, so plain must win — the old sort only
+    demoted non-mSBC and picked whichever came first, i.e. CVSD."""
+    from venom.audio.routing import pick_headset_profile
+
+    profiles = [
+        {"index": 196864, "name": "headset-head-unit-cvsd"},
+        {"index": 196865, "name": "headset-head-unit"},
+    ]
+    assert pick_headset_profile(profiles)["name"] == "headset-head-unit"
+    # mSBC still wins outright when the device offers it
+    profiles.append({"index": 3, "name": "headset-head-unit-msbc"})
+    assert pick_headset_profile(profiles)["name"] == "headset-head-unit-msbc"
