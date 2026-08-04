@@ -693,6 +693,28 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
         def auto_reply_mode(enable: bool) -> str:
             return whatsapp.set_auto_reply(enable)
 
+        @reg.tool(
+            description=(
+                "Turns on/off answering when someone writes '@jarvis' in the "
+                "user's WhatsApp chats — groups included. This is ON by "
+                "default and is NOT the same as auto_reply_mode: this one "
+                "answers only when summoned by name, and never speaks for the "
+                "user otherwise. Use for 'stop replying in my groups', "
+                "'@jarvis wala reply band kar do', 'start answering when "
+                "people tag you'."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "enable": {"type": "boolean",
+                               "description": "true to answer mentions, false to stop"},
+                },
+                "required": ["enable"],
+            },
+        )
+        def mention_reply_mode(enable: bool) -> str:
+            return whatsapp.set_mention_reply(enable)
+
     if sos is not None:
         @reg.tool(
             description=(

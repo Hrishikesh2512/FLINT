@@ -114,3 +114,28 @@ class WhatsAppClient:
                         "replies — nothing will be sent until that's set.")
             return "I couldn't turn auto mode on."
         return "Auto message mode is off. I'll stop replying on my own."
+
+    def set_mention_reply(self, enabled: bool) -> str:
+        """Turn '@jarvis' replies on/off. Separate from auto-reply: this one
+        answers only when someone summons her by name, in any chat including
+        groups, and it is on by default."""
+        try:
+            _, data = self._request("POST", "/mention", {"enabled": bool(enabled)})
+        except urllib.error.HTTPError as exc:
+            try:
+                data = json.loads(exc.read().decode("utf-8", "replace"))
+            except (ValueError, OSError):
+                data = {}
+        except (urllib.error.URLError, OSError) as exc:
+            log.warning("whatsapp mention toggle failed: %s", exc)
+            return "I couldn't reach WhatsApp — the bridge isn't running."
+        trigger = data.get("mentionTrigger") or "@jarvis"
+        if enabled:
+            if data.get("mentionReply") and data.get("hasKey"):
+                return (f"I'll answer whenever someone writes {trigger} in your "
+                        "chats — groups included.")
+            if data.get("mentionReply"):
+                return (f"{trigger} replies are on, but I have no Gemini key here "
+                        "to write them — nothing will be sent until that's set.")
+            return "I couldn't turn that on."
+        return f"I'll stay quiet now, even if someone writes {trigger}."
