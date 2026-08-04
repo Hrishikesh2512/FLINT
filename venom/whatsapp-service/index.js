@@ -464,6 +464,31 @@ async function drainNotifyQueue() {
 setInterval(() => { if (notifyQueue.length) drainNotifyQueue(); }, 3000).unref();
 
 // ── Baileys connection lifecycle ─────────────────────────────────────────────
+/**
+ * Reconnect after `delay`, and keep the chain alive if the attempt throws.
+ *
+ * `start` is async, so a bare `setTimeout(start, delay)` turns any throw
+ * inside it into an unhandled rejection: nothing is logged, no further retry
+ * is ever scheduled, and the bridge sits there with connected=false looking
+ * healthy from the outside. Every reconnect must go through here.
+ */
+function scheduleReconnect(delay) {
+  setTimeout(() => {
+    start().catch((err) => {
+      const next = Math.min(delay * 2, 30000);
+      logger.warn({ err }, 'reconnect attempt failed');
+      console.log(`[venom-whatsapp] reconnect failed — retry in ${next}ms`);
+      scheduleReconnect(next);
+    });
+  }, delay);
+}
+
+// A crash in an event handler must not take the bridge down silently either.
+process.on('unhandledRejection', (err) => {
+  logger.warn({ err }, 'unhandled rejection');
+  console.log(`[venom-whatsapp] unhandled rejection: ${(err && err.message) || err}`);
+});
+
 async function start() {
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
 
