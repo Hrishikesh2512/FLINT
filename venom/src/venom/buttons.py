@@ -30,13 +30,22 @@ RESCAN_SECONDS = 10
 DEBOUNCE_SECONDS = 0.5        # one press can emit several events — act once
 
 
-def route_key(code: int, dnd_code: int, wake_code: int) -> str | None:
+def route_key(code: int, dnd_code: int, wake_code: int | tuple[int, ...],
+              play_pause_wakes: bool = True) -> str | None:
     """Map a key code to an action, or None if it is not one of ours.
 
     Kept pure (no I/O) so the routing is unit-testable and the configurable
     shutter codes are matched before falling through to 'unknown'. Both the
-    headset play/pause family and the configured shutter wake_code wake her."""
-    if code in WAKE_CODES or (wake_code and code == wake_code):
+    headset play/pause family and the configured shutter wake_code wake her.
+
+    `play_pause_wakes=False` drops the play/pause family, leaving wake_code as
+    the only way in. That is for headsets whose single tap is play/pause and
+    which offer a *distinct* second gesture — binding wake to the distinct one
+    keeps a tap meaning 'pause the music' instead of summoning her by accident.
+    """
+    wake_set = {wake_code} if isinstance(wake_code, int) else set(wake_code or ())
+    wake_set.discard(0)   # 0 means "not mapped", never a real key code
+    if (play_pause_wakes and code in WAKE_CODES) or code in wake_set:
         return "wake"
     if dnd_code and code == dnd_code:
         return "dnd"
@@ -63,7 +72,8 @@ def find_key_devices() -> list:
 
 
 async def watch_buttons(*, on_wake=None, on_dnd=None,
-                        dnd_code: int = 0, wake_code: int = 0) -> None:
+                        dnd_code: int = 0, wake_code: int = 0,
+                        play_pause_wakes: bool = True) -> None:
     """Forever: attach to every key device and route presses to callbacks.
 
     Callbacks are plain callables invoked on the event loop (they must be quick
@@ -87,7 +97,8 @@ async def watch_buttons(*, on_wake=None, on_dnd=None,
             async for event in device.async_read_loop():
                 if event.type != evdev.ecodes.EV_KEY or event.value != 1:
                     continue  # key-down only (press, not release/autorepeat)
-                action = route_key(event.code, dnd_code, wake_code)
+                action = route_key(event.code, dnd_code, wake_code,
+                                   play_pause_wakes)
                 if action is None:
                     # Not debounced: this is how an unknown shutter button is
                     # identified — press it once and read the code from here.

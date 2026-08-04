@@ -784,3 +784,63 @@ def test_voice_not_ready_without_key(tmp_path):
 
     config = load_config(tmp_path / "none.toml")
     assert not config.voice_ready
+
+
+def test_play_pause_can_be_taken_out_of_the_wake_family():
+    """The pTron glasses: single tap is play/pause (200/201), double tap is
+    165. Binding wake to 165 is only useful if a single tap stops waking her,
+    otherwise every attempt to pause music summons her instead."""
+    from venom.buttons import route_key
+
+    # default: the play/pause family still wakes
+    assert route_key(200, dnd_code=0, wake_code=165) == "wake"
+    assert route_key(201, dnd_code=0, wake_code=165) == "wake"
+
+    # play_pause_wakes=False: only the distinct gesture wakes
+    assert route_key(200, dnd_code=0, wake_code=165, play_pause_wakes=False) is None
+    assert route_key(201, dnd_code=0, wake_code=165, play_pause_wakes=False) is None
+    assert route_key(165, dnd_code=0, wake_code=165, play_pause_wakes=False) == "wake"
+    # DND is unaffected by the play/pause switch
+    assert route_key(115, dnd_code=115, wake_code=165, play_pause_wakes=False) == "dnd"
+
+
+def test_mic_on_demand_config_defaults_off(tmp_path):
+    """Waking by button only is a real behaviour change — it must be opt-in."""
+    from venom.config import AudioConfig, ButtonsConfig, load_config
+
+    assert AudioConfig().mic_on_demand is False
+    assert ButtonsConfig().play_pause_wakes is True
+
+    path = tmp_path / "venom.toml"
+    path.write_text(
+        '[audio]\noutput = "bluetooth"\nbluetooth_mac = "AA:BB"\n'
+        "mic_on_demand = true\n\n[buttons]\nwake_code = 165\n"
+        "play_pause_wakes = false\n",
+        encoding="utf-8")
+    cfg = load_config(path)
+    assert cfg.audio.mic_on_demand is True
+    assert cfg.buttons.wake_code == 165
+    assert cfg.buttons.play_pause_wakes is False
+
+
+def test_two_devices_can_both_wake_her():
+    """The shutter remote and the glasses shouldn't have to displace each
+    other — 114 stays bound while 165 is added."""
+    from venom.buttons import route_key
+
+    codes = (114, 165)
+    assert route_key(114, dnd_code=115, wake_code=codes, play_pause_wakes=False) == "wake"
+    assert route_key(165, dnd_code=115, wake_code=codes, play_pause_wakes=False) == "wake"
+    assert route_key(200, dnd_code=115, wake_code=codes, play_pause_wakes=False) is None
+    # an unset wake_code (0) must never match a real key
+    assert route_key(0, dnd_code=115, wake_code=(0,), play_pause_wakes=False) is None
+
+
+def test_wake_codes_parse_from_toml(tmp_path):
+    from venom.config import load_config
+
+    path = tmp_path / "venom.toml"
+    path.write_text("[buttons]\nwake_code = 114\nwake_codes = [165]\n", encoding="utf-8")
+    cfg = load_config(path)
+    assert cfg.buttons.wake_code == 114
+    assert cfg.buttons.wake_codes == (165,)

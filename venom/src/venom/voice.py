@@ -273,7 +273,9 @@ class VoiceOrchestrator:
             on_wake=self._on_wake_button,
             on_dnd=self._on_dnd_button,
             dnd_code=self.config.buttons.dnd_code,
-            wake_code=self.config.buttons.wake_code))
+            wake_code=((self.config.buttons.wake_code,)
+                       + self.config.buttons.wake_codes),
+            play_pause_wakes=self.config.buttons.play_pause_wakes))
 
         # Phone notifications (WhatsApp): chime on arrival, read on demand.
         self.notifications.start()
@@ -409,6 +411,17 @@ class VoiceOrchestrator:
 
             suppressor = NoiseSuppressor()
 
+        # Mic on demand only makes sense on Bluetooth: it is a Bluetooth
+        # profile switch, and a USB headset costs no radio airtime anyway.
+        mic_on_demand = (self.config.audio.mic_on_demand
+                         and self.config.audio.use_bluetooth)
+        bt_mac = self.config.audio.bluetooth_mac
+        if mic_on_demand:
+            from venom.audio.routing import (
+                pin_bluetooth_audio,
+                release_bluetooth_mic,
+            )
+
         speaker = SpeakerStream(pick)
         mic = MicStream(pick, loop, suppressor=suppressor)
         speaker.start()
@@ -425,7 +438,31 @@ class VoiceOrchestrator:
                 # a console prompt breaks in (cold session, ~4s to first
                 # reply); the stream ending resumes the normal cycle.
                 cold_wake = False
-                if self._bt_focused():
+                # Mic on demand: idle with the headset dropped to A2DP, so
+                # HFP's SCO link stops reserving 2.4GHz slots and Wi-Fi gets
+                # its throughput back (~20 KB/s -> ~370 KB/s on this Pi). This
+                # *replaces* the wake-word phase rather than preceding it:
+                # with no microphone there is nothing to hear a wake word, so
+                # the button is the only way in, and the session is always
+                # cold. That cost is the deal — see audio.mic_on_demand.
+                if mic_on_demand:
+                    mic.stop()
+                    self._drain(mic)
+                    await asyncio.to_thread(release_bluetooth_mic, 2.0, bt_mac)
+                    self.state = "idle (mic released)"
+                    await self._idle_a2dp(speaker)
+                    self.state = "taking the microphone back"
+                    if not await asyncio.to_thread(pin_bluetooth_audio, 3.0, 6,
+                                                   bt_mac):
+                        raise StreamsDied(
+                            "could not take the microphone back after idle")
+                    # The profile switch re-creates the nodes, so the old
+                    # stream points at a device that no longer exists.
+                    mic = MicStream(current_devices(bluetooth=True), loop,
+                                    suppressor=suppressor)
+                    mic.start()
+                    cold_wake = True
+                elif self._bt_focused():
                     self.state = "bluetooth audio"
                     log.info("bluetooth focus: external audio streaming — "
                              "wake word off, no pre-warm (button breaks in)")
@@ -499,6 +536,29 @@ class VoiceOrchestrator:
             self._speaker = None
             mic.stop()
             speaker.stop()
+
+    async def _idle_a2dp(self, speaker: SpeakerStream) -> None:
+        """Wait, with no microphone at all, until the user asks for her.
+
+        The counterpart to _focus_phase, and deliberately simpler: there is no
+        mic to guard here, so none of the starvation or dead-capture logic
+        applies — which is the whole point, because a live capture is what
+        costs the airtime. Timers and reminders still chime; only listening
+        is off, and by construction nothing can hear a wake word, so the
+        button (or a console prompt) is the only way back in.
+        """
+        self._manual_wake.clear()
+        while True:
+            self._announce_due_alerts(speaker)
+            if not self.inbox.empty():
+                log.info("idle (mic released): console prompt — waking (cold)")
+                return
+            if self._manual_wake.is_set():
+                self._manual_wake.clear()
+                if not self._dnd:
+                    log.info("idle (mic released): wake button — waking (cold)")
+                    return
+            await asyncio.sleep(0.25)
 
     def _bt_focused(self) -> bool:
         """True while an external device (laptop/phone) is actively streaming

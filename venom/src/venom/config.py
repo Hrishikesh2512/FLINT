@@ -85,6 +85,13 @@ class AudioConfig:
     # button (or a console prompt) breaks in, and the stream ending
     # restores the normal cycle automatically.
     receiver_focus: bool = True
+    # Mic on demand: idle in A2DP (speaker only) and take the microphone back
+    # only for a conversation. HFP's SCO link reserves 2.4GHz airtime and, on
+    # the Pi's shared antenna, collapses Wi-Fi throughput (~20 KB/s on HFP vs
+    # ~370 on A2DP — see audio/routing.release_bluetooth_mic). The trade is
+    # the wake word: with no mic there is nothing to hear it, so waking is by
+    # button only. Off by default — it is a real change in how she is woken.
+    mic_on_demand: bool = False
 
     def __post_init__(self) -> None:
         if self.output not in ("auto", "bluetooth", "usb"):
@@ -241,6 +248,15 @@ class ButtonsConfig:
 
     dnd_code: int = 0    # shutter button 1: toggle do-not-disturb
     wake_code: int = 0   # shutter button 2: wake Venom (a physical wake button)
+    # Further codes that also wake her, so a second device doesn't have to
+    # displace the first — e.g. the shutter remote on wake_code and the
+    # glasses' double tap (165) here, both live at once.
+    wake_codes: tuple[int, ...] = ()
+    # Whether the headset's play/pause family (WAKE_CODES) still wakes her.
+    # Set false when the headset's single tap is wanted for music and a
+    # distinct gesture is bound to wake_code instead — e.g. the pTron glasses,
+    # whose single tap is play/pause (200/201) and double tap is 165.
+    play_pause_wakes: bool = True
 
 
 @dataclass(frozen=True)
@@ -575,6 +591,7 @@ def load_config(path: Path | None = None) -> VenomConfig:
             noise_suppression=bool(audio.get("noise_suppression", True)),
             receiver=bool(audio.get("receiver", True)),
             receiver_focus=bool(audio.get("receiver_focus", True)),
+            mic_on_demand=bool(audio.get("mic_on_demand", False)),
         ),
         screen=ScreenConfig(
             enabled=bool(screen.get("enabled", True)),
@@ -609,6 +626,8 @@ def load_config(path: Path | None = None) -> VenomConfig:
         buttons=ButtonsConfig(
             dnd_code=int(buttons.get("dnd_code", 0)),
             wake_code=int(buttons.get("wake_code", 0)),
+            wake_codes=tuple(int(c) for c in buttons.get("wake_codes", []) if int(c)),
+            play_pause_wakes=bool(buttons.get("play_pause_wakes", True)),
         ),
         phone=PhoneConfig(
             ntfy_server=str(phone.get("ntfy_server", "https://ntfy.sh")).strip(),

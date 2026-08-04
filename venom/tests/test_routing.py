@@ -68,3 +68,35 @@ def test_pin_skips_profile_switch_when_mic_already_live(monkeypatch):
     assert all(call[:2] != ["wpctl", "set-profile"] for call in calls)
     defaults = [call for call in calls if call[:2] == ["wpctl", "set-default"]]
     assert {call[2] for call in defaults} == {"71", "72"}
+
+
+# ── A2DP release: giving the microphone up to get the airtime back ──────────
+def test_pick_a2dp_profile_prefers_plain_over_xq():
+    from venom.audio.routing import pick_a2dp_profile
+
+    profiles = [
+        {"index": 0, "name": "off"},
+        {"index": 2, "name": "a2dp-sink-sbc_xq"},
+        {"index": 1, "name": "a2dp-sink"},
+        {"index": 3, "name": "headset-head-unit"},
+    ]
+    # sbc_xq is a higher-bitrate SBC — the wrong trade when the entire point
+    # of switching to A2DP is to stop spending 2.4GHz airtime.
+    assert pick_a2dp_profile(profiles)["name"] == "a2dp-sink"
+
+
+def test_pick_a2dp_profile_absent():
+    from venom.audio.routing import pick_a2dp_profile
+
+    assert pick_a2dp_profile([{"index": 0, "name": "headset-head-unit"}]) is None
+
+
+def test_a2dp_and_headset_profiles_are_distinct():
+    from venom.audio.routing import pick_a2dp_profile
+
+    profiles = enum_profiles(GRAPH, 70)
+    a2dp = pick_a2dp_profile(profiles)
+    headset = pick_headset_profile(profiles)
+    assert a2dp["name"] == "a2dp-sink"
+    assert "headset-head-unit" in headset["name"]
+    assert a2dp["index"] != headset["index"]

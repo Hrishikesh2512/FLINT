@@ -72,6 +72,57 @@ def pick_headset_profile(profiles: list[dict]) -> dict | None:
     return headset[0]
 
 
+def pick_a2dp_profile(profiles: list[dict]) -> dict | None:
+    """The A2DP profile — speaker only, no microphone."""
+    a2dp = [p for p in profiles if str(p.get("name", "")).startswith("a2dp-sink")]
+    if not a2dp:
+        return None
+    # Plain a2dp-sink before the sbc_xq variant: xq is a higher-bitrate SBC,
+    # which is exactly the wrong trade when the point of being here is airtime.
+    a2dp.sort(key=lambda p: (str(p.get("name", "")) != "a2dp-sink",))
+    return a2dp[0]
+
+
+def release_bluetooth_mic(wait: float = 2.0, mac: str = "") -> bool:
+    """Drop the headset to A2DP: speaker alive, microphone gone. True on success.
+
+    The inverse of pin_bluetooth_audio, and the reason it exists is airtime,
+    not audio. HFP carries the mic over a SCO link, which reserves periodic
+    2.4GHz slots; on a Pi, where one antenna serves both radios, that starves
+    Wi-Fi. Measured on this device, same link, minutes apart:
+
+        HFP (mic live)    ~20 KB/s
+        A2DP (speaker)   ~370 KB/s
+        Bluetooth off    ~845 KB/s
+
+    Ping barely moves across those three — small packets slip between the
+    reserved slots — so this is only ever visible in a throughput test.
+    Idling in A2DP buys that bandwidth back for everything that isn't a
+    conversation; pin_bluetooth_audio takes the mic back on wake.
+    """
+    objects = pw_dump()
+    card = find_bluez_card(objects, mac)
+    if card is None:
+        log.info("no bluez card to release")
+        return False
+
+    target = pick_a2dp_profile(enum_profiles(objects, card))
+    if target is None:
+        log.warning("card %d offers no a2dp profile", card)
+        return False
+
+    _run(["wpctl", "set-profile", str(card), str(target.get("index"))])
+    log.info("card %d -> profile %s (mic released)", card, target.get("name"))
+    time.sleep(wait)  # nodes are re-created after a profile switch
+
+    # Re-assert the speaker as default: the sink is a *new* node id after the
+    # switch, and without this she would keep talking into the old one.
+    nodes = find_bluez_nodes(pw_dump(), card)
+    for node_id in nodes.values():
+        _run(["wpctl", "set-default", str(node_id)])
+    return "sink" in nodes
+
+
 def find_bluez_nodes(objects: list[dict], card_id: int) -> dict[str, int]:
     """{'sink': id, 'source': id} for nodes belonging to the bluez card."""
     nodes: dict[str, int] = {}
