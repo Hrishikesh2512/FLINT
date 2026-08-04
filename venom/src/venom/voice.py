@@ -452,8 +452,11 @@ class VoiceOrchestrator:
                     self.state = "idle (mic released)"
                     await self._idle_a2dp(speaker)
                     self.state = "taking the microphone back"
+                    # force=True: we released the mic ourselves, so the card is
+                    # on A2DP whatever a stale graph claims. Without it the
+                    # fast path "sees" a leftover source and skips the switch.
                     if not await asyncio.to_thread(pin_bluetooth_audio, 3.0, 6,
-                                                   bt_mac):
+                                                   bt_mac, True):
                         raise StreamsDied(
                             "could not take the microphone back after idle")
                     # The profile switch re-creates the nodes, so the old

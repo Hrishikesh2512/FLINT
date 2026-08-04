@@ -100,3 +100,27 @@ def test_a2dp_and_headset_profiles_are_distinct():
     assert a2dp["name"] == "a2dp-sink"
     assert "headset-head-unit" in headset["name"]
     assert a2dp["index"] != headset["index"]
+
+
+def test_force_skips_the_mic_already_live_fast_path(monkeypatch):
+    """A leftover source node (or a stale pw-dump) made the fast path decide
+    the mic was live and skip the switch back from A2DP — she chimed and then
+    heard nothing. force=True must always issue the profile switch."""
+    from venom.audio import routing
+
+    calls: list[list[str]] = []
+    monkeypatch.setattr(routing, "pw_dump", lambda: GRAPH)
+    monkeypatch.setattr(routing, "_run", lambda args, timeout=10: calls.append(args) or "")
+    monkeypatch.setattr(routing.time, "sleep", lambda _s: None)
+
+    # GRAPH has a source (id 72), so the fast path would normally fire.
+    assert routing.pin_bluetooth_audio(0, 1, "", False) is True
+    assert not any("set-profile" in a for a in calls), "fast path should not switch"
+
+    calls.clear()
+    assert routing.pin_bluetooth_audio(0, 1, "", True) is True
+    profile_calls = [a for a in calls if "set-profile" in a]
+    assert profile_calls, "force must issue a profile switch"
+    # and it must target the headset profile, not A2DP
+    headset = routing.pick_headset_profile(routing.enum_profiles(GRAPH, 70))
+    assert str(headset["index"]) in profile_calls[0]

@@ -175,7 +175,7 @@ def pin_usb_audio(wait: float = 1.0, attempts: int = 4) -> bool:
 
 
 def pin_bluetooth_audio(wait: float = 2.0, attempts: int = 3,
-                        mac: str = "") -> bool:
+                        mac: str = "", force: bool = False) -> bool:
     """Switch the connected headset to its mic-capable profile and make its
     nodes the defaults. True when a Bluetooth microphone source exists.
     Pass the headset's MAC when other Bluetooth audio devices (a laptop
@@ -192,8 +192,14 @@ def pin_bluetooth_audio(wait: float = 2.0, attempts: int = 3,
         # profile is active. Re-switching the profile here would tear the
         # Bluetooth audio link down audibly for nothing — just re-assert
         # the defaults (silent) and report ready.
+        # `force` skips this: after release_bluetooth_mic we *know* the card is
+        # on A2DP, and a source node lingering in the graph (or a stale pw-dump
+        # — it can time out under load) makes this fast path conclude the mic
+        # is live and return without ever switching back. The stream then opens
+        # cleanly onto nothing and she hears silence, which is the worst way to
+        # fail: chiming, apparently awake, deaf.
         nodes = find_bluez_nodes(objects, card)
-        if "source" in nodes:
+        if "source" in nodes and not force:
             for node_id in nodes.values():
                 _run(["wpctl", "set-default", str(node_id)])
             log.info("bluetooth mic already live (sink=%s source=%s)",
