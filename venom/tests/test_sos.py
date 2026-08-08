@@ -9,8 +9,7 @@ nobody's phone buzzing.
 import pytest
 
 from venom.config import VenomConfig
-from venom.sos import (DEFAULT_MESSAGE, EmergencySos, SosStore,
-                       manage_contacts)
+from venom.sos import DEFAULT_MESSAGE, EmergencySos, SosStore, manage_contacts
 from venom.tools_pi import TimerBoard, build_pi_registry
 
 

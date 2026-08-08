@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from venom.contacts_import import (import_file, parse, parse_google_csv,
-                                    parse_vcards)
+from venom.contacts_import import import_file, parse, parse_google_csv, parse_vcards
 from venom.stores import ConnectionStore
 
 VCARD = """BEGIN:VCARD

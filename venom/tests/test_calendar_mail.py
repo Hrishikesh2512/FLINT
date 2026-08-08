@@ -2,7 +2,7 @@
 
 import datetime as dt
 
-from venom.config import CalendarConfig, MailConfig, VenomConfig, load_config
+from venom.config import MailConfig, VenomConfig, load_config
 from venom.gcal import CalendarFeed, CalendarWatcher, parse_events
 from venom.gmail import Mailbox, _decode, _sender_name
 

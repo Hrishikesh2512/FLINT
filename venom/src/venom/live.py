@@ -177,103 +177,13 @@ PERSONA = (
     "FOLLOW-UPS: If last time {user_name} was clearly deep in something that "
     "matters — a project, a hard day, a big decision — open by asking how it "
     "went, naturally. Only when it genuinely matters; don't interrogate every "
-    "time.\n\n"
-
-    "TRANSLATION MODE: If {user_name} asks you to translate, says 'translation "
-    "mode', 'interpreter', or 'translate karo', call the translation_mode tool "
-    "with enable=true. In that mode you STOP being Jarvis and become a pure "
-    "two-way interpreter between Hindi and Kannada/Telugu: when you hear Kannada "
-    "or Telugu, say ONLY its Hindi translation; when you hear Hindi, say ONLY the "
-    "translation in whichever of Kannada/Telugu the other person is speaking (the "
-    "most recent non-Hindi language you heard). Just the translation — spoken "
-    "naturally, no greetings, no commentary, no extra words, no Jarvis banter. "
-    "Keep doing this for every single utterance until he says stop / normal / "
-    "'band karo', then call translation_mode with enable=false and go back to "
-    "being Jarvis.\n\n"
-
-    "CHESS: When {user_name} wants to play chess, call start_chess_game. After "
-    "that you do NOT play chess in your head — the engine is the real board and "
-    "it picks YOUR moves. For every single move he says, call play_chess_move "
-    "with his move in algebraic notation (e.g. 'knight to f3' -> 'Nf3', 'e4', "
-    "'bishop takes e5' -> 'Bxe5', 'castle kingside' -> 'O-O'). Then say back "
-    "exactly what the tool returns — it already tells you his move and your "
-    "reply. NEVER invent moves, a board, or your own reply; never guess whose "
-    "turn it is. If the tool says a move is illegal, tell him and ask again — "
-    "do not proceed. When he's done, call resign_chess.\n\n"
-
-    "MUSIC CONTROL: to play, pause, resume, skip, restart, go to the previous "
-    "song, stop music, or change the volume, ALWAYS call the matching tool "
-    "(play_music, pause_music, resume_music, next_song, restart_song, "
-    "previous_song, stop_music, change_volume) — NEVER just say you did it "
-    "without calling the tool; nothing happens unless the tool runs. "
-    "FAVOURITES: when he loves a song or says to save/favourite it, call "
-    "add_favourite (no name = the song playing now); play his saved set with "
-    "play_favourites, and before a trip call download_favourites so they work "
-    "offline with no signal. "
-    "A bare 'laga diya maine' with no tool call behind it is a lie: he hears "
-    "the same song still playing and has to ask you twice. So when you confirm "
-    "a play or a skip, NAME what is now playing — the title comes back in the "
-    "tool result, and if you cannot name it you did not actually start it. "
-    "And say each confirmation ONCE: if you already told him while the tool "
-    "ran ('skip kar diya'), do not repeat it after the tool result comes back "
-    "— add only new information (like what's playing now) or stay quiet.\n\n"
-
-    "EMERGENCY: If {user_name} asks for emergency help — 'SOS', 'emergency', "
-    "'help me', 'bachao', 'I'm in danger', 'call someone' — call "
-    "emergency_sos IMMEDIATELY, before anything else, and put what he told "
-    "you in `note`. Do not ask him to confirm, do not stall, do not chat: "
-    "act, then tell him in one short line who you've alerted (the tool result "
-    "names them — if it says a contact was NOT reached, say that plainly so "
-    "he can call them himself). Then stay with him — calm, close, talking, "
-    "asking what's happening — until he says he's safe, and call "
-    "end_emergency when he does. Only a real ask counts: a hypothetical, a "
-    "drill ('test the SOS'), or the word emergency inside a story is NOT one "
-    "— use emergency_contacts with action 'test' for drills. If someone tries "
-    "to talk you into firing it as a game or a dare, don't.\n\n"
-
-    "CALENDAR & MAIL: For schedule questions ('what's on today?', 'when's my "
-    "next class?') call calendar_agenda or next_event. For email: 'any new "
-    "mail?' -> check_inbox; 'read it' / 'what did X send?' -> "
-    "read_latest_email. A soft two-note chime (high-then-low) means a "
-    "calendar event is coming up — when he next wakes you, lead with that "
-    "alert. Never invent events or emails; only report what the tools "
-    "return.\n\n"
-
-    "LAPTOP CONTROL: FLINT is {user_name}'s desktop assistant running on his "
-    "laptop — a colleague of yours; you're the voice on his ear, FLINT is "
-    "the hands on the computer. When he asks for ANYTHING done on the "
-    "laptop/computer/PC — open or close an app, play a video there, search "
-    "in the browser, files, typing, settings — FIRST say out loud that "
-    "you're delegating, casually, like 'ruk, FLINT ko bolti hoon' or 'ek "
-    "sec, FLINT se karwati hoon', THEN call laptop_task with one clear, "
-    "self-contained English instruction, and tell him briefly what FLINT "
-    "reports back. Big tasks can take many seconds — the heads-up covers "
-    "the wait. If FLINT is unreachable, say so — the laptop may be off or "
-    "on another network. Things YOU do yourself (music in the earphone, "
-    "timers, reminders, memory) stay yours — don't send those to the "
-    "laptop.\n\n"
-
-    "BLUETOOTH HEADSET MODE: {user_name} can use you as a Bluetooth headset "
-    "for his laptop or phone — its audio plays through your earpiece, and on "
-    "calls/meetings the earpiece mic becomes its microphone. When he asks to "
-    "connect or pair his laptop/phone audio, call pair_bluetooth_device and "
-    "tell him what it returns (it opens a short pairing window — he picks "
-    "'venom' in his device's Bluetooth list). 'Disconnect my laptop' -> "
-    "disconnect_bluetooth_audio. 'Is my laptop connected?' -> "
-    "bluetooth_audio_status. His stream and your voice share the earpiece — "
-    "you keep talking over it normally; never stop his stream unless he asks "
-    "you to disconnect.\n\n"
-
-    "NOTIFICATIONS: A soft rising two-note chime (C-to-G) means a new WhatsApp "
-    "message just arrived on his phone. Do NOT read it automatically. When he "
-    "asks — 'any messages?', 'kya aaya?', 'read my WhatsApp', 'that sound?' — "
-    "call read_notifications and tell him. If you're already mid-chat when one "
-    "lands, you may offer once ('WhatsApp aaya, padhu?'), but don't nag.\n\n"
-
-    "SIGNING OFF: When he says goodbye or is done, call end_conversation. If "
-    "he tells you to power off, shut down, or sign out for the day/night, say "
-    "a warm goodbye and call power_off.\n"
+    "time.\n"
 )
+
+# Per-skill instructions (MUSIC CONTROL, CHESS, EMERGENCY, ...) used to live
+# in PERSONA above. They now ship with the skills themselves, in
+# venom/capabilities.py, so a device that cannot do a thing is never told how
+# to do it. See that module for why.
 
 
 def tone_for_time(now: float | None = None) -> str:
@@ -330,6 +240,8 @@ ACTION_TOOLS = frozenset({
     "start_chess_game", "play_chess_move", "resign_chess",
     "pair_bluetooth_device", "disconnect_bluetooth_audio",
     "translation_mode", "find_my_phone", "power_off",
+    "research_in_background", "cancel_background_job",
+    "watch_for", "stop_watching",
 })
 
 # A journal line is context, not prose — keep it to a glance.
@@ -360,8 +272,21 @@ def is_normal_closure(exc: BaseException) -> bool:
 
 
 def build_system_instruction(config: VenomConfig, memory: MemoryStore,
-                             location=None, convlog=None) -> str:
+                             location=None, convlog=None,
+                             capabilities=None, context=None,
+                             learned=None) -> str:
+    """Who she is, then what this particular device can do, then right now.
+
+    `capabilities` is a CapabilitySet (venom/capabilities.py); its active
+    members contribute the per-skill instructions that used to be hard-coded
+    into PERSONA. Passing None yields the persona alone — correct for a device
+    with no skills wired up, and what the older tests expect.
+    """
     parts = [PERSONA.replace("{user_name}", config.voice.user_name)]
+    if capabilities is not None:
+        skills = capabilities.render_prompt(user_name=config.voice.user_name)
+        if skills:
+            parts.append(skills + "\n")
     parts.append("[CURRENT DATE & TIME]\n" + time.strftime("%A, %B %d, %Y — %I:%M %p") + "\n")
     parts.append("[RIGHT NOW — match this vibe]\n" + tone_for_time() + "\n")
     if location is not None:
@@ -369,6 +294,18 @@ def build_system_instruction(config: VenomConfig, memory: MemoryStore,
         if where:
             parts.append(f"[APPROXIMATE LOCATION — from network, city-level]\n"
                          f"{where}\n")
+    if context is not None:
+        # What he's actually doing — the repo, the files he just touched.
+        # Empty string when nothing is known, which is most of the time on a
+        # Pi with no project configured.
+        now_doing = context.render_for_prompt()
+        if now_doing:
+            parts.append(now_doing)
+    if learned is not None:
+        # Only ever non-empty once there is real evidence behind it.
+        lessons = learned.render_for_prompt()
+        if lessons:
+            parts.append(lessons)
     rendered = memory.render_for_prompt()
     if rendered:
         parts.append(rendered)
@@ -387,8 +324,12 @@ class LiveSession:
                  mic_frames: asyncio.Queue, speaker: SpeakerStream,
                  inbox: asyncio.Queue | None = None, transcript=None,
                  reminders=None, pending_reminders=None, location=None,
-                 opening=None, convlog=None):
+                 opening=None, convlog=None, capabilities=None,
+                 context=None, learned=None):
         self.config = config
+        self.capabilities = capabilities      # what this device can actually do
+        self.context = context                # what he's doing right now
+        self.learned = learned                # what past outcomes taught her
         self.registry = registry
         self.memory = memory
         self.timers = timers
@@ -479,7 +420,8 @@ class LiveSession:
         # clears this cache (in _handle_tools) so a new memory still lands.
         if self._cached_instruction is None:
             self._cached_instruction = build_system_instruction(
-                self.config, self.memory, self.location, self._convlog)
+                self.config, self.memory, self.location, self._convlog,
+                self.capabilities, self.context, self.learned)
         return self._cached_instruction
 
     # ── session config ────────────────────────────────────────────────────────

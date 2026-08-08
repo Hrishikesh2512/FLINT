@@ -141,3 +141,32 @@ def test_buttons_and_phone_parse(tmp_path):
     assert config.buttons.wake_code == 114
     assert config.phone.ntfy_topic == "venom-abc123"
     assert config.phone.ready is True
+
+
+def test_override_applies_array_of_tables(tmp_path, monkeypatch):
+    """Regression: [[deploy]] and [[agent]] in override.toml were silently
+    dropped — the merge only handled dict sections, so a deploy target
+    configured on a running device did nothing and said nothing."""
+    override = tmp_path / "override.toml"
+    override.write_text(
+        '[[deploy]]\nname = "staging"\nhost = "staging.example.com"\n\n'
+        '[[agent]]\nname = "claude"\ncommand = ["claude", "-p", "{goal}"]\n',
+        encoding="utf-8")
+    monkeypatch.setenv("VENOM_OVERRIDE", str(override))
+    from venom.config import load_config
+
+    cfg = load_config(tmp_path / "absent.toml")
+    assert [d["name"] for d in cfg.dev.deploy_targets] == ["staging"]
+    assert [a["name"] for a in cfg.dev.agents] == ["claude"]
+
+
+def test_override_replaces_rather_than_appends(tmp_path, monkeypatch):
+    """An allowlist that grows by being overridden is not an allowlist."""
+    base = tmp_path / "venom.toml"
+    base.write_text('[[deploy]]\nname = "old"\n', encoding="utf-8")
+    override = tmp_path / "override.toml"
+    override.write_text('[[deploy]]\nname = "new"\n', encoding="utf-8")
+    monkeypatch.setenv("VENOM_OVERRIDE", str(override))
+    from venom.config import load_config
+
+    assert [d["name"] for d in load_config(base).dev.deploy_targets] == ["new"]

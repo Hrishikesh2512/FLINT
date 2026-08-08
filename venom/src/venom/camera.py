@@ -119,6 +119,54 @@ def describe_scene(config: VenomConfig, question: str = "") -> str:
         return "I took a look but couldn't make sense of it just now."
 
 
+#: How the model must answer a "is X here?" question. Free-form description
+#: is useless for finding something: it will happily narrate the whole room
+#: and never actually commit to yes or no.
+_FIND_SYSTEM = (
+    "You are the eyes of a voice assistant, looking for one specific thing.\n\n"
+    "Answer in ONE short spoken sentence, and it must do two jobs:\n"
+    "- say clearly whether the thing is visible, yes or no\n"
+    "- if it is, say WHERE, the way a person would point: 'on the table to "
+    "your left', 'behind the laptop', 'bottom right of the shelf'\n\n"
+    "Rules:\n"
+    "- If you cannot see it, say so plainly. Do NOT describe what is there "
+    "instead, and do NOT guess at where it 'probably' is — a confident wrong "
+    "direction sends someone across the room for nothing.\n"
+    "- If something merely resembles it, say that it might be, and what makes "
+    "you unsure.\n"
+    "- No markdown, no lists, no preamble."
+)
+
+
+def find_object(config: VenomConfig, thing: str) -> str:
+    """Look for one specific thing and say whether it's there, and where.
+
+    Distinct from `describe_scene`: "what do you see" and "where are my keys"
+    want different answers, and asking the second with the first's prompt gets
+    a tour of the room with the keys never mentioned.
+    """
+    thing = (thing or "").strip()
+    if not thing:
+        return "What am I looking for?"
+    try:
+        jpeg = capture_jpeg()
+    except CameraError as exc:
+        log.warning("camera capture failed: %s", exc)
+        return ("I couldn't get a picture from the camera — is it connected "
+                "and enabled?")
+    import base64
+
+    try:
+        provider = GeminiProvider(config.gemini_api_key)
+        return provider.complete_vision(
+            f"Is there {thing} in this picture? If so, where exactly?",
+            base64.b64encode(jpeg).decode("ascii"), "image/jpeg",
+            provider.vision_models[0], system=_FIND_SYSTEM, max_tokens=200)
+    except Exception as exc:  # network / API — never crash the voice loop
+        log.warning("vision find failed: %s", exc)
+        return f"I had a look for {thing} but couldn't make it out just now."
+
+
 def push_photo(server: str, topic: str, jpeg: bytes, caption: str = "",
                timeout: float = 12.0) -> bool:
     """PUT the JPEG to an ntfy topic as an image attachment. The subscribed

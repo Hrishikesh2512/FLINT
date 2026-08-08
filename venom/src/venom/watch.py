@@ -50,7 +50,6 @@ from collections.abc import Callable
 from pathlib import Path
 
 from flint_core.llm.base import ChatMessage
-
 from venom.stores import _JsonStore
 
 log = logging.getLogger("venom.watch")

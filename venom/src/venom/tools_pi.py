@@ -208,7 +208,7 @@ def change_system_volume(delta: int) -> str:
             return ("Volume up a bit." if delta > 0 else "Volume down a bit.")
     except (OSError, subprocess.SubprocessError):
         pass
-    return f"Could not change the volume."
+    return "Could not change the volume."
 
 
 # ── device health ─────────────────────────────────────────────────────────────
@@ -322,7 +322,9 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
                       location=None, chess=None, notifications=None,
                       receiver=None, calendar=None, mailbox=None,
                       whatsapp=None, connections=None, lights=None,
-                      tv=None, watches=None, sos=None) -> ToolRegistry:
+                      tv=None, watches=None, jobs=None, audit=None,
+                      projects=None, outcomes=None, archive=None,
+                      sos=None) -> ToolRegistry:
     reg = ToolRegistry(platform="linux")
 
     if calendar is not None:
@@ -1265,6 +1267,111 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
                 return f"Stopped all {dropped} watches."
             return f"Stopped {dropped} watch{'es' if dropped > 1 else ''}."
 
+    # ── background jobs (work that outlives this conversation) ───────────────
+    if jobs is not None:
+        @reg.tool(
+            description=(
+                "Hands a whole question to your background worker to go and "
+                "research properly — several web searches, then a written "
+                "answer — and comes back to him with it later. Use when he "
+                "asks you to look into / research / dig into something, or "
+                "when a real answer plainly needs more than one search: "
+                "'iske baare mein pata karo', 'research this properly', "
+                "'find out everything about X and tell me'.\n"
+                "NOT for a quick fact — use web_search for anything one search "
+                "answers, because that comes back inside this conversation.\n"
+                "`goal` must be self-contained enough to work on an hour from "
+                "now: resolve 'it', 'that' and 'him' into real names first. "
+                "Tell him you'll go and do it and come back — then move on. Do "
+                "NOT wait for it or keep asking about it in this conversation."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "goal": {"type": "string",
+                             "description": "The question to research, self-contained"},
+                },
+                "required": ["goal"],
+            },
+        )
+        def research_in_background(goal: str) -> str:
+            try:
+                jobs.submit("research", goal, origin="voice")
+            except ValueError as exc:      # at the per-type ceiling
+                return str(exc)
+            except Exception as exc:       # noqa: BLE001 — never a spoken traceback
+                return f"I couldn't start that: {exc}"
+            return ("On it — I'll go and look into that properly and come back "
+                    "to you when I have the answer.")
+
+        @reg.tool(
+            description=("Says what background work is running and how far "
+                         "along it is. Use for 'what are you working on?', "
+                         "'us research ka kya hua?', 'any progress?'."),
+        )
+        def background_jobs() -> str:
+            return jobs.summary()
+
+        @reg.tool(
+            description=(
+                "Stops background work. Pass a few words of what he wants "
+                "stopped; omit `what` to stop everything. Use for 'stop that "
+                "research', 'sab cancel kar do'."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "what": {"type": "string",
+                             "description": "Words identifying the job; omit for all"},
+                },
+            },
+        )
+        def cancel_background_job(what: str = "") -> str:
+            stopped = jobs.cancel_matching(what)
+            if not stopped:
+                return "I'm not working on anything matching that."
+            if not what.strip():
+                return f"Stopped all {stopped} background jobs."
+            return f"Stopped {stopped} job{'s' if stopped > 1 else ''}."
+
+    if jobs is not None:
+        register_build_tools(reg, jobs, default_dir=config.build_dir)
+
+    if config.dev.repos:
+        register_dev_tools(reg, config.dev, jobs=jobs)
+
+    if archive is not None:
+        register_recall_tools(reg, archive)
+
+    if config.documents_dir:
+        register_document_tools(reg, config.documents_dir)
+
+    if projects is not None:
+        register_project_tools(reg, projects)
+
+    if outcomes is not None:
+        register_learning_tools(reg, outcomes)
+
+    if audit is not None:
+        @reg.tool(
+            description=(
+                "Says what she has actually done recently — the real record of "
+                "tool calls, including anything she was refused. Use for 'what "
+                "have you been doing?', 'kya kiya tune?', 'did you do anything "
+                "while I was away?'. This is the log, not her memory: report "
+                "exactly what it returns and never pad it out."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "count": {"type": "integer",
+                              "description": "How many recent actions (default 5)"},
+                },
+            },
+        )
+        def recent_activity(count: int = 5) -> str:
+            return audit.summary(max(1, min(int(count or 5), 20)))
+
     @reg.tool(
         description=(
             "Searches the web (Google) for current, real information. Use for "
@@ -1637,6 +1744,28 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
 
         @reg.tool(
             description=(
+                "Looks for one specific thing through the camera and says "
+                "whether it's there and exactly where. Use for 'where are my "
+                "keys?', 'can you see my phone?', 'mera wallet dikh raha "
+                "hai?'. Different from look_around, which just describes the "
+                "scene — use this whenever he's looking FOR something. Report "
+                "exactly what comes back, including a plain no."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "thing": {"type": "string",
+                              "description": "What to look for, e.g. 'my keys'"},
+                },
+                "required": ["thing"],
+            },
+        )
+        def find_object(thing: str) -> str:
+            from venom import camera
+            return camera.find_object(config, thing)
+
+        @reg.tool(
+            description=(
                 "Takes a photo with the Raspberry Pi camera, sends it to the "
                 "user's phone, and describes it aloud. Use when they say 'take a "
                 "photo', 'take a shot', 'click a picture', 'photo le lo', or "
@@ -1725,3 +1854,536 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
         return "Powering off. Good night, take care."
 
     return reg
+
+
+def register_project_tools(reg, projects, clock=time.time):
+    """Tracking real work: tasks, deadlines, and what's actually blocked.
+
+    Deliberately separate from add_to_list/add_note, which are for flat lists
+    ("buy milk"). The difference the user feels is that this one can answer
+    "what should I do next" — because it knows what is waiting on what.
+    """
+    def _due_epoch(in_hours: float | None, in_days: float | None) -> float | None:
+        if in_hours:
+            return clock() + float(in_hours) * 3600
+        if in_days:
+            return clock() + float(in_days) * 86400
+        return None
+
+    @reg.tool(
+        description=(
+            "Tracks a piece of real work with a deadline and what it's waiting "
+            "on. Use for 'remind me to finish X by Friday', 'add a task', "
+            "'I need to do X after Y is done'. NOT for shopping items — that's "
+            "add_to_list. Set `after` to whatever must happen first."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "What needs doing"},
+                "project": {"type": "string", "description": "Which project, if any"},
+                "in_hours": {"type": "number", "description": "Due in this many hours"},
+                "in_days": {"type": "number", "description": "Due in this many days"},
+                "after": {"type": "string",
+                          "description": "A few words of the task this waits on"},
+            },
+            "required": ["title"],
+        },
+    )
+    def add_task(title: str, project: str = "", in_hours: float | None = None,
+                 in_days: float | None = None, after: str = "") -> str:
+        try:
+            task = projects.add_task(
+                title, project=project, due=_due_epoch(in_hours, in_days),
+                depends_on=[after] if after.strip() else ())
+        except Exception as exc:  # noqa: BLE001 — spoken, never a traceback
+            return str(exc)
+        if task["depends_on"]:
+            return f"Added — {title}, once {after} is done."
+        return f"Added — {title}."
+
+    @reg.tool(
+        description=("Says what he should actually work on: overdue things, "
+                     "what's ready to start, what's blocked. Use for 'what's "
+                     "on?', 'what should I do next?', 'kya karna hai?'."),
+        parameters={
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "description": "Limit to one project"},
+            },
+        },
+    )
+    def whats_next(project: str = "") -> str:
+        return projects.summary(project)
+
+    @reg.tool(
+        description=("Explains why a task can't start yet — names the actual "
+                     "thing blocking it. Use for 'why can't I start X?', "
+                     "'what's X waiting on?'."),
+        parameters={
+            "type": "object",
+            "properties": {
+                "task": {"type": "string", "description": "A few words of the task"},
+            },
+            "required": ["task"],
+        },
+    )
+    def why_blocked(task: str) -> str:
+        return projects.explain(task)
+
+    @reg.tool(
+        description=("Marks a task done. Use for 'I finished X', 'X ho gaya', "
+                     "'mark X complete'."),
+        parameters={
+            "type": "object",
+            "properties": {
+                "task": {"type": "string", "description": "A few words of the task"},
+            },
+            "required": ["task"],
+        },
+    )
+    def complete_task(task: str) -> str:
+        done = projects.complete(task)
+        if done is None:
+            return f"I don't have a task matching {task}."
+        return f"Nice — {done['title']} is done."
+
+    @reg.tool(
+        description=("Records that one task has to wait for another. Use for "
+                     "'X can't start until Y is done', 'do Y first'."),
+        parameters={
+            "type": "object",
+            "properties": {
+                "task": {"type": "string", "description": "The task that waits"},
+                "after": {"type": "string", "description": "What must happen first"},
+            },
+            "required": ["task", "after"],
+        },
+    )
+    def block_task(task: str, after: str) -> str:
+        try:
+            projects.block_on(task, after)
+        except Exception as exc:  # noqa: BLE001
+            return str(exc)
+        return f"Got it — {task} waits for {after}."
+
+
+def register_learning_tools(reg, outcomes):
+    """Reading back her own record: why she chose something, what she's learned."""
+
+    @reg.tool(
+        description=(
+            "Explains why she actually chose what she chose — reads back the "
+            "reason recorded at the time, never a story made up afterwards. "
+            "Use for 'why did you do that?', 'why that one?', 'aisa kyun kiya?'. "
+            "If nothing was recorded, say so plainly."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "about": {"type": "string",
+                          "description": "Which kind of decision, e.g. 'which agent'"},
+            },
+        },
+    )
+    def why_did_you(about: str = "") -> str:
+        return outcomes.explain(about)
+
+    @reg.tool(
+        description=("Says what she's picked up about how he likes things done, "
+                     "from what actually happened before. Use for 'what have "
+                     "you learned about me?', 'what do you know by now?'."),
+    )
+    def what_have_you_learned() -> str:
+        notes = outcomes.advice()
+        if not notes:
+            return ("Nothing solid yet — I haven't seen enough to call it a "
+                    "pattern, and I'd rather not guess.")
+        return " ".join(notes)
+
+
+def register_build_tools(reg, jobs, default_dir: str = ""):
+    """Building software by voice — handed to a coding agent as a long job."""
+
+    @reg.tool(
+        description=(
+            "Builds a working application from a description — writes it, "
+            "runs it, and keeps fixing it until it works. Use when he asks "
+            "you to build / make / write an app, a script, a tool, a game: "
+            "'ek script bana do', 'build me a CLI that...'. This takes many "
+            "minutes and happens in the background: say you're on it and "
+            "you'll come back, then carry on. Do NOT wait for it. "
+            "`where` is the folder to build in — ask him if you don't know."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "what": {"type": "string",
+                         "description": "What to build, in full — the whole brief"},
+                "where": {"type": "string",
+                          "description": "Folder to build in, if he named one"},
+            },
+            "required": ["what"],
+        },
+    )
+    def build_app(what: str, where: str = "") -> str:
+        target = (where or default_dir).strip()
+        if not target:
+            return ("I need to know which folder to build in — tell me where "
+                    "and I'll get started.")
+        try:
+            jobs.submit("build", what, origin="voice",
+                        params={"cwd": target, "task": "code"})
+        except ValueError as exc:          # already building something
+            return str(exc)
+        except Exception as exc:           # noqa: BLE001 — never a spoken traceback
+            return f"I couldn't start that: {exc}"
+        return ("On it — I'll build it, run it, and keep at it until it "
+                "works. I'll come back to you when it's done.")
+
+
+def register_recall_tools(reg, archive):
+    """The searchable memory tier — everything that doesn't fit in the prompt."""
+
+    @reg.tool(
+        description=(
+            "Searches everything she's ever filed away — old conversations, "
+            "details about people and projects, things from months ago. Use "
+            "when he refers to something you don't already have in front of "
+            "you: 'that thing we discussed', 'what did I say about X?', "
+            "'us project ka kya scene tha?'. Report only what comes back; if "
+            "nothing does, say you don't remember rather than guessing."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "about": {"type": "string",
+                          "description": "What to look for — names and specifics work best"},
+            },
+            "required": ["about"],
+        },
+    )
+    def remember_about(about: str) -> str:
+        found = archive.search(about)
+        if not found:
+            return f"I've got nothing filed about {about}."
+        return " ".join(entry.line() for entry in found)
+
+    @reg.tool(
+        description=(
+            "Files something away for the long term — bigger than a one-line "
+            "preference (that's save_memory). Use for details about projects, "
+            "people, or anything he says he'll want later."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "text": {"type": "string", "description": "What to remember, in full"},
+                "subject": {"type": "string",
+                            "description": "Who or what it's about"},
+                "kind": {"type": "string",
+                         "description": "fact, project, person, or episode"},
+            },
+            "required": ["text"],
+        },
+    )
+    def file_away(text: str, subject: str = "", kind: str = "fact") -> str:
+        if archive.remember(text, kind=kind, subject=subject) is None:
+            return "There was nothing there to file."
+        return "Filed that away."
+
+    @reg.tool(
+        description=("Forgets everything filed about something. Use for "
+                     "'forget about X', 'X ke baare mein bhool ja'."),
+        parameters={
+            "type": "object",
+            "properties": {
+                "about": {"type": "string", "description": "What to forget"},
+            },
+            "required": ["about"],
+        },
+    )
+    def forget_about(about: str) -> str:
+        dropped = archive.forget_matching(about)
+        if not dropped:
+            return f"I had nothing filed about {about} anyway."
+        return f"Forgotten — dropped {dropped} thing{'s' if dropped > 1 else ''}."
+
+
+def register_document_tools(reg, folder: str):
+    """Writing things out: notes, spreadsheets, slide decks."""
+    from flint_core.documents import (
+        list_documents,
+        read_document,
+        write_document,
+        write_presentation,
+        write_spreadsheet,
+    )
+
+    @reg.tool(
+        description=(
+            "Writes a document — notes, a summary, a letter, a write-up. "
+            "Markdown by default; pass a name ending .txt or .docx for those. "
+            "Use for 'write this up', 'make me a note about...', 'draft a...'. "
+            "Set overwrite only if he says to replace an existing file."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Filename, e.g. 'meeting notes'"},
+                "content": {"type": "string", "description": "The full body text"},
+                "title": {"type": "string", "description": "Heading, for markdown"},
+                "overwrite": {"type": "boolean",
+                              "description": "true only if replacing on purpose"},
+            },
+            "required": ["name", "content"],
+        },
+    )
+    def write_note(name: str, content: str, title: str = "",
+                   overwrite: bool = False) -> str:
+        return write_document(folder, name, content, title=title,
+                              overwrite=overwrite).spoken()
+
+    @reg.tool(
+        description=(
+            "Writes a spreadsheet from rows of values. CSV by default (opens "
+            "in Excel); .xlsx if he asks for Excel specifically. Use for "
+            "'make a spreadsheet of...', 'track my spending'."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Filename"},
+                "headers": {"type": "array", "items": {"type": "string"},
+                            "description": "Column names"},
+                "rows": {"type": "array",
+                         "items": {"type": "array", "items": {"type": "string"}},
+                         "description": "Each row as a list of cell values"},
+                "overwrite": {"type": "boolean", "description": "Replace on purpose"},
+            },
+            "required": ["name", "rows"],
+        },
+    )
+    def write_sheet(name: str, rows: list, headers: list | None = None,
+                    overwrite: bool = False) -> str:
+        return write_spreadsheet(folder, name, rows, headers=headers or (),
+                                 overwrite=overwrite).spoken()
+
+    @reg.tool(
+        description=(
+            "Writes a slide deck. Markdown by default (imports into any slide "
+            "tool); .pptx if he asks for PowerPoint. Each slide needs a title "
+            "and bullets. Use for 'make me a deck about...'."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Filename"},
+                "title": {"type": "string", "description": "Deck title"},
+                "slides": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "title": {"type": "string"},
+                            "bullets": {"type": "array", "items": {"type": "string"}},
+                            "notes": {"type": "string"},
+                        },
+                    },
+                    "description": "The slides, in order",
+                },
+                "overwrite": {"type": "boolean", "description": "Replace on purpose"},
+            },
+            "required": ["name", "slides"],
+        },
+    )
+    def write_deck(name: str, slides: list, title: str = "",
+                   overwrite: bool = False) -> str:
+        return write_presentation(folder, name, slides, title=title,
+                                  overwrite=overwrite).spoken()
+
+    @reg.tool(
+        description=("Lists the documents she's written, newest first. Use for "
+                     "'what have you written?', 'show me my notes'."),
+    )
+    def list_notes() -> str:
+        found = list_documents(folder)
+        if not found:
+            return "I haven't written anything out yet."
+        return "Most recent first: " + ", ".join(found[:10]) + "."
+
+    @reg.tool(
+        description=("Reads back a document she wrote, so it can be read out "
+                     "or edited. Use for 'read me the meeting notes'."),
+        parameters={
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "The filename"},
+            },
+            "required": ["name"],
+        },
+    )
+    def read_note(name: str) -> str:
+        from pathlib import Path
+
+        from flint_core.documents import safe_name
+
+        return read_document(Path(folder) / safe_name(name, "md"))
+
+
+def register_dev_tools(reg, dev, jobs=None):
+    """Git and deployment, bounded by the repos and targets named in config.
+
+    Every tool here resolves a *name* against the allowlist rather than taking
+    a path or a host. She cannot reach a repo you did not name, and cannot
+    deploy anywhere you did not list — which is the whole reason these were
+    not wired up until you decided what they may touch.
+    """
+    from flint_core.deploy import DeployTargets
+    from flint_core.vcs import GitRepo
+
+    targets = DeployTargets.from_config(list(dev.deploy_targets))
+
+    def _repo(name: str):
+        path = dev.repo_path(name) or (dev.default_repo if not name else "")
+        if not path:
+            known = ", ".join(dev.repo_names) or "none"
+            return None, (f"I don't have a repo called {name or 'that'}. "
+                          f"I know about: {known}.")
+        return GitRepo(path), ""
+
+    @reg.tool(
+        description=(
+            "Says what's changed in a repo — branch, modified files, recent "
+            "commits. Use for 'what have I changed?', 'kya status hai?', "
+            "'what branch am I on?'. Name the repo if he has more than one."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "repo": {"type": "string", "description": "Which repo, by name"},
+            },
+        },
+    )
+    def code_status(repo: str = "") -> str:
+        git, problem = _repo(repo)
+        if problem:
+            return problem
+        if not git.is_repo():
+            return "That folder isn't a git repo."
+        changed = git.changed_files()
+        branch = git.branch()
+        if not changed:
+            return f"On {branch}, nothing changed — working tree is clean."
+        shown = ", ".join(changed[:5])
+        more = f" and {len(changed) - 5} more" if len(changed) > 5 else ""
+        return f"On {branch} with {len(changed)} file(s) changed: {shown}{more}."
+
+    @reg.tool(
+        description=(
+            "Commits the current changes with a message. Refuses on main or "
+            "master — make a branch first. Use for 'commit this', 'commit kar "
+            "de with message X'. Never invent a message: use his words, or "
+            "ask what the change was."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "message": {"type": "string", "description": "The commit message"},
+                "repo": {"type": "string", "description": "Which repo, by name"},
+            },
+            "required": ["message"],
+        },
+    )
+    def commit_code(message: str, repo: str = "") -> str:
+        git, problem = _repo(repo)
+        if problem:
+            return problem
+        return git.commit(message).text
+
+    @reg.tool(
+        description=("Starts a new branch in a repo. Use for 'make a branch "
+                     "called X', 'nayi branch banao'."),
+        parameters={
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Branch name"},
+                "repo": {"type": "string", "description": "Which repo, by name"},
+            },
+            "required": ["name"],
+        },
+    )
+    def new_branch(name: str, repo: str = "") -> str:
+        git, problem = _repo(repo)
+        if problem:
+            return problem
+        result = git.create_branch(name)
+        return f"You're on {name} now." if result.ok else result.text
+
+    @reg.tool(
+        description=("Pushes the current branch and opens a pull request. Use "
+                     "for 'push it', 'raise a PR', 'PR bana do'."),
+        parameters={
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "PR title"},
+                "repo": {"type": "string", "description": "Which repo, by name"},
+            },
+            "required": ["title"],
+        },
+    )
+    def open_pull_request(title: str, repo: str = "") -> str:
+        git, problem = _repo(repo)
+        if problem:
+            return problem
+        pushed = git.push()
+        if not pushed.ok:
+            return f"Couldn't push: {pushed.text}"
+        return git.pull_request(title).text
+
+    if targets and jobs is not None:
+        @reg.tool(
+            description=(
+                "Deploys a project to one of his configured targets. By "
+                "DEFAULT this only says what it would do and changes nothing "
+                "— tell him what it reports, then call it again with "
+                "confirm=true ONLY if he clearly says go ahead. Never pass "
+                "confirm=true on the first try, and never pick a target he "
+                "didn't name. Known targets: " + ", ".join(targets.names()) + "."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "target": {"type": "string",
+                               "description": "Which target, by name"},
+                    "repo": {"type": "string", "description": "Which repo, by name"},
+                    "confirm": {"type": "boolean",
+                                "description": "true ONLY after he says go ahead"},
+                },
+                "required": ["target"],
+            },
+        )
+        def deploy_project(target: str, repo: str = "",
+                           confirm: bool = False) -> str:
+            path = dev.repo_path(repo) or dev.default_repo
+            if not path:
+                return "I don't know which project to deploy."
+            try:
+                jobs.submit("deploy", f"deploy to {target}", origin="voice",
+                            params={"cwd": path, "target": target,
+                                    "confirm": bool(confirm)})
+            except ValueError as exc:
+                return str(exc)
+            except Exception as exc:      # noqa: BLE001
+                return f"I couldn't start that: {exc}"
+            if confirm:
+                return "Deploying now — I'll tell you how it goes."
+            return ("Checking what that would do — I'll read it back to you "
+                    "before anything ships.")
+
+        @reg.tool(
+            description=("Lists the places she's allowed to deploy to. Use for "
+                         "'where can you deploy?'."),
+        )
+        def deploy_targets() -> str:
+            return targets.describe()

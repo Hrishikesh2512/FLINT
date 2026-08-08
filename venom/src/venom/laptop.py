@@ -35,8 +35,22 @@ def _default_connect(uri: str):
     return connect(uri, open_timeout=6)
 
 
+def _progress_note(mtype: str, msg: dict) -> str:
+    """One readable line from a FLINT progress frame, or "" to ignore it."""
+    if mtype == "log":
+        return " ".join(str(msg.get("line", "")).split())
+    if mtype == "state":
+        state = str(msg.get("state", "")).strip()
+        return f"FLINT is {state.lower()}" if state else ""
+    if mtype == "job":
+        event = str(msg.get("event", "")).replace("_", " ").strip()
+        return f"FLINT: {event}" if event else ""
+    return ""      # ack / transcript / pong carry nothing worth reporting
+
+
 def run_laptop_task(config: LaptopConfig, command: str,
-                    connect_fn=None, clock=time.monotonic) -> str:
+                    connect_fn=None, clock=time.monotonic,
+                    on_progress=None) -> str:
     """Send one task to FLINT and wait for its spoken-back reply."""
     uri = f"ws://{config.host}:{config.port}"
     try:
@@ -90,7 +104,16 @@ def run_laptop_task(config: LaptopConfig, command: str,
                 return text or "Done — FLINT finished but said nothing."
             elif mtype == "error":
                 return f"FLINT reported a problem: {msg.get('message', '?')}"
-            # ack / log / state / transcript / job / pong — progress noise
+            elif on_progress is not None:
+                # Not noise once someone is listening: these frames are the
+                # only sign of life during a task that takes minutes, and
+                # dropping them is what made delegation feel like a black box.
+                note = _progress_note(mtype, msg)
+                if note:
+                    try:
+                        on_progress(note)
+                    except Exception:  # noqa: BLE001 — a listener must not kill the task
+                        log.debug("laptop progress listener failed", exc_info=True)
     except Exception as exc:
         log.warning("laptop task failed mid-flight: %s", exc)
         return ("The connection to FLINT dropped mid-task — it may still "
@@ -100,3 +123,43 @@ def run_laptop_task(config: LaptopConfig, command: str,
             ws.close()
         except Exception:
             pass
+
+
+# ── FLINT as a registered agent ──────────────────────────────────────────────
+def flint_agent_spec(config: LaptopConfig, connect_fn=None):
+    """FLINT, presented through the shared agent protocol.
+
+    Venom's side of "multi-agent" was previously this one hard-wired tool:
+    one sentence out, one string back, no progress, no structure. Wrapping it
+    as an AgentSpec puts it in the same registry as any coding CLI, so the
+    caller picks on the merits of the task instead of the delegation target
+    being baked into the prompt.
+
+    FLINT is deliberately registered as general-purpose (`good_at` empty): it
+    drives a desktop rather than specialising in one kind of work, so it wins
+    when nothing better is available and yields to an agent that names the
+    task.
+    """
+    from flint_core.agents import AgentRequest, AgentResult, AgentSpec
+
+    def run(request: AgentRequest) -> AgentResult:
+        reply = run_laptop_task(config, request.goal, connect_fn=connect_fn,
+                                on_progress=request.progress)
+        # The wire protocol has no success flag — FLINT answers in prose
+        # either way — so the failure sentences this module produces are the
+        # only signal available. Matching them here keeps that knowledge in
+        # the one place that generates them.
+        failed = any(mark in reply for mark in (
+            "I couldn't reach FLINT", "didn't respond in time",
+            "rejected my token", "reported a problem", "dropped mid-task",
+            "wants a token"))
+        return AgentResult(ok=not failed, summary=reply, detail=reply,
+                           agent="flint", error=reply if failed else "")
+
+    return AgentSpec(
+        name="flint",
+        summary="The desktop assistant on the laptop — apps, files, browser.",
+        run=run,
+        available=config.ready,
+        permissions=("remote_control",),
+    )

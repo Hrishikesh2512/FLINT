@@ -8,6 +8,16 @@ ExecStart=/opt/venom/venv/bin/python -m venom.shell_server
 # Full root, deliberately unsandboxed: this IS the escape hatch from the
 # venom daemon's ProtectSystem=strict jail. Group=venom + RuntimeDirectory
 # 0750 let only the console daemon reach the socket it drops here.
+#
+# Every command is recorded to /var/log/venom-shell.log (mode 0600, root
+# only) BEFORE it runs, so a command that hangs or takes the Pi down still
+# leaves a trace: `tail -f /var/log/venom-shell.log`.
+#
+# Do NOT add secrets to this unit's environment expecting them to be private:
+# nothing secret is passed to the shell today (see SHELL_ENV in
+# venom/shell_server.py), and that list is the only reason `env` in a browser
+# terminal is safe. If a future Environment= line is added here, add it to
+# SHELL_ENV deliberately or it will not reach the shell at all.
 User=root
 Group=venom
 RuntimeDirectory=venom-shell

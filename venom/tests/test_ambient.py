@@ -10,9 +10,19 @@ import time
 
 import pytest
 
-from venom.ambient import (AmbientGate, AmbientLoop, AmbientState, Nudge,
-                           World, device_health, early_start_tomorrow, judge,
-                           mail_pileup, quiet_check_in, rain_before_event)
+from venom.ambient import (
+    AmbientGate,
+    AmbientLoop,
+    AmbientState,
+    Nudge,
+    World,
+    device_health,
+    early_start_tomorrow,
+    judge,
+    mail_pileup,
+    quiet_check_in,
+    rain_before_event,
+)
 from venom.config import AmbientConfig, VenomConfig, load_config
 from venom.gcal import Event
 

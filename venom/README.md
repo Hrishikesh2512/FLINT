@@ -39,14 +39,44 @@ architecture with FLINT through `flint-core`, but it is its own product.
   console's EMERGENCY SOS panel, and prove it works with a clearly-marked
   test alert before you ever need it.
 - **Time & date**, **headset volume control** by voice.
+- **Background jobs** — work that outlives the conversation that asked for
+  it. "Go research what's happening with the rupee properly and tell me" —
+  she plans the searches, runs them over the next few minutes, writes the
+  answer up, and *opens a fresh conversation* to give it to you. Ask "what
+  are you working on?" any time; "stop that" cancels it. Jobs are stored on
+  disk, so one still running when the power goes is picked back up rather
+  than lost, and every job carries a step budget and an expiry so a runaway
+  loop can't quietly bill you all month.
+- **A root terminal that keeps receipts** — the browser console's shell runs
+  as real root (that's the point: `apt`, `systemctl`, `mkdir` all work), and
+  every command is written to `/var/log/venom-shell.log` before it runs, so a
+  command that hung or took the Pi down still left a trace. A handful of
+  device-ending commands (`rm -rf /`, `mkfs`, `dd` onto a disk) are refused as
+  a typo guard — do those over SSH, where you meant to.
+- **Permissions & an audit log** — every tool call is checked against what
+  the device is allowed to do and written down. Ask "what have you been
+  doing?" for the last few actions, refusals included, or read
+  `/var/lib/venom/audit.jsonl` directly. Switch a whole class of action off
+  with one line: `denied = ["messaging"]`.
 - **Long-term memory** — it quietly remembers who you are, what you like,
   what you're working on, and uses it naturally next time.
 - **Goes back to sleep** on "goodbye" or ~45 s of silence; wake it again
   anytime. Boot/wake/error states are signalled with distinct chimes since
   there is no screen.
 
-Everything is a tool on the shared registry, so new skills are one
-`@registry.tool` away.
+Everything she does inside a conversation is a tool on the shared registry,
+so new skills are one `@registry.tool` away. Everything she goes away and
+does is a job type on the shared kernel (`flint_core.kernel` — scheduling,
+budgets, persistence, delivery), so new autonomous work is one
+`@runners.runner` away.
+
+Skills are grouped into **capabilities** (`flint_core.capabilities`), which
+pair a skill's tools with the instructions for using them and the condition
+that makes it real. A capability that is off contributes neither tools nor
+prompt text — so a Pi with no TV is never told about a TV — and its
+permissions are what the audit layer checks. Adding a skill is one
+`Capability`, not an edit to the registry plus an edit to the persona plus a
+note to keep them in step.
 
 ```
 venom/src/venom/
@@ -54,6 +84,8 @@ venom/src/venom/
 ├── live.py         # one Gemini Live session: audio duplex + tool dispatch
 ├── wake.py         # openWakeWord ("hey jarvis") + silence endpointing
 ├── tools_pi.py     # search, weather, timers, volume, memory, goodbye
+├── capabilities.py # each skill's tools + its instructions + when it applies
+├── jobs.py         # job types: multi-step work that outlives a conversation
 ├── sos.py          # emergency contacts + the alert / emergency mode
 ├── ambient.py      # sense → judge → gate: when she opens the conversation
 ├── audio/          # USB headset auto-selection, mic/speaker streams, chimes

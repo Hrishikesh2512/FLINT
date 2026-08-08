@@ -163,6 +163,50 @@ token_path = "/var/lib/venom/tv-token.txt"
 enabled      = true
 tick_seconds = 60.0        # how often the loop looks for due work
 
+# ── Background jobs ──────────────────────────────────────────────────────────
+# Work that outlives the conversation that asked for it: "go research this
+# properly and tell me". She plans the searches, runs them over several minutes,
+# writes the answer up, and opens a fresh conversation to give it to you.
+#
+# COSTS MONEY, like watches, and is bounded the same way: the per-job-type
+# budgets (how many steps, how long, how many at once) live in venom/jobs.py so
+# they are a deliberate decision rather than a config knob. Jobs are stored in
+# /var/lib/venom/jobs.db and survive a reboot — one interrupted mid-step is
+# picked back up rather than lost. Needs the Gemini key; off without one.
+#
+# A job finishing during [ambient] quiet hours, mid-conversation, or during DND
+# holds its result until a decent moment, exactly like a watch.
+[kernel]
+enabled              = true
+tick_seconds         = 30.0    # how often the loop looks for due work
+max_running          = 2       # concurrent steps; a 2 GB Pi is not a server
+keep_finished_hours  = 72.0    # how long a finished job stays readable
+
+# ── Permissions & audit ──────────────────────────────────────────────────────
+# Every tool call is permission-checked and written down. Permissions are
+# declared by the capability that owns each tool (venom/capabilities.py):
+# audio, network, messaging, personal_data, location, home_control,
+# remote_control, camera, bluetooth, emergency, device_control.
+#
+# The default grants exactly what the ACTIVE capabilities ask for — this is
+# your own device, and the point is a record plus an off-switch, not locking
+# you out. Nothing you have configured stops working.
+#
+# `denied` always wins, and is the useful knob. To stop her messaging anyone
+# (including SOS) while keeping everything else:
+#     denied = ["messaging"]
+# `granted` replaces the default with an explicit list, if you want default-deny.
+#
+# The audit log is append-only JSONL, rotated at 5000 lines. Read it with
+# `tail -f /var/lib/venom/audit.jsonl`, or just ask her "what have you been
+# doing?" (the recent_activity tool). It is a record, not a security boundary:
+# anyone with root can rewrite it.
+[permissions]
+enabled    = true
+granted    = []                            # empty = whatever capabilities need
+denied     = []                            # always wins over granted
+audit_path = "/var/lib/venom/audit.jsonl"
+
 # ── Screen reading (OCR) ─────────────────────────────────────────────────────
 # Run laptop/screen_server.py on your laptop, then say "look at my screen" and
 # Jarvis reads the on-screen text (local OCR — fast, no vision API, text only).

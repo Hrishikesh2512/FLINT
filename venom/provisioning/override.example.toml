@@ -1,0 +1,90 @@
+# Venom runtime overrides — copy to /var/lib/venom/override.toml on the Pi.
+#
+# This file wins over /etc/venom/venom.toml, one section at a time, and the
+# venom daemon can write its own state dir while /etc is sealed by systemd
+# hardening. So this is the file to edit on a running device.
+#
+#   sudo nano /var/lib/venom/override.toml
+#   sudo systemctl restart venom
+#
+# Everything here is OFF until you fill it in. That is deliberate: an
+# assistant that picks a repo to commit to, or a host to deploy to, has picked
+# one you did not mean.
+
+# ── where she may write ──────────────────────────────────────────────────────
+[venom]
+# build_app writes generated projects here. Empty = she asks you every time.
+build_dir     = "/home/YOURUSER/projects"
+# write_note / write_sheet / write_deck put documents here. Empty = the whole
+# documents capability is off and its tools are never registered.
+documents_dir = "/home/YOURUSER/documents"
+
+# ── repos she may touch ──────────────────────────────────────────────────────
+# code_status / commit_code / new_branch / open_pull_request resolve a NAME
+# against this list. A repo not listed here is unreachable — she cannot be
+# talked into a path. The first one listed is the default when you don't say
+# which. Say "what's changed?" and she reads the first; "what's changed in
+# flint?" picks by name.
+#
+# She refuses to commit to main/master regardless — branch first.
+[[dev.repo]]
+name = "flint"
+path = "/home/YOURUSER/FLINT"
+
+# [[dev.repo]]
+# name = "website"
+# path = "/home/YOURUSER/site"
+
+# ── coding agents she may drive ──────────────────────────────────────────────
+# Only add these on a machine where the CLI is actually installed — an agent
+# whose binary is missing registers as unavailable and is never chosen, which
+# is correct but means build_app will fall back to FLINT on the laptop.
+#
+# The Pi almost certainly should NOT run these: coding agents want the repo
+# and the toolchain, which live on your laptop. Put this block in FLINT's
+# config instead, and let Venom delegate.
+#
+# `{goal}` is required — a command without it would run the same thing
+# whatever it was asked. Check `--help` for the version you actually have;
+# these flags change between releases.
+# [[agent]]
+# name    = "claude"
+# command = ["claude", "-p", "{goal}"]
+# good_at = ["code"]
+# summary = "Claude Code, headless."
+# priority = 5
+
+# ── where she may deploy ─────────────────────────────────────────────────────
+# deploy_project resolves a NAME against this list, and nothing else. An
+# unrecognised name is refused with the real options rather than guessed at.
+#
+# She ALWAYS does a dry run first and reads back exactly what would happen;
+# shipping for real needs you to say go ahead, out loud, afterwards.
+#
+# host empty = this machine. A host is reached over ssh using the key and
+# config ssh already has — no credentials are stored here or passed by Venom.
+# [[deploy]]
+# name       = "staging"
+# host       = "staging.example.com"
+# directory  = "/srv/app"
+#
+# [[deploy]]
+# name       = "live"
+# host       = "example.com"
+# directory  = "/srv/app"
+# production = true          # says "production" out loud before it ships
+
+# ── what she's allowed to do at all ──────────────────────────────────────────
+# Defaults grant whatever the active capabilities need — this is your device.
+# `denied` is the useful knob and always wins. To stop her messaging anyone
+# (including SOS) while keeping everything else:
+#     denied = ["messaging"]
+[permissions]
+enabled = true
+denied  = []
+
+# ── background work ──────────────────────────────────────────────────────────
+[kernel]
+enabled      = true
+tick_seconds = 30.0
+max_running  = 2        # a 2 GB Pi is not a server

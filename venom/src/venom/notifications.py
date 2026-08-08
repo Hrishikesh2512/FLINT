@@ -42,7 +42,7 @@ def _write_chime(path: Path = CHIME_WAV) -> Path | None:
     try:
         import numpy as np
 
-        def tone(freq: float, dur: float, vol: float = 0.28) -> "np.ndarray":
+        def tone(freq: float, dur: float, vol: float = 0.28) -> np.ndarray:
             n = int(SAMPLE_RATE * dur)
             i = np.arange(n)
             fade = np.minimum(np.minimum(i, n - i) / (n * 0.2), 1.0)  # in+out, no click

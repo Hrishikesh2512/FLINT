@@ -3,7 +3,7 @@ resolution/colour/scene logic is exercised with no hardware or tinytuya."""
 
 import json
 
-from venom.config import LightsConfig, VenomConfig, load_config
+from venom.config import VenomConfig, load_config
 from venom.lights import LightsController
 
 

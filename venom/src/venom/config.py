@@ -345,6 +345,86 @@ class WatchConfig:
 
 
 @dataclass(frozen=True)
+class DevConfig:
+    """Repos she may touch, agents she may drive, places she may deploy.
+
+    All three are allowlists and all three default to empty. That is the
+    point: an assistant that picks a repo to commit to, or a host to deploy
+    to, has picked one you did not mean. Nothing here works until you name
+    what it may work on.
+    """
+
+    repos: tuple[tuple[str, str], ...] = ()      # (name, path)
+    agents: tuple[dict, ...] = ()                # [[agent]] blocks
+    deploy_targets: tuple[dict, ...] = ()        # [[deploy]] blocks
+
+    def repo_path(self, name: str) -> str:
+        wanted = (name or "").strip().lower()
+        for repo_name, path in self.repos:
+            if repo_name.lower() == wanted:
+                return path
+        return ""
+
+    @property
+    def repo_names(self) -> tuple[str, ...]:
+        return tuple(name for name, _ in self.repos)
+
+    @property
+    def default_repo(self) -> str:
+        return self.repos[0][1] if self.repos else ""
+
+
+@dataclass(frozen=True)
+class PermissionsConfig:
+    """What Venom is allowed to do, and where the record of it goes.
+
+    Permissions are declared by capabilities (venom/capabilities.py) and
+    enforced on every tool dispatch by flint_core.permissions. The default is
+    to grant exactly what the *active* capabilities ask for: this is a
+    single-user personal device, and the point is a record of what happened
+    plus a switch to turn things off — not keeping the owner out.
+
+    `granted` overrides that with an explicit list. `denied` always wins, so a
+    single risky permission can be switched off without rewriting anything:
+
+        [permissions]
+        denied = ["shell", "messaging"]
+    """
+
+    enabled: bool = True
+    granted: tuple[str, ...] = ()      # empty = whatever capabilities need
+    denied: tuple[str, ...] = ()
+    audit_path: Path = Path("/var/lib/venom/audit.jsonl")
+
+
+@dataclass(frozen=True)
+class KernelConfig:
+    """Background jobs — work that outlives the conversation (venom/jobs.py).
+
+    The kernel itself is `flint_core.kernel`; this is only how often Venom
+    looks for due work and how much of it may run at once. The budgets that
+    actually bound the bill (steps, lifetime, jobs per type) live on each job
+    type in `venom/jobs.py`, because they exist to be deliberate rather than
+    tuned from a config file.
+    """
+
+    enabled: bool = True
+    tick_seconds: float = 30.0
+    max_running: int = 2       # concurrent steps; a 2 GB Pi is not a server
+    keep_finished_hours: float = 72.0   # how long a finished job stays readable
+
+    def __post_init__(self) -> None:
+        if self.tick_seconds <= 0:
+            raise ValueError("kernel.tick_seconds must be positive")
+        if self.max_running < 1:
+            raise ValueError("kernel.max_running must be at least 1")
+
+    @property
+    def ready(self) -> bool:
+        return bool(self.enabled)
+
+
+@dataclass(frozen=True)
 class AmbientConfig:
     """Ambient awareness — whether Venom is allowed to speak first.
 
@@ -418,6 +498,13 @@ class VenomConfig:
     memory_path: Path = Path("/var/lib/venom/memory.json")
     internet_host: str = "1.1.1.1"
     internet_port: int = 53
+    # Where `build_app` writes generated projects. Empty means she must ask,
+    # which is the right default: an assistant that picks a folder to write
+    # a whole application into is one that writes it somewhere surprising.
+    build_dir: str = ""
+    # Where documents she writes go. Empty means the feature is off, rather
+    # than her choosing a folder to start writing files into.
+    documents_dir: str = ""
     web_enabled: bool = True   # browser console
     web_port: int = 8787
     # Bind address for the console. Loopback by default: the console is a root
@@ -440,6 +527,9 @@ class VenomConfig:
     lights: LightsConfig = field(default_factory=LightsConfig)
     tv: TVConfig = field(default_factory=TVConfig)
     watch: WatchConfig = field(default_factory=WatchConfig)
+    kernel: KernelConfig = field(default_factory=KernelConfig)
+    permissions: PermissionsConfig = field(default_factory=PermissionsConfig)
+    dev: DevConfig = field(default_factory=DevConfig)
     ambient: AmbientConfig = field(default_factory=AmbientConfig)
 
     def __post_init__(self) -> None:
@@ -508,6 +598,15 @@ def load_config(path: Path | None = None) -> VenomConfig:
             for section, values in tomllib.load(fh).items():
                 if isinstance(values, dict):
                     data.setdefault(section, {}).update(values)
+                elif isinstance(values, list):
+                    # Array-of-tables: [[agent]], [[deploy]], [[brain]].
+                    # Replaced wholesale rather than merged — these are
+                    # allowlists, and "the override adds to whatever /etc
+                    # already said" is not what anyone means by overriding an
+                    # allowlist. Skipping them entirely (the old behaviour)
+                    # was worse still: a [[deploy]] block here was silently
+                    # ignored, with no error and no deploy target.
+                    data[section] = values
     except (OSError, tomllib.TOMLDecodeError):
         pass
 
@@ -531,6 +630,9 @@ def load_config(path: Path | None = None) -> VenomConfig:
     lights = data.get("lights", {})
     tv = data.get("tv", {})
     watch = data.get("watch", {})
+    kernel = data.get("kernel", {})
+    permissions = data.get("permissions", {})
+    dev = data.get("dev", {})
     ambient = data.get("ambient", {})
     raw_brains = data.get("brain", [])
 
@@ -547,6 +649,8 @@ def load_config(path: Path | None = None) -> VenomConfig:
         memory_path=Path(venom.get("memory_path", "/var/lib/venom/memory.json")),
         internet_host=str(internet.get("host", "1.1.1.1")),
         internet_port=int(internet.get("port", 53)),
+        build_dir=str(venom.get("build_dir", "")).strip(),
+        documents_dir=str(venom.get("documents_dir", "")).strip(),
         web_enabled=bool(data.get("web", {}).get("enabled", True)),
         web_port=int(data.get("web", {}).get("port", 8787)),
         web_bind=str(data.get("web", {}).get("bind", "127.0.0.1")).strip()
@@ -658,6 +762,30 @@ def load_config(path: Path | None = None) -> VenomConfig:
         watch=WatchConfig(
             enabled=bool(watch.get("enabled", True)),
             tick_seconds=float(watch.get("tick_seconds", 60.0)),
+        ),
+        kernel=KernelConfig(
+            enabled=bool(kernel.get("enabled", True)),
+            tick_seconds=float(kernel.get("tick_seconds", 30.0)),
+            max_running=int(kernel.get("max_running", 2)),
+            keep_finished_hours=float(kernel.get("keep_finished_hours", 72.0)),
+        ),
+        permissions=PermissionsConfig(
+            enabled=bool(permissions.get("enabled", True)),
+            granted=tuple(str(p).strip() for p in permissions.get("granted", [])
+                          if str(p).strip()),
+            denied=tuple(str(p).strip() for p in permissions.get("denied", [])
+                         if str(p).strip()),
+            audit_path=Path(permissions.get("audit_path",
+                                            "/var/lib/venom/audit.jsonl")),
+        ),
+        dev=DevConfig(
+            repos=tuple((str(r.get("name", "")).strip(),
+                         str(r.get("path", "")).strip())
+                        for r in dev.get("repo", [])
+                        if str(r.get("name", "")).strip()
+                        and str(r.get("path", "")).strip()),
+            agents=tuple(dict(a) for a in data.get("agent", [])),
+            deploy_targets=tuple(dict(d) for d in data.get("deploy", [])),
         ),
         # Every ambient knob falls back to the dataclass default, so an empty
         # [ambient] section (or none at all) is the tuned configuration.

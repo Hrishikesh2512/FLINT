@@ -168,9 +168,9 @@ def test_fetch_weather_unknown_city():
 
 # ── volume (non-Linux simulation path) ────────────────────────────────────────
 def test_system_volume_simulates_off_linux():
-    from venom.tools_pi import change_system_volume, set_system_volume
-
     import platform
+
+    from venom.tools_pi import change_system_volume, set_system_volume
     if platform.system() == "Linux":
         pytest.skip("simulation paths are for non-Linux dev boxes")
     assert "150" not in set_system_volume(150)   # clamped to 100
@@ -209,6 +209,7 @@ def test_pi_registry_toolset(pi_setup):
         "check_timers", "set_volume", "change_volume", "device_status",
         "save_memory", "translation_mode",
         "end_conversation", "power_off", "look_around", "take_photo",
+            "find_object",
     }
 
 

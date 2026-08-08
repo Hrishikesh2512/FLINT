@@ -21,15 +21,27 @@ import logging
 import threading
 import time
 
+from flint_core.agents import AgentRegistry
 from flint_core.memory import MemoryStore
+from flint_core.permissions import AuditLog, Policy, guarded
 from venom.audio.devices import current_devices
 from venom.audio.streams import MicStream, SpeakerStream, chime
+from venom.capabilities import build_capabilities
 from venom.config import VenomConfig
+from venom.jobs import build_registry as build_job_registry
+from venom.jobs import job_instruction
 from venom.live import LiveSession
 from venom.tools_pi import TimerBoard, build_pi_registry
 from venom.wake import WakeWordDetector
 
 log = logging.getLogger("venom.voice")
+
+
+def _deploy_targets(config):
+    """The allowlist of places a deploy job may ship to. Empty by default."""
+    from flint_core.deploy import DeployTargets
+
+    return DeployTargets.from_config(list(config.dev.deploy_targets))
 
 # Wake-phase frame starvation: mic callbacks deliver ~15 frames/s; this many
 # consecutive empty seconds means the stream is dead or the headset is gone.
@@ -98,9 +110,14 @@ class VoiceOrchestrator:
         self.memory = MemoryStore(config.memory_path)
         self.timers = TimerBoard()
         # Persistent productivity stores live beside memory in the state dir.
-        from venom.stores import (ConnectionStore, ConversationLog,
-                                  FavouritesStore, ListStore, NoteStore,
-                                  ReminderStore)
+        from venom.stores import (
+            ConnectionStore,
+            ConversationLog,
+            FavouritesStore,
+            ListStore,
+            NoteStore,
+            ReminderStore,
+        )
 
         state_dir = config.memory_path.parent
         self.reminders = ReminderStore(state_dir / "reminders.json")
@@ -111,6 +128,29 @@ class VoiceOrchestrator:
         # People she knows — numbers, nicknames, socials, interests — used to
         # contact them and to recall who they are.
         self.connections = ConnectionStore(state_dir / "connections.json")
+        # Real work with deadlines and dependencies (distinct from the flat
+        # lists in ListStore), and her record of what she chose and what
+        # actually worked — the evidence behind "why did you do that?".
+        from flint_core.outcomes import OutcomeLog
+        from flint_core.projects import ProjectStore
+        from flint_core.recall import Archive
+
+        self.projects = ProjectStore(state_dir / "projects.json")
+        # The searchable memory tier. MemoryStore stays the small always-in-
+        # prompt set; this holds everything that doesn't fit there.
+        self.archive = Archive(state_dir / "archive.db")
+        # What he's actually doing right now — the repo he's in, files he just
+        # touched. Only built when there's a repo to look at; on a bare Pi
+        # there is nothing here to see and the block stays empty.
+        self.context = None
+        if config.dev.default_repo:
+            from flint_core.context import build_gatherer
+
+            self.context = build_gatherer(
+                project_dir=config.dev.default_repo,
+                watch_dirs=[config.dev.default_repo],
+                include_window=False)   # no window manager on the Pi
+        self.outcomes = OutcomeLog(state_dir / "outcomes.jsonl")
         from venom.session import SessionState
 
         self.session = SessionState(state_dir / "session.json")
@@ -219,6 +259,74 @@ class VoiceOrchestrator:
             from venom.watch import WatchStore
 
             self.watches = WatchStore(state_dir / "watches.json")
+        # Background jobs: multi-step work that outlives the conversation that
+        # asked for it (flint_core.kernel + venom/jobs.py). Built here rather
+        # than in run() so the tools can reach it, and so a job started before
+        # a reboot is already visible the moment she wakes up.
+        # Other agents she can hand whole tasks to. On the Pi that is FLINT on
+        # the laptop; coding CLIs live on the machine with the repos, and
+        # register themselves there. Same registry either way, so the caller
+        # never learns which kind it got.
+        self.agents = AgentRegistry(
+            on_decision=lambda what, chose, why, others:
+                self.outcomes.record_decision(what, chose, why, others))
+        try:
+            from venom.laptop import flint_agent_spec
+
+            self.agents.add(flint_agent_spec(config.laptop))
+        except Exception:
+            log.exception("agent registry: FLINT unavailable — continuing")
+        try:
+            from flint_core.agents import agents_from_config
+
+            for spec in agents_from_config(list(config.dev.agents)):
+                self.agents.add(spec)
+        except Exception:
+            log.exception("agent registry: could not load configured agents")
+        log.info("agents: %s", ", ".join(self.agents.names()) or "none")
+        self.jobs = None
+        self._jobs_task: asyncio.Task | None = None
+        if config.kernel.enabled and config.gemini_api_key:
+            try:
+                from flint_core.kernel import JobStore, Scheduler
+                from flint_core.llm.providers import GeminiProvider
+
+                self.jobs = Scheduler(
+                    JobStore(state_dir / "jobs.db"),
+                    build_job_registry(),
+                    services={"provider": GeminiProvider(config.gemini_api_key),
+                              "agents": self.agents,
+                              "deploy_targets": _deploy_targets(config)},
+                    deliver=self._deliver_job,
+                    on_outcome=lambda job, ok, secs:
+                        self.outcomes.record_outcome(job.type, ok, secs,
+                                                     actor="kernel",
+                                                     detail=job.goal),
+                    tick_seconds=config.kernel.tick_seconds,
+                    max_running=config.kernel.max_running)
+            except Exception:
+                # Additive, like every other extension here: a kernel that
+                # won't start must leave a perfectly good assistant behind.
+                log.exception("job kernel failed to start — continuing without it")
+                self.jobs = None
+        # What this device can actually do. Each capability pairs a skill's
+        # tools with the instructions for using them, and is active only when
+        # the skill is really here — so a Pi with no TV is never told about a
+        # TV. See venom/capabilities.py.
+        self.capabilities = build_capabilities(
+            config, music=self.music, chess=self.chess, sos=self.sos,
+            calendar=self.calwatch, mailbox=self.mailbox,
+            receiver=self.btreceiver, notifications=self.notifications,
+            jobs=self.jobs, watches=self.watches, lights=self.lights,
+            tv=self.tv, connections=self.connections, whatsapp=self.whatsapp,
+            reminders=self.reminders, notes=self.notes, lists=self.lists,
+            location=self.location, projects=self.projects,
+            outcomes=self.outcomes, archive=self.archive)
+        self.capabilities.log_summary()
+        self._health = self._build_health()
+        # Append-only record of every guarded tool call, allowed or refused.
+        self.audit = AuditLog(config.permissions.audit_path
+                              if config.permissions.enabled else None)
         self.registry = build_pi_registry(config, self.memory, self.timers,
                                           music=self.music,
                                           reminders=self.reminders,
@@ -234,7 +342,34 @@ class VoiceOrchestrator:
                                           lights=self.lights,
                                           tv=self.tv,
                                           watches=self.watches,
+                                          jobs=self.jobs,
+                                          audit=self.audit,
+                                          projects=self.projects,
+                                          outcomes=self.outcomes,
+                                          archive=self.archive,
                                           sos=self.sos)
+        # Every tool call from here on is permission-checked and written down.
+        # Default policy grants exactly what the active capabilities ask for —
+        # this is his own device — but [permissions] denied = [...] switches
+        # any of it off, and the audit log answers "what did she do while I
+        # was asleep?", which is the question that actually gets asked.
+        if config.permissions.enabled:
+            # build_pi_registry predates capabilities and registers every tool
+            # itself, so the tools arrive with no permissions on them. Attach
+            # each capability's permissions to the tools it owns first —
+            # without this the guard has nothing to check.
+            attached = self.capabilities.apply_permissions(self.registry)
+            granted = (config.permissions.granted
+                       or self.capabilities.permissions())
+            self.policy = Policy(granted=granted,
+                                 denied=config.permissions.denied)
+            self.registry = guarded(self.registry, self.policy, self.audit)
+            log.info("permissions: %s (%d/%d tools guarded)",
+                     self.policy.describe(), len(attached),
+                     len(self.registry.names()))
+        else:
+            self.policy = None
+            log.warning("permissions: DISABLED — every tool is unrestricted")
         self._detector: WakeWordDetector | None = None
         # True while we've paused our own music for a live conversation, so we
         # only resume what *we* paused (not a track the user paused by hand).
@@ -292,6 +427,7 @@ class VoiceOrchestrator:
         # worth it. Keep a reference (asyncio holds tasks weakly).
         self._ambient_task = self._start_ambient()
         self._watch_task = self._start_watches()
+        self._jobs_task = self._start_jobs()
 
         first_cycle = True
         died_streak = 0
@@ -644,7 +780,6 @@ class VoiceOrchestrator:
             return None
         try:
             from flint_core.llm.providers import GeminiProvider
-
             from venom.ambient import in_quiet_hours
             from venom.watch import WatchLoop
 
@@ -662,6 +797,51 @@ class VoiceOrchestrator:
                  self.config.watch.tick_seconds, len(self.watches.active()))
         return asyncio.create_task(self.watchloop.run())
 
+    # ── background jobs (she goes away and does the work) ────────────────────
+    def _start_jobs(self) -> asyncio.Task | None:
+        """Launch the job scheduler, if one was built. Additive: a failure
+        here leaves every other way of talking to her intact."""
+        if self.jobs is None:
+            return None
+        try:
+            self.jobs.purge_finished(self.config.kernel.keep_finished_hours)
+        except Exception:
+            log.exception("job kernel: could not tidy finished jobs")
+        log.info("background jobs on (tick %.0fs, %d active)",
+                 self.config.kernel.tick_seconds, len(self.jobs.active()))
+        return asyncio.create_task(self.jobs.run())
+
+    def _build_health(self):
+        """The checks worth running on a headless box nobody looks at."""
+        from flint_core.health import HealthMonitor, disk_check, job_backlog_check, store_check
+
+        checks = [disk_check(self.config.memory_path.parent),
+                  store_check("memory", self.memory.load),
+                  store_check("projects", self.projects.tasks)]
+        if self.jobs is not None:
+            checks.append(job_backlog_check(self.jobs))
+        return HealthMonitor(checks)
+
+    def health_report(self):
+        """Run the checks now. Safe to call from the console or a tool."""
+        return self._health.run()
+
+    def _deliver_job(self, job) -> bool:
+        """A finished job wants to speak. Same door as ambient and watches.
+
+        Returning False means "not now" — the kernel keeps the result and
+        offers it again next tick, so a job finishing mid-conversation or at
+        3 a.m. waits for a decent moment instead of barging in.
+        """
+        if self._ambient_busy():
+            return False
+        from venom.ambient import in_quiet_hours
+
+        if in_quiet_hours(self.config.ambient) and not job.urgent:
+            return False
+        self.queue_proactive(job_instruction(job, self.config.voice.user_name))
+        return True
+
     def shutdown(self) -> None:
         """Stop the background tasks this orchestrator owns.
 
@@ -675,6 +855,9 @@ class VoiceOrchestrator:
         if self._watch_task is not None:
             self._watch_task.cancel()
             self._watch_task = None
+        if self._jobs_task is not None:
+            self._jobs_task.cancel()
+            self._jobs_task = None
 
     def _ambient_busy(self) -> bool:
         """True whenever she must not open her mouth unprompted: DND, a live
@@ -903,7 +1086,10 @@ class VoiceOrchestrator:
                            reminders=self.reminders,
                            pending_reminders=self.pending_reminders,
                            location=self.location, opening=None,
-                           convlog=self.convlog)
+                           convlog=self.convlog,
+                           capabilities=self.capabilities,
+                           context=self.context,
+                           learned=self.outcomes)
 
     def _prepare_opening(self, session: LiveSession) -> None:
         """At the moment of waking, decide whether to lead with a briefing."""
