@@ -114,11 +114,14 @@ def test_the_secret_patterns_cover_the_usual_suspects():
         assert not looks_secret(path), path
 
 
-def test_staging_defaults_to_tracked_changes_only(tmp_path):
-    """Never -A: an agent that stages everything commits the .env eventually."""
-    git, fake = repo(tmp_path)
+def test_staging_prefers_tracked_changes(tmp_path):
+    """Never -A: an agent that stages everything commits the .env eventually.
+    With tracked changes present, `add -u` is all that runs."""
+    git, fake = repo(tmp_path, {
+        "diff --staged --quiet": GitResult(False, ""),   # exit 1 = has changes
+    })
     git.stage()
-    assert fake.commands == ["git add -u"]
+    assert fake.commands == ["git add -u", "git diff --staged --quiet"]
 
 
 # ── the rest ────────────────────────────────────────────────────────────────
@@ -166,3 +169,82 @@ def test_a_missing_directory_is_reported():
     git = GitRepo("/no/such/place/at/all")
     assert git.run("status").ok is False
     assert "no such directory" in git.run("status").error
+
+
+# ── a brand-new project, which is what anything just built looks like ───────
+def fresh_repo(tmp_path):
+    """A real git repo with no commits — an unborn branch."""
+    import subprocess
+
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    (tmp_path / "main.py").write_text("print('hi')", encoding="utf-8")
+    return GitRepo(tmp_path)
+
+
+def test_an_unborn_branch_is_not_a_detached_head(tmp_path):
+    """Regression: rev-parse --abbrev-ref HEAD fails on a repo with no
+    commits, so a freshly built project looked detached and was refused."""
+    git = fresh_repo(tmp_path)
+    assert git.branch() != ""
+    assert git.has_commits() is False
+
+
+def test_a_first_commit_works_on_a_new_repo(tmp_path):
+    """The protected-branch rule guards shared history; there isn't any yet."""
+    git = fresh_repo(tmp_path)
+    result = git.commit("initial commit", paths=["main.py"])
+    assert result.ok is True, result.text
+    assert git.has_commits() is True
+
+
+def test_the_protection_returns_once_there_is_history(tmp_path):
+    git = fresh_repo(tmp_path)
+    git.commit("initial commit", paths=["main.py"])
+    (tmp_path / "main.py").write_text("print('changed')", encoding="utf-8")
+    result = git.commit("second commit")
+    assert result.ok is False
+    assert "Make a branch first" in result.error
+
+
+def test_a_branch_on_a_new_repo_then_commits(tmp_path):
+    git = fresh_repo(tmp_path)
+    assert git.create_branch("feature/thing").ok is True
+    assert git.branch() == "feature/thing"
+    assert git.commit("first", paths=["main.py"]).ok is True
+
+
+def test_a_new_project_stages_its_untracked_files(tmp_path):
+    """Regression: `git add -u` stages tracked changes, and a brand-new
+    project has none — so nothing could ever make its first commit."""
+    git = fresh_repo(tmp_path)
+    (tmp_path / "README.md").write_text("hi", encoding="utf-8")
+    assert git.stage().ok is True
+    assert git.has_staged_changes() is True
+
+
+def test_a_secret_is_left_behind_even_on_a_first_commit(tmp_path):
+    """The reason this enumerates instead of using -A."""
+    git = fresh_repo(tmp_path)
+    (tmp_path / ".env").write_text("GEMINI_API_KEY=sk-real", encoding="utf-8")
+    result = git.commit("initial commit")
+    assert result.ok is True
+    committed = git.run("show", "--name-only", "--format=", "HEAD").output
+    assert "main.py" in committed
+    assert ".env" not in committed
+
+
+def test_an_untracked_secret_is_reported_not_silently_dropped(tmp_path):
+    git = fresh_repo(tmp_path)
+    (tmp_path / "id_rsa").write_text("PRIVATE KEY", encoding="utf-8")
+    result = git.stage()
+    assert result.ok is True
+    assert "id_rsa" in result.output and "looks secret" in result.output
+
+
+def test_gitignored_files_are_not_staged(tmp_path):
+    git = fresh_repo(tmp_path)
+    (tmp_path / ".gitignore").write_text("build/\n", encoding="utf-8")
+    (tmp_path / "build").mkdir()
+    (tmp_path / "build" / "junk.o").write_text("x", encoding="utf-8")
+    git.stage()
+    assert "junk.o" not in git.run("diff", "--staged", "--name-only").output

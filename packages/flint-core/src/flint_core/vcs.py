@@ -113,8 +113,25 @@ class GitRepo:
         return self.run("rev-parse", "--git-dir").ok
 
     def branch(self) -> str:
-        result = self.run("rev-parse", "--abbrev-ref", "HEAD")
-        return result.output if result.ok else ""
+        """The current branch, or "" when HEAD is genuinely detached.
+
+        `--show-current` and not `rev-parse --abbrev-ref HEAD`: on a repo with
+        no commits yet the rev-parse form *fails*, which made a brand-new
+        project — the exact state anything just built is in — look like a
+        detached HEAD and get refused. `--show-current` returns the branch
+        name on an unborn branch and empty only when truly detached, which is
+        the distinction that actually matters here.
+        """
+        result = self.run("branch", "--show-current")
+        if result.ok and result.output:
+            return result.output
+        # Older git without --show-current; falls back to the previous form.
+        fallback = self.run("rev-parse", "--abbrev-ref", "HEAD")
+        return fallback.output if fallback.ok else ""
+
+    def has_commits(self) -> bool:
+        """False on a repo where nothing has ever been committed."""
+        return self.run("rev-parse", "--verify", "HEAD").ok
 
     def status(self) -> GitResult:
         return self.run("status", "--porcelain=v1", "--branch")
@@ -137,11 +154,25 @@ class GitRepo:
         return self.run("log", f"-{max(1, min(count, 50))}", "--oneline")
 
     # ── writing ─────────────────────────────────────────────────────────────
-    def stage(self, paths: Sequence[str] = ()) -> GitResult:
-        """Stage tracked changes, or the named paths.
+    def untracked_files(self) -> list[str]:
+        """Files git has never seen, honouring .gitignore."""
+        result = self.run("ls-files", "--others", "--exclude-standard")
+        if not result.ok:
+            return []
+        return [line.strip() for line in result.output.splitlines() if line.strip()]
 
-        No `-A`: an agent that stages everything commits whatever happens to
-        be sitting in the tree, which is how a `.env` ends up in history.
+    def stage(self, paths: Sequence[str] = ()) -> GitResult:
+        """Stage the named paths, or everything safe to stage.
+
+        Still never `-A`. With no paths this stages tracked changes first;
+        if that stages nothing — a brand-new project, where no file is
+        tracked yet — it falls back to adding untracked files *by name*,
+        having filtered out anything that looks like a secret.
+
+        Enumerating rather than `-A` is the whole point: the secret filter
+        only works on names we have actually looked at. `-A` would have made
+        the first commit work too, and would eventually have committed
+        someone's `.env`.
         """
         secrets = [p for p in paths if looks_secret(p)]
         if secrets:
@@ -149,7 +180,26 @@ class GitRepo:
                 False, "",
                 f"I won't stage {', '.join(secrets)} — that looks like a "
                 f"secret. Add it yourself if you really mean to.")
-        return self.run("add", *(paths or ["-u"]))
+        if paths:
+            return self.run("add", *paths)
+
+        tracked = self.run("add", "-u")
+        if self.has_staged_changes():
+            return tracked
+
+        untracked = self.untracked_files()
+        safe = [p for p in untracked if not looks_secret(p)]
+        skipped = [p for p in untracked if looks_secret(p)]
+        if skipped:
+            log.warning("vcs: not staging %s — looks like a secret",
+                        ", ".join(skipped))
+        if not safe:
+            return tracked
+        added = self.run("add", *safe)
+        if added.ok and skipped:
+            return GitResult(True, f"staged {len(safe)} file(s); left "
+                                   f"{', '.join(skipped)} alone — looks secret")
+        return added
 
     def commit(self, message: str, paths: Sequence[str] = (),
                allow_protected: bool = False) -> GitResult:
@@ -163,7 +213,12 @@ class GitRepo:
             # like it worked, which is the worst available outcome.
             return GitResult(False, "", "HEAD is detached — I won't commit "
                                         "somewhere the work can be lost")
-        if current in PROTECTED_BRANCHES and not allow_protected:
+        # The protected-branch rule exists to stop an agent committing on top
+        # of shared history. A repo with no commits has no history to endanger
+        # — and refusing there would mean nothing newly built could ever make
+        # its first commit, which is the one case where "main" is fine.
+        if (current in PROTECTED_BRANCHES and not allow_protected
+                and self.has_commits()):
             return GitResult(
                 False, "",
                 f"you're on {current} — I won't commit straight to it. "
