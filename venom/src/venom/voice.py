@@ -960,7 +960,15 @@ class VoiceOrchestrator:
             # A WhatsApp arrived while asleep — wake ourselves to announce who
             # messaged (unless DND, which holds it queued until DND lifts).
             if not self._dnd:
-                ann = self._take_announcement()
+                # Only take the announcement if there is somewhere to put it.
+                # This slot holds ONE opening, and everything else that fills
+                # it (ambient, watches, finished jobs) checks it is free
+                # first — this path used to overwrite regardless, so a
+                # research result he actually asked for could be silently
+                # destroyed by an unrelated WhatsApp landing first. Leaving
+                # the senders queued costs nothing: they announce next wake.
+                ann = (self._take_announcement()
+                       if self._opening_announcement is None else None)
                 if ann is not None:
                     self._opening_announcement = ann
                     log.info("whatsapp arrived while asleep — announcing sender")
