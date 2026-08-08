@@ -63,7 +63,7 @@ def analyze_error(
         }
     """
     if attempt >= max_attempts:
-        print(f"[ErrorHandler] ⚠️ Max attempts reached for step {step.get('step')} — forcing replan")
+        print(f"[ErrorHandler] ⚠️ Max attempts reached for step {step.step} — forcing replan")
         return {
             "decision":      ErrorDecision.REPLAN,
             "reason":        f"Failed {attempt} times: {error[:100]}",
@@ -73,10 +73,10 @@ def analyze_error(
         }
 
     prompt = f"""Failed step:
-Tool: {step.get('tool')}
-Description: {step.get('description')}
-Parameters: {json.dumps(step.get('parameters', {}), indent=2)}
-Critical: {step.get('critical', False)}
+Tool: {step.tool}
+Description: {step.description}
+Parameters: {json.dumps(dict(step.parameters), indent=2, default=str)}
+Critical: {step.critical}
 
 Error:
 {error[:500]}
@@ -84,9 +84,13 @@ Error:
 Attempt number: {attempt}"""
 
     try:
+        # Deciding retry/skip/replan/abort from a failure is a judgement call
+        # about what went wrong — reasoning, not classification.
+        from flint_core.llm.routing import Task
+
         result = get_gateway().chat_json(
-            prompt, system=ERROR_ANALYST_PROMPT,
-            model="gemini-2.5-flash-lite", temperature=0.2,
+            prompt, system=ERROR_ANALYST_PROMPT, temperature=0.2,
+            task=Task.REASONING,
         )
         decision_str = str(result.get("decision", "replan")).lower()
         decision_map = {

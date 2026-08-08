@@ -578,7 +578,13 @@ Rules:
 - Return ONLY the JSON, no explanation, no markdown."""
 
     try:
-        return get_gateway().chat_json(prompt, system="Return only valid JSON. No extra text.")
+        # Mapping one phrase onto one of a fixed list of actions: mechanical
+        # work, and the cheapest model that can do it is the right one.
+        from flint_core.llm.routing import Task
+
+        return get_gateway().chat_json(
+            prompt, system="Return only valid JSON. No extra text.",
+            task=Task.BULK)
     except Exception as e:
         print(f"[Settings] Intent detection failed: {e}")
         return {"action": description.lower().replace(" ", "_"), "value": None}
