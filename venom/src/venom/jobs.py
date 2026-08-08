@@ -297,6 +297,20 @@ def build_registry() -> RunnerRegistry:
         ttl_hours=4.0,
         max_concurrent=1,      # one build at a time; each drives a coding agent
     )(run_build)
+    from flint_core.shipping import run_ship
+
+    runners.runner(
+        "ship",
+        description=(
+            "Build a working application from a description AND put it on "
+            "GitHub: write it, run it, fix it until it passes, commit it, "
+            "publish it. Takes many minutes."
+        ),
+        default_interval=60.0,
+        max_steps=20,          # the build budget plus commit and publish
+        ttl_hours=4.0,
+        max_concurrent=1,
+    )(run_ship)
     from flint_core.deploy import run_deploy
 
     runners.runner(

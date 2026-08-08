@@ -59,7 +59,9 @@ def test_ordinary_commands_go_through(tmp_path):
 
 # ── protecting the branch and the secrets ───────────────────────────────────
 def test_committing_straight_to_main_is_refused(tmp_path):
-    git, _ = repo(tmp_path, {"rev-parse --abbrev-ref": GitResult(True, "main")})
+    git, _ = repo(tmp_path, {"branch --show-current": GitResult(True, "main"),
+                             "rev-parse --verify HEAD": GitResult(True, "abc123"),
+                             "remote": GitResult(True, "origin")})
     result = git.commit("some change")
     assert result.ok is False
     assert "Make a branch first" in result.error
@@ -67,13 +69,15 @@ def test_committing_straight_to_main_is_refused(tmp_path):
 
 def test_every_protected_branch_is_covered(tmp_path):
     for branch in PROTECTED_BRANCHES:
-        git, _ = repo(tmp_path, {"rev-parse --abbrev-ref": GitResult(True, branch)})
+        git, _ = repo(tmp_path, {"branch --show-current": GitResult(True, branch),
+                                 "rev-parse --verify HEAD": GitResult(True, "abc"),
+                                 "remote": GitResult(True, "origin")})
         assert git.commit("x").ok is False
 
 
 def test_a_feature_branch_commits_fine(tmp_path):
     git, fake = repo(tmp_path, {
-        "rev-parse --abbrev-ref": GitResult(True, "feature/thing"),
+        "branch --show-current": GitResult(True, "feature/thing"),
         "diff --staged --quiet": GitResult(False, ""),   # exit 1 = has changes
     })
     assert git.commit("a real change").ok is True
@@ -82,14 +86,15 @@ def test_a_feature_branch_commits_fine(tmp_path):
 
 def test_a_detached_head_is_refused(tmp_path):
     """A commit that lands nowhere still looks like it worked."""
-    git, _ = repo(tmp_path, {"rev-parse --abbrev-ref": GitResult(True, "HEAD")})
+    git, _ = repo(tmp_path, {"branch --show-current": GitResult(True, ""),
+                             "rev-parse --abbrev-ref": GitResult(True, "HEAD")})
     result = git.commit("x")
     assert result.ok is False and "detached" in result.error
 
 
 def test_committing_nothing_is_reported_not_faked(tmp_path):
     git, _ = repo(tmp_path, {
-        "rev-parse --abbrev-ref": GitResult(True, "feature/x"),
+        "branch --show-current": GitResult(True, "feature/x"),
         "diff --staged --quiet": GitResult(True, ""),    # exit 0 = nothing staged
     })
     assert "nothing staged" in git.commit("x").error
@@ -132,12 +137,12 @@ def test_changed_files_are_parsed_from_porcelain(tmp_path):
 
 
 def test_pushing_a_protected_branch_is_refused(tmp_path):
-    git, _ = repo(tmp_path, {"rev-parse --abbrev-ref": GitResult(True, "main")})
+    git, _ = repo(tmp_path, {"branch --show-current": GitResult(True, "main")})
     assert git.push().ok is False
 
 
 def test_pushing_a_feature_branch_sets_upstream(tmp_path):
-    git, fake = repo(tmp_path, {"rev-parse --abbrev-ref": GitResult(True, "feat")})
+    git, fake = repo(tmp_path, {"branch --show-current": GitResult(True, "feat")})
     git.push()
     assert "git push --set-upstream origin feat" in fake.commands
 
@@ -197,9 +202,23 @@ def test_a_first_commit_works_on_a_new_repo(tmp_path):
     assert git.has_commits() is True
 
 
-def test_the_protection_returns_once_there_is_history(tmp_path):
+def test_a_local_only_repo_is_not_protected(tmp_path):
+    """Nobody else has this branch — "main" here is a default name, not a
+    shared trunk. Refusing made a project Venom built unresumable."""
+    git = fresh_repo(tmp_path)
+    assert git.commit("initial commit", paths=["main.py"]).ok is True
+    (tmp_path / "main.py").write_text("print('changed')", encoding="utf-8")
+    assert git.has_remote() is False
+    assert git.commit("second commit").ok is True
+
+
+def test_the_protection_returns_once_the_repo_is_shared(tmp_path):
+    import subprocess
+
     git = fresh_repo(tmp_path)
     git.commit("initial commit", paths=["main.py"])
+    subprocess.run(["git", "remote", "add", "origin",
+                    "https://example.com/x.git"], cwd=tmp_path, check=True)
     (tmp_path / "main.py").write_text("print('changed')", encoding="utf-8")
     result = git.commit("second commit")
     assert result.ok is False

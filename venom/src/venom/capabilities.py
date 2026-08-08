@@ -144,7 +144,15 @@ BUILD_PROMPT = (
     "talk about something else. Do NOT wait, do NOT keep checking. If you "
     "don't know which folder to build in, ask him once — never pick one "
     "yourself. When it's done you'll hear whether it passed its own tests; "
-    "if it didn't, say so plainly rather than dressing it up."
+    "if it didn't, say so plainly rather than dressing it up.\n\n"
+
+    "ON GITHUB: if he wants it published — 'put it on GitHub', 'push it', "
+    "'make a repo' — call build_and_publish instead, which does the whole "
+    "thing and comes back with the URL. It makes a PRIVATE repo unless he "
+    "clearly says public; never pass public=true off your own bat, because "
+    "a public repo is indexed and forked within minutes and cannot really be "
+    "unpublished. If it built fine but couldn't reach GitHub, say exactly "
+    "that — the code still exists and is committed, which is worth knowing."
 )
 
 JOBS_PROMPT = (
@@ -366,7 +374,7 @@ def build_capabilities(config, *, music=None, chess=None, sos=None,
             summary="Build a working app from a description, and fix it until it runs.",
             prompt=BUILD_PROMPT, available=jobs is not None,
             permissions=("shell", "files"),
-            tools=("build_app",),
+            tools=("build_app", "build_and_publish"),
         ),
         Capability(
             name="watches", order=61,

@@ -110,7 +110,31 @@ class GitRepo:
 
     # ── reading ─────────────────────────────────────────────────────────────
     def is_repo(self) -> bool:
+        """True if this path is inside a repository — possibly an ancestor's."""
         return self.run("rev-parse", "--git-dir").ok
+
+    def root(self) -> str:
+        """The working tree this path belongs to, or "" if none."""
+        result = self.run("rev-parse", "--show-toplevel")
+        return result.output.strip() if result.ok else ""
+
+    def is_repo_root(self) -> bool:
+        """True only if THIS directory is itself the top of a repository.
+
+        The distinction is not academic. `is_repo()` is true anywhere under a
+        repository, including — discovered the hard way — a home directory
+        that happens to be version-controlled. Anything that says "is there a
+        repo here? no? then create one" must ask *this* question, or a project
+        built in a scratch folder silently commits itself into whatever
+        ancestor repo it happened to land inside.
+        """
+        top = self.root()
+        if not top:
+            return False
+        try:
+            return Path(top).resolve() == self.path.resolve()
+        except OSError:
+            return False
 
     def branch(self) -> str:
         """The current branch, or "" when HEAD is genuinely detached.
@@ -132,6 +156,15 @@ class GitRepo:
     def has_commits(self) -> bool:
         """False on a repo where nothing has ever been committed."""
         return self.run("rev-parse", "--verify", "HEAD").ok
+
+    def has_remote(self) -> bool:
+        """True if this repo is shared with somewhere else.
+
+        The proxy for "other people can see this branch", which is what the
+        protected-branch rule is actually about.
+        """
+        result = self.run("remote")
+        return result.ok and bool(result.output.strip())
 
     def status(self) -> GitResult:
         return self.run("status", "--porcelain=v1", "--branch")
@@ -214,11 +247,19 @@ class GitRepo:
             return GitResult(False, "", "HEAD is detached — I won't commit "
                                         "somewhere the work can be lost")
         # The protected-branch rule exists to stop an agent committing on top
-        # of shared history. A repo with no commits has no history to endanger
-        # — and refusing there would mean nothing newly built could ever make
-        # its first commit, which is the one case where "main" is fine.
+        # of history other people share. Both halves of that matter:
+        #
+        #   no commits  — nothing to endanger, and refusing would mean nothing
+        #                 newly built could ever make its first commit
+        #   no remote   — nobody else has this branch, so "main" here is just
+        #                 a default name, not a shared trunk. A project Venom
+        #                 built and initialised is exactly this case, and
+        #                 refusing made its own work unresumable after a crash
+        #
+        # A cloned or published repo has a remote, so the guard still applies
+        # everywhere it was meant to.
         if (current in PROTECTED_BRANCHES and not allow_protected
-                and self.has_commits()):
+                and self.has_commits() and self.has_remote()):
             return GitResult(
                 False, "",
                 f"you're on {current} — I won't commit straight to it. "
