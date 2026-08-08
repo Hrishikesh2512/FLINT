@@ -44,8 +44,20 @@ from flint_core.agents.base import AgentRequest, AgentResult, AgentSpec
 
 log = logging.getLogger("flint.agents.cli")
 
-#: Claude Code's headless/print mode. The one default worth shipping.
-CLAUDE_CODE_DEFAULT: tuple[str, ...] = ("claude", "-p", "{goal}")
+#: Claude Code's headless mode, with editing allowed. The one default shipped.
+#:
+#: `-p` alone answers a question and writes nothing — verified on hardware,
+#: where a build job "succeeded" having produced zero files while the agent
+#: politely printed the whole project to stdout and asked for a writable
+#: directory. An agent hired to build something must be allowed to build it.
+#:
+#: `acceptEdits` and not `bypassPermissions`: this grants file edits inside
+#: the working directory, which is exactly what a build needs. The loop runs
+#: the tests itself (see `flint_core.building`), so the agent never needs
+#: shell access to verify its own work — and an agent that cannot run
+#: arbitrary commands cannot be talked into running one.
+CLAUDE_CODE_DEFAULT: tuple[str, ...] = (
+    "claude", "-p", "--permission-mode", "acceptEdits", "{goal}")
 
 #: Lines longer than this are truncated before being reported as progress —
 #: a CLI dumping a whole file into stdout must not flood the caller.

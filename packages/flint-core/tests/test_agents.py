@@ -289,8 +289,21 @@ def test_a_bad_agent_entry_is_skipped_not_fatal():
     assert [s.name for s in specs] == ["fine"]
 
 
-def test_the_shipped_default_is_claude_code_headless_mode():
+def test_the_shipped_default_can_actually_write_files():
+    """Regression, found on hardware: `claude -p "{goal}"` alone answers the
+    question and writes nothing, so a build job reported success having
+    produced zero files. An agent hired to build must be allowed to build."""
     from flint_core.agents import CLAUDE_CODE_DEFAULT
 
-    assert CLAUDE_CODE_DEFAULT == ("claude", "-p", "{goal}")
-    CLIAgentConfig(name="claude", command=CLAUDE_CODE_DEFAULT)   # valid
+    assert "--permission-mode" in CLAUDE_CODE_DEFAULT
+    assert "acceptEdits" in CLAUDE_CODE_DEFAULT
+    CLIAgentConfig(name="claude", command=CLAUDE_CODE_DEFAULT)   # still valid
+
+
+def test_the_shipped_default_does_not_bypass_every_check():
+    """acceptEdits, not bypassPermissions — the loop runs the tests itself, so
+    the agent never needs shell access to verify its own work."""
+    from flint_core.agents import CLAUDE_CODE_DEFAULT
+
+    assert "bypassPermissions" not in CLAUDE_CODE_DEFAULT
+    assert not any("dangerously" in part for part in CLAUDE_CODE_DEFAULT)
