@@ -54,3 +54,44 @@ def test_build_gateway_provider_order():
 def test_build_gateway_requires_a_key():
     with pytest.raises(ValueError, match="no LLM provider configured"):
         build_gateway(FlintSettings())
+
+
+# ── routing catalogue ───────────────────────────────────────────────────────
+def test_the_router_covers_only_configured_providers():
+    from flint_core.config import FlintSettings, build_router
+
+    router = build_router(FlintSettings(gemini_api_key="g"))
+    assert {spec.provider for spec in router} == {"gemini"}
+
+
+def test_routing_degrades_gracefully_to_one_provider():
+    """A single-provider device still gets sensible chat/reasoning splits."""
+    from flint_core.config import FlintSettings, build_router
+    from flint_core.llm.routing import Task
+
+    router = build_router(FlintSettings(gemini_api_key="g"))
+    assert router.pick(Task.CHAT).model == "gemini-2.5-flash-lite"    # cheap+fast
+    assert router.pick(Task.REASONING).model == "gemini-2.5-flash"    # strongest
+
+
+def test_a_stronger_provider_takes_over_reasoning():
+    from flint_core.config import FlintSettings, build_router
+    from flint_core.llm.routing import Task
+
+    router = build_router(FlintSettings(gemini_api_key="g", groq_api_key="q"))
+    picked = router.pick(Task.REASONING)
+    assert (picked.provider, picked.model) == ("groq", "llama-3.3-70b-versatile")
+
+
+def test_no_providers_means_an_empty_router():
+    from flint_core.config import FlintSettings, build_router
+
+    assert len(build_router(FlintSettings())) == 0
+
+
+def test_the_built_gateway_carries_a_router():
+    from flint_core.config import FlintSettings, build_gateway
+
+    gateway = build_gateway(FlintSettings(gemini_api_key="g"))
+    assert gateway._router is not None
+    assert len(gateway._router) > 0

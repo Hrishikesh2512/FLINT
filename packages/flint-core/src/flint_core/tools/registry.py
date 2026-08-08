@@ -24,8 +24,8 @@ dispatch table, the planner's tool documentation, and platform gating.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Iterator
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable, Iterator
+from dataclasses import dataclass, replace
 from typing import Any
 
 log = logging.getLogger("flint.tools")
@@ -81,6 +81,11 @@ class ToolSpec:
     # "kwargs": handler(**args)   "parameters": handler(parameters=args)
     # — the latter bridges legacy actions that take one params dict.
     arg_style: str = "kwargs"
+    #: What this tool needs permission to do — "shell", "files", "messaging".
+    #: Empty means it needs nothing beyond existing (reading a timer, telling
+    #: the time). Enforced by flint_core.permissions, not here: the registry's
+    #: job is to know what a tool needs, not to decide who may have it.
+    permissions: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.name.isidentifier():
@@ -145,6 +150,7 @@ class ToolRegistry:
         parameters: dict[str, Any] | None = None,
         platforms: tuple[str, ...] = (ANY_PLATFORM,),
         arg_style: str = "kwargs",
+        permissions: tuple[str, ...] = (),
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             self.register(
@@ -155,11 +161,27 @@ class ToolRegistry:
                     handler=func,
                     platforms=platforms,
                     arg_style=arg_style,
+                    permissions=tuple(permissions),
                 )
             )
             return func
 
         return decorator
+
+    def grant_default_permissions(self, names: Iterable[str],
+                                  permissions: tuple[str, ...]) -> None:
+        """Attribute `permissions` to any of `names` that declared none.
+
+        Used by CapabilitySet: a skill's tools inherit the skill's permissions
+        unless a tool asked for something more specific itself. Keeps the
+        common case (every music tool needs "audio") out of every decoration.
+        """
+        if not permissions:
+            return
+        for name in names:
+            spec = self._tools.get(name)
+            if spec is not None and not spec.permissions:
+                self._tools[name] = replace(spec, permissions=tuple(permissions))
 
     # ── lookup ───────────────────────────────────────────────────────────────
     def __contains__(self, name: str) -> bool:

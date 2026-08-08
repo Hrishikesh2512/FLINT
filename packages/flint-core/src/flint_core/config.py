@@ -19,6 +19,7 @@ from flint_core.llm.providers import (
     GeminiProvider,
     OpenAICompatProvider,
 )
+from flint_core.llm.routing import ModelSpec, Router, Task, Tier
 from flint_core.llm.transport import requests_transport
 
 # Free-tier pool used when only an OpenRouter key is configured. Order matters:
@@ -87,10 +88,51 @@ def load_settings(legacy_json: Path | None = None) -> FlintSettings:
     return FlintSettings(**{f"{name}_api_key": resolve(name) for name in _ENV_KEYS})
 
 
+#: Default routing hints for the models `build_gateway` actually wires up.
+#:
+#: Tiers are coarse and deliberately uncontroversial — the "lite"/"mini"/
+#: "instant" variants are the cheap tier, the rest are standard. `good_at` is
+#: a starting guess, not a benchmark result; getting one wrong costs ordering
+#: and nothing else, because the router never removes a model from the field.
+#: Override the whole thing by passing your own Router to build_gateway.
+_DEFAULT_ROUTING: tuple[tuple[str, str, tuple[str, ...], str, bool, bool], ...] = (
+    # provider,     model,                        good_at, tier, fast, vision
+    ("gemini", "gemini-2.5-flash",
+     (Task.CHAT, Task.VISION, Task.CODE), Tier.STANDARD, True, True),
+    ("gemini", "gemini-2.5-flash-lite",
+     (Task.CHAT, Task.BULK), Tier.CHEAP, True, False),
+    ("groq", "llama-3.3-70b-versatile",
+     (Task.REASONING, Task.CODE), Tier.STANDARD, True, False),
+    ("groq", "llama-3.1-8b-instant",
+     (Task.BULK,), Tier.CHEAP, True, False),
+    ("openai", "gpt-4o-mini",
+     (Task.CHAT, Task.BULK, Task.VISION), Tier.CHEAP, True, True),
+    ("anthropic", "claude-haiku-4-5-20251001",
+     (Task.CHAT, Task.CODE), Tier.STANDARD, True, False),
+)
+
+
+def build_router(settings: FlintSettings) -> Router:
+    """Routing catalogue covering whichever providers are configured.
+
+    Entries for absent providers are harmless — the gateway skips a routed
+    model it has no provider for — but filtering keeps the table honest when
+    it is logged or shown in the console.
+    """
+    configured = set(settings.configured_providers)
+    return Router([
+        ModelSpec(provider=provider, model=model,
+                  good_at=frozenset(good_at), tier=tier, fast=fast, vision=vision)
+        for provider, model, good_at, tier, fast, vision in _DEFAULT_ROUTING
+        if provider in configured
+    ])
+
+
 def build_gateway(
     settings: FlintSettings,
     transport: Transport = requests_transport,
     rate_limit_cooldown: float = 60.0,
+    router: Router | None = None,
 ) -> LLMGateway:
     """The standard provider chain: Gemini → Groq → OpenAI → Anthropic → OpenRouter.
 
@@ -139,4 +181,5 @@ def build_gateway(
             "no LLM provider configured — set GEMINI_API_KEY (or another provider key) "
             "in the environment or config/api_keys.json"
         )
-    return LLMGateway(providers, rate_limit_cooldown=rate_limit_cooldown)
+    return LLMGateway(providers, rate_limit_cooldown=rate_limit_cooldown,
+                      router=router if router is not None else build_router(settings))

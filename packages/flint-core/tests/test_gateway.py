@@ -107,3 +107,101 @@ def test_system_prompt_reaches_provider():
     gateway_with(gemini).chat("hi", system="you are a test")
     payload = transport.requests[0]["payload"]
     assert payload["system_instruction"]["parts"][0]["text"] == "you are a test"
+
+
+# ── routing: the right model for the kind of work ───────────────────────────
+def routed_gateway(*providers, catalogue=()):
+    from flint_core.llm.routing import Router
+
+    return LLMGateway(list(providers), router=Router(catalogue))
+
+
+def test_routing_prefers_the_model_the_task_calls_for():
+    from flint_core.llm.routing import ModelSpec, Task, Tier
+
+    transport = FakeTransport(gemini_ok("thought hard"))
+    gemini = GeminiProvider("k", models=("flash", "pro"), transport=transport)
+    gateway = routed_gateway(gemini, catalogue=[
+        ModelSpec("gemini", "flash", good_at=frozenset({Task.CHAT}),
+                  tier=Tier.CHEAP, fast=True),
+        ModelSpec("gemini", "pro", good_at=frozenset({Task.REASONING}),
+                  tier=Tier.PREMIUM),
+    ])
+    gateway.chat("why", task=Task.REASONING)
+    assert "pro:generateContent" in transport.requests[0]["url"]
+
+
+def test_routing_picks_the_cheap_one_for_chat():
+    from flint_core.llm.routing import ModelSpec, Task, Tier
+
+    transport = FakeTransport(gemini_ok("haan"))
+    gemini = GeminiProvider("k", models=("flash", "pro"), transport=transport)
+    gateway = routed_gateway(gemini, catalogue=[
+        ModelSpec("gemini", "pro", good_at=frozenset({Task.REASONING}),
+                  tier=Tier.PREMIUM),
+        ModelSpec("gemini", "flash", good_at=frozenset({Task.CHAT}),
+                  tier=Tier.CHEAP, fast=True),
+    ])
+    gateway.chat("kya scene hai", task=Task.CHAT)
+    assert "flash:generateContent" in transport.requests[0]["url"]
+
+
+def test_auto_classifies_from_the_prompt():
+    from flint_core.llm.routing import ModelSpec, Task, Tier
+
+    transport = FakeTransport(gemini_ok("fixed"))
+    gemini = GeminiProvider("k", models=("flash", "pro"), transport=transport)
+    gateway = routed_gateway(gemini, catalogue=[
+        ModelSpec("gemini", "flash", good_at=frozenset({Task.CHAT}),
+                  tier=Tier.CHEAP, fast=True),
+        ModelSpec("gemini", "pro", good_at=frozenset({Task.CODE}),
+                  tier=Tier.PREMIUM),
+    ])
+    gateway.chat("fix this traceback in main.py", task="auto")
+    assert "pro:generateContent" in transport.requests[0]["url"]
+
+
+def test_routing_never_costs_availability():
+    """The routed model is down: the request must still be answered."""
+    from flint_core.llm.routing import ModelSpec, Task, Tier
+
+    transport = FakeTransport(http(500), gemini_ok("fell back"))
+    gemini = GeminiProvider("k", models=("pro", "flash"), transport=transport)
+    gateway = routed_gateway(gemini, catalogue=[
+        ModelSpec("gemini", "pro", good_at=frozenset({Task.REASONING}),
+                  tier=Tier.PREMIUM),
+        ModelSpec("gemini", "flash", good_at=frozenset({Task.CHAT}),
+                  tier=Tier.CHEAP, fast=True),
+    ])
+    assert gateway.chat("why", task=Task.REASONING).text == "fell back"
+
+
+def test_a_routed_model_the_host_does_not_have_is_skipped():
+    """A catalogue entry for a provider that isn't configured must not break it."""
+    from flint_core.llm.routing import ModelSpec, Task
+
+    gemini = GeminiProvider("k", models=("flash",),
+                            transport=FakeTransport(gemini_ok("still fine")))
+    gateway = routed_gateway(gemini, catalogue=[
+        ModelSpec("anthropic", "absent", good_at=frozenset({Task.REASONING})),
+    ])
+    assert gateway.chat("why", task=Task.REASONING).text == "still fine"
+
+
+def test_without_a_task_behaviour_is_unchanged():
+    transport = FakeTransport(gemini_ok("as before"))
+    gemini = GeminiProvider("k", models=("flash", "pro"), transport=transport)
+    from flint_core.llm.routing import ModelSpec, Task, Tier
+
+    gateway = routed_gateway(gemini, catalogue=[
+        ModelSpec("gemini", "pro", good_at=frozenset({Task.CHAT}),
+                  tier=Tier.PREMIUM),
+    ])
+    gateway.chat("hi")                      # no task= at all
+    assert "flash:generateContent" in transport.requests[0]["url"]
+
+
+def test_a_gateway_without_a_router_ignores_the_task():
+    transport = FakeTransport(gemini_ok("fine"))
+    gemini = GeminiProvider("k", models=("flash",), transport=transport)
+    assert gateway_with(gemini).chat("hi", task="reasoning").text == "fine"

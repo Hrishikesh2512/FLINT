@@ -21,6 +21,7 @@ from flint_core.llm.base import (
     RateLimitedError,
     strip_code_fences,
 )
+from flint_core.llm.routing import Router, classify
 
 log = logging.getLogger("flint.llm")
 
@@ -38,6 +39,7 @@ class LLMGateway:
         providers: Sequence[Provider],
         rate_limit_cooldown: float = 60.0,
         clock: Callable[[], float] = time.monotonic,
+        router: Router | None = None,
     ):
         if not providers:
             raise ValueError("LLMGateway needs at least one provider")
@@ -45,6 +47,10 @@ class LLMGateway:
         self._cooldown = rate_limit_cooldown
         self._clock = clock
         self._limited_until: dict[tuple[str, str], float] = {}
+        # Optional: orders (provider, model) by what the request is *for*.
+        # Without one, behaviour is exactly as before — configured order,
+        # first thing that answers.
+        self._router = router
 
     # ── public API ───────────────────────────────────────────────────────────
     def chat(
@@ -57,7 +63,13 @@ class LLMGateway:
         max_tokens: int = 4096,
         temperature: float = 0.7,
         json_mode: bool = False,
+        task: str | None = None,
     ) -> LLMResponse:
+        """`task` (see flint_core.llm.routing.Task) picks the model by what the
+        work *is* — "chat", "reasoning", "code", "bulk". Pass "auto" to have it
+        guessed from the prompt. Omit it and nothing changes: configured order,
+        first provider that answers.
+        """
         if (prompt is None) == (messages is None):
             raise ValueError("pass exactly one of prompt= or messages=")
         turns: list[ChatMessage] = []
@@ -66,25 +78,24 @@ class LLMGateway:
         turns.extend([ChatMessage("user", prompt)] if prompt is not None else messages)
 
         errors: list[str] = []
-        for provider in self._providers:
-            for candidate_model in self._model_order(provider, model):
-                if self._on_cooldown(provider.name, candidate_model):
-                    continue
-                try:
-                    text = provider.complete(
-                        turns,
-                        candidate_model,
-                        max_tokens=max_tokens,
-                        temperature=temperature,
-                        json_mode=json_mode,
-                    )
-                    return LLMResponse(text=text, provider=provider.name, model=candidate_model)
-                except RateLimitedError as exc:
-                    self._mark_limited(provider.name, candidate_model)
-                    errors.append(str(exc))
-                except ProviderError as exc:
-                    log.warning("%s", exc)
-                    errors.append(str(exc))
+        for provider, candidate_model in self._attempt_order(turns, model, task):
+            if self._on_cooldown(provider.name, candidate_model):
+                continue
+            try:
+                text = provider.complete(
+                    turns,
+                    candidate_model,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    json_mode=json_mode,
+                )
+                return LLMResponse(text=text, provider=provider.name, model=candidate_model)
+            except RateLimitedError as exc:
+                self._mark_limited(provider.name, candidate_model)
+                errors.append(str(exc))
+            except ProviderError as exc:
+                log.warning("%s", exc)
+                errors.append(str(exc))
         raise AllProvidersFailedError(errors)
 
     def chat_json(
@@ -95,6 +106,7 @@ class LLMGateway:
         model: str | None = None,
         max_tokens: int = 4096,
         temperature: float = 0.2,
+        task: str | None = None,
     ) -> dict | list:
         response = self.chat(
             prompt,
@@ -103,6 +115,7 @@ class LLMGateway:
             max_tokens=max_tokens,
             temperature=temperature,
             json_mode=True,
+            task=task,
         )
         cleaned = strip_code_fences(response.text)
         try:
@@ -150,6 +163,43 @@ class LLMGateway:
         raise AllProvidersFailedError(errors or ["no vision-capable provider configured"])
 
     # ── internals ────────────────────────────────────────────────────────────
+    def _attempt_order(self, turns: Sequence[ChatMessage], requested: str | None,
+                       task: str | None) -> list[tuple[Provider, str]]:
+        """Every (provider, model) worth trying, best first.
+
+        Routed pairs come first when a task is given; everything else follows
+        in the configured order. Nothing is ever dropped — routing decides
+        what to try *first*, never what to rule out, so a routed model being
+        down or rate-limited still falls through to whatever is up.
+        """
+        fallback = [(p, m) for p in self._providers
+                    for m in self._model_order(p, requested)]
+        if task is None or self._router is None:
+            return fallback
+
+        if task == "auto":
+            text = "\n".join(t.content for t in turns if t.role == "user")
+            task = classify(text)
+            log.debug("routing: classified as %s", task)
+
+        by_name = {p.name: p for p in self._providers}
+        preferred: list[tuple[Provider, str]] = []
+        for spec in self._router.candidates(task):
+            provider = by_name.get(spec.provider)
+            if provider is not None:
+                preferred.append((provider, spec.model))
+        if preferred:
+            log.debug("routing: %s -> %s/%s", task,
+                      preferred[0][0].name, preferred[0][1])
+        seen = set()
+        ordered = []
+        for pair in preferred + fallback:
+            key = (pair[0].name, pair[1])
+            if key not in seen:
+                seen.add(key)
+                ordered.append(pair)
+        return ordered
+
     def _model_order(self, provider: Provider, requested: str | None) -> list[str]:
         models = list(provider.models)
         if requested and requested in models:
