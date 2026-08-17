@@ -99,10 +99,14 @@ def register_sms_tools(reg, phone: Phone, contacts=None) -> None:
         number = _resolve(to, contacts)
         if not number:
             return f"I don't have a number for {to}."
-        if phone.send_sms(number, text):
+        if not phone.send_sms(number, text):
+            return (f"I couldn't send that to {to} — the message did not go. "
+                    f"Worth trying another way.")
+        if getattr(phone, "sends_directly", True):
             return f"Sent to {to}."
-        return (f"I couldn't send that to {to} — the message did not go. "
-                f"Worth trying another way.")
+        # A body that can only pre-fill the messaging app. Saying "sent" here
+        # would be a lie he would not discover until it mattered.
+        return (f"I've opened it for {to} — tap send and it's away.")
 
 
 def register_sos_sms(reg, phone: Phone, sos) -> None:
@@ -142,6 +146,15 @@ def register_sos_sms(reg, phone: Phone, sos) -> None:
         for name, number in contacts:
             (sent if phone.send_sms(number, body) else failed).append(name)
 
+        direct = getattr(phone, "sends_directly", True)
+        if not direct and sent:
+            # This body can only open the messaging app. In an emergency the
+            # difference between "I told them" and "you still have to press
+            # send" is the entire message, so it leads rather than trails.
+            tail = (f" I couldn't even open one for {', '.join(failed)}."
+                    if failed else "")
+            return (f"Tap send — I've opened a message to {', '.join(sent)}, "
+                    f"one after another. They are NOT sent until you do.{tail}")
         if sent and not failed:
             return f"Texted {', '.join(sent)}. Stay where you are."
         if sent:

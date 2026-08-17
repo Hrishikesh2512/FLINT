@@ -55,6 +55,24 @@ class HubConfig:
 
 
 @dataclass(frozen=True)
+class WebConfig:
+    """The page the phone installs — see `carnage/web.py`.
+
+    Bound to loopback by default and meant to be published by `tailscale
+    serve`, which terminates TLS and reaches it over the tailnet. That is not
+    a nicety: browsers refuse geolocation, the microphone and installability on
+    a plain-HTTP origin that is not localhost, so a LAN address would give a
+    page with none of the three things that make it worth having.
+    """
+
+    enabled: bool = False
+    host: str = "127.0.0.1"
+    port: int = 8791
+    #: Defaults to the hub token, so there is one secret for the device.
+    token: str = ""
+
+
+@dataclass(frozen=True)
 class CarnageConfig:
     device: str = DEFAULT_DEVICE
     user_name: str = ""
@@ -64,6 +82,7 @@ class CarnageConfig:
     #: rather than guessing at a folder on someone's phone.
     documents_dir: str = ""
     hub: HubConfig = field(default_factory=HubConfig)
+    web: WebConfig = field(default_factory=WebConfig)
     #: Repos and deploy targets, matching `flint_core.skills.Workspace`. Same
     #: allowlist discipline as Venom: nothing until it is named.
     repos: tuple[tuple[str, str], ...] = ()
@@ -112,6 +131,13 @@ def load_config(path: Path | None = None) -> CarnageConfig:
             log.warning("config at %s unreadable (%s) — using defaults",
                         path, exc)
 
+    web_raw = raw.get("web") if isinstance(raw.get("web"), dict) else {}
+    web = WebConfig(
+        enabled=bool(web_raw.get("enabled", False)),
+        host=str(web_raw.get("host", WebConfig.host)),
+        port=int(web_raw.get("port", WebConfig.port) or WebConfig.port),
+        token=str(web_raw.get("token", "") or ""))
+
     hub_raw = raw.get("hub") if isinstance(raw.get("hub"), dict) else {}
     hub = HubConfig(
         enabled=bool(hub_raw.get("enabled", True)),
@@ -129,6 +155,7 @@ def load_config(path: Path | None = None) -> CarnageConfig:
         state_dir=Path(state) if state else _default_state(),
         documents_dir=str(raw.get("documents_dir", "") or ""),
         hub=hub,
+        web=web,
         repos=tuple((str(name), str(p))
                     for name, p in (raw.get("repos") or ())),
         deploy_targets=tuple(d for d in (raw.get("deploy_targets") or ())

@@ -83,11 +83,20 @@ an Android device in the room.
 
 ## Getting it onto a phone
 
-**Termux, today.** Install Termux and Termux:API from F-Droid, `pkg install
-python`, install the two packages, run it. `TermuxPhone` shells out to
-`termux-battery-status`, `termux-location`, `termux-sms-send`. This works this
-week with no toolchain — but Android will eventually stop a background Termux
-session, so it validates the idea rather than shipping it.
+Two routes, and they can coexist.
+
+**A page, with nothing installed** — run Carnage on a machine you already have,
+publish it over Tailscale for a real HTTPS certificate, and add the page to the
+phone's home screen. You get her whole shared memory, conversation, dictation,
+real GPS and battery. What you give up is silent SMS: a browser can only open
+your messaging app pre-filled, so she says *"tap send"* and never *"sent"*.
+See **[NO-DOWNLOAD.md](provisioning/NO-DOWNLOAD.md)**.
+
+**Termux, for a phone that acts without you** — real SMS, the notification
+shade, and a process that keeps running with the screen off. Three apps from
+F-Droid and one command; `TermuxPhone` shells out to `termux-battery-status`,
+`termux-location` and `termux-sms-send`. See
+**[provisioning/README.md](provisioning/README.md)**.
 
 **Chaquopy, properly.** A Kotlin app embeds CPython and holds a foreground
 service, so the loop survives the screen locking. It passes one callable into
@@ -161,5 +170,5 @@ says what it applied.
 ## Tests
 
 ```bash
-python -m pytest carnage/tests      # 82 tests, no phone needed
+python -m pytest carnage/tests      # 119 tests, no phone needed
 ```

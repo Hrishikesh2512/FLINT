@@ -82,6 +82,21 @@ class Carnage:
         self.registry = self.capabilities.build_registry(platform=ANY_PLATFORM)
         self.capabilities.log_summary()
 
+        # Built on first use: a device with no key still runs as a hub and a
+        # set of tools, it just cannot hold a conversation.
+        self._gateway = _gateway_for(config)
+        self._conversation = None
+
+        # The page the phone installs, when one is wanted. Off by default —
+        # a headless hub on a laptop has nobody to show it to.
+        self.web = None
+        if config.web.enabled:
+            from carnage.web import CarnageWeb
+
+            self.web = CarnageWeb(self, token=config.web.token or
+                                  config.hub.token,
+                                  host=config.web.host, port=config.web.port)
+
         self.server: SyncServer | None = None
         if config.hub.enabled:
             self.server = SyncServer(
@@ -127,6 +142,23 @@ class Carnage:
                 f"it was the later edit of {conflict.store}/{conflict.key}",
                 alternatives=(conflict.discarded,))
 
+    # ── talking to her ──────────────────────────────────────────────────────
+    def answer(self, said: str) -> str:
+        """One turn of conversation. Never raises.
+
+        Built lazily and kept, so the last few turns survive between requests —
+        a page that reloads should not make her forget the sentence before.
+        """
+        if self._conversation is None:
+            if self._gateway is None:
+                return ("I've no key to think with yet — put a Gemini API key "
+                        "in carnage.json and I'll be able to answer properly.")
+            from carnage.conversation import Conversation
+
+            self._conversation = Conversation(
+                self._gateway, self.registry, self.system_instruction)
+        return self._conversation.ask(said)
+
     def run_relayed(self, run) -> list:
         """Carry out whatever her other bodies have asked this one to do.
 
@@ -139,15 +171,32 @@ class Carnage:
     async def start(self) -> None:
         if self.server is not None and not await self.server.start():
             log.warning("carnage is running without device sync")
+        if self.web is not None and not self.web.start():
+            log.warning("carnage is running without the page")
 
     async def stop(self) -> None:
         if self.server is not None:
             await self.server.stop()
+        if self.web is not None:
+            self.web.stop()
 
     def describe(self) -> str:
         active = ", ".join(c.name for c in self.capabilities.active())
         return (f"{self.config.device} on {self.phone.name}: "
                 f"{len(list(self.registry))} tools — {active}")
+
+
+def _gateway_for(config: CarnageConfig):
+    """The shared LLM gateway, when there is a key for one."""
+    if not config.gemini_api_key:
+        return None
+    try:
+        from flint_core.config import FlintSettings, build_gateway
+
+        return build_gateway(FlintSettings(gemini_api_key=config.gemini_api_key))
+    except Exception:                       # noqa: BLE001
+        log.exception("could not build an LLM gateway — she cannot converse")
+        return None
 
 
 def _search_for(config: CarnageConfig):

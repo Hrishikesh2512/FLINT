@@ -40,11 +40,27 @@ def main(argv: list[str] | None = None) -> int:
                         help="print one status snapshot and exit")
     parser.add_argument("--config", default=None, help="path to carnage.json")
     parser.add_argument("-v", "--verbose", action="store_true")
+    parser.add_argument("--web", action="store_true",
+                        help="serve the installable page, whatever the config says")
     args = parser.parse_args(argv)
 
     _setup_logging(args.verbose)
     config = load_config(args.config)
-    carnage = Carnage(config)
+    if args.web:
+        # A flag rather than only a config key: the first thing anyone does is
+        # try it once, and editing JSON to do that is a poor welcome.
+        from dataclasses import replace
+
+        config = replace(config, web=replace(config.web, enabled=True))
+    phone = None
+    if config.web.enabled:
+        # A page is the body. Detecting Termux underneath would be wrong: the
+        # senses are coming from the browser, and two bodies claiming the same
+        # phone would disagree about where he is.
+        from carnage.browserphone import BrowserPhone
+
+        phone = BrowserPhone()
+    carnage = Carnage(config, phone=phone)
 
     if args.once:
         print(json.dumps({
@@ -55,6 +71,7 @@ def main(argv: list[str] | None = None) -> int:
             "tools": len(list(carnage.registry)),
             "capabilities": carnage.capabilities.names(),
             "hub": {"enabled": config.hub.enabled, "port": config.hub.port},
+            "web": {"enabled": config.web.enabled, "port": config.web.port},
         }, indent=2))
         return 0
 

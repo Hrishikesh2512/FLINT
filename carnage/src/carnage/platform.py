@@ -40,7 +40,7 @@ import shutil
 import subprocess
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 
 log = logging.getLogger("carnage.platform")
 
@@ -94,10 +94,22 @@ class Notification:
     when: float = 0.0
 
 
+@runtime_checkable
 class Phone(Protocol):
     """The phone-shaped half of the device seam."""
 
     name: str
+
+    #: True when `send_sms` actually puts a message on the network. False when
+    #: it can only hand one to the messaging app for the user to send — which
+    #: is all a browser is allowed to do.
+    #:
+    #: This exists because the difference is invisible in the return value and
+    #: enormous in what she should say. "Texted your father" when the message
+    #: is sitting unsent in a composer is the worst class of bug this codebase
+    #: has: a confident false report, in an emergency, about the one thing
+    #: nobody will double-check until it matters.
+    sends_directly: bool
 
     def available(self) -> bool: ...
 
@@ -120,6 +132,7 @@ class AbsentPhone:
     """
 
     name = "absent"
+    sends_directly = True
 
     def available(self) -> bool:
         return False
@@ -161,6 +174,7 @@ class TermuxPhone:
     """
 
     name = "termux"
+    sends_directly = True
 
     def __init__(self, runner: Runner = _run,
                  has: Callable[[str], bool] = lambda tool: bool(shutil.which(tool))):
@@ -263,6 +277,7 @@ class AndroidPhone:
     """
 
     name = "android"
+    sends_directly = True
 
     def __init__(self, bridge: Callable[..., Any] | None = None):
         self._bridge = bridge
