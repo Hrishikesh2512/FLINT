@@ -47,5 +47,15 @@ target-version = "py311"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 
+[tool.ruff.lint.per-file-ignores]
+# web.py embeds the console's HTML and CSS as string literals. Those are
+# minified on purpose — it is one page served off a 2 GB Pi — and rewrapping
+# markup to satisfy a Python line-length rule makes the markup worse to read
+# without making the Python any better.
+# Globbed rather than a fixed relative path: CI lints once from the repo
+# root with --config and once from inside venom/, and the path ruff
+# matches against differs between the two.
+"**/venom/web.py" = ["E501"]
+
 [tool.ruff.lint.isort]
 known-first-party = ["venom", "flint_core"]

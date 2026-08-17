@@ -46,13 +46,12 @@ def test_illegal_move_is_rejected_without_changing_turn():
 def test_castling_spoken_form():
     g = ChessGame()
     g.new_game()
-    # Clear the kingside for White by hand via legal moves.
-    for m in ("Nf3", "Bc4", "e3"):  # not all reachable in one turn each; do UCI setup
-        pass
-    # Simpler: verify the parser maps the phrase, on a position where it's legal.
+    # Verify the parser maps the phrase, on a position where it's legal.
     g = ChessGame(depth=1)
     g.new_game()
-    g.human_move("e4"); g.human_move("Nf3"); g.human_move("Bc4")
+    g.human_move("e4")
+    g.human_move("Nf3")
+    g.human_move("Bc4")
     # After those, White can castle kingside on some replies; only assert parsing
     # doesn't crash and either castles or reports illegality cleanly.
     out = g.human_move("castle kingside")

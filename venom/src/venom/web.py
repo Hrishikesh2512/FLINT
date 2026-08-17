@@ -1444,7 +1444,7 @@ class WebConsole:
             if action == "priority":
                 return netman.set_priority(self._nm, name,
                                            _as_int(data.get("priority")) or 0)
-        except Exception as exc:  # noqa: BLE001: surface, don't crash the thread
+        except Exception as exc:  # noqa: BLE001 - surface, don't crash the thread
             log.warning("wifi action %s failed: %s", action, exc)
             return f"That didn't work: {exc}"
         return "Unknown Wi-Fi action."

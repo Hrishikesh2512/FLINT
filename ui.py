@@ -14,18 +14,17 @@ from pathlib import Path
 import psutil
 
 from PyQt6.QtCore import (
-    QEasingCurve, QMimeData, QObject, QPointF, QRectF, QSize, Qt,
-    QTimer, QUrl, pyqtSignal,
+    QPointF, QRectF, Qt,
+    QTimer, pyqtSignal,
 )
 from PyQt6.QtGui import (
-    QBrush, QColor, QDragEnterEvent, QDropEvent, QFont, QFontDatabase,
-    QKeySequence, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap,
+    QBrush, QColor, QDragEnterEvent, QDropEvent, QFont, QKeySequence, QPainter, QPainterPath, QPen, QPixmap,
     QRadialGradient, QShortcut,
 )
 from PyQt6.QtWidgets import (
     QApplication, QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
-    QMainWindow, QPushButton, QScrollArea, QSizePolicy, QTextEdit,
-    QVBoxLayout, QWidget, QProgressBar,
+    QMainWindow, QPushButton, QSizePolicy, QTextEdit,
+    QVBoxLayout, QWidget,
 )
 
 
@@ -480,7 +479,6 @@ class HudCanvas(QWidget):
         p.drawLine(QPointF(cx, cy - ch_r), QPointF(cx, cy - gap_h))
         p.drawLine(QPointF(cx, cy + gap_h), QPointF(cx, cy + ch_r))
         # diagonal lines
-        d45 = gap_h * 0.707
         p.setPen(QPen(qcol(C.INDIGO, a_ch // 2), 0.7))
         for dx, dy in [(1, 1), (-1, 1), (1, -1), (-1, -1)]:
             p.drawLine(
@@ -983,7 +981,7 @@ class _DropCanvas(QWidget):
                    "Images · Video · Audio · PDF · Docs · Code · Data")
 
     def _paint_drag_over(self, p, W, H):
-        cx, cy = W / 2, H / 2
+        cy = H / 2
         p.setFont(QFont("Courier New", 18))
         p.setPen(QPen(qcol(C.PRI_BRIGHT), 1))
         p.drawText(QRectF(0, cy - 22, W, 30), Qt.AlignmentFlag.AlignCenter, "⬇")

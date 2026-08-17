@@ -50,7 +50,7 @@ try:
 except Exception:  # pragma: no cover - optional dep
     _MSS = False
 try:
-    from PIL import ImageGrab, Image  # type: ignore
+    from PIL import ImageGrab  # type: ignore
     _PIL = True
 except Exception:  # pragma: no cover
     _PIL = False
@@ -104,8 +104,9 @@ def grab_screen():
             if box is None:
                 mon = sct.monitors[1]
             else:
-                l, t, r, b = box
-                mon = {"left": l, "top": t, "width": r - l, "height": b - t}
+                left, top, right, bottom = box
+                mon = {"left": left, "top": top,
+                       "width": right - left, "height": bottom - top}
             shot = sct.grab(mon)
             arr = np.asarray(shot)[:, :, :3]  # BGRA -> BGR
             return arr[:, :, ::-1]            # BGR -> RGB

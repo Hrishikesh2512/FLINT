@@ -9,6 +9,7 @@ import time
 
 from venom.live import collapse_doubled
 from venom.music import MusicPlayer
+from venom.stores import FavouritesStore
 
 
 def test_collapse_doubled_transcript():
@@ -215,9 +216,6 @@ def test_fresh_play_resets_fail_streak():
 
 
 # ── favourites, restart, previous, offline (train-journey features) ───────────
-from venom.stores import FavouritesStore
-
-
 def fav_player(tmp_path, ytdlp=FAKE_YTDLP, **kw):
     """A player wired to a real FavouritesStore and an offline dir in tmp."""
     favs = FavouritesStore(tmp_path / "fav.json")

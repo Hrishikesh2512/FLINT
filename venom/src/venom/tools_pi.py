@@ -299,7 +299,8 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
                 "type": "object",
                 "properties": {
                     "enable": {"type": "boolean",
-                               "description": "true to keep playing similar songs, false to stop after this one"},
+                               "description": "true to keep playing similar songs, "
+                                              "false to stop after this one"},
                 },
                 "required": ["enable"],
             },
@@ -435,7 +436,8 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
                 "type": "object",
                 "properties": {
                     "color": {"type": "string",
-                              "description": "The colour the USER plays: 'white' or 'black'. Default white."},
+                              "description": "The colour the USER plays: "
+                                             "'white' or 'black'. Default white."},
                     "difficulty": {"type": "integer",
                                    "description": "Search depth 1 (easy) to 3 (hard). Default 2."},
                 },
@@ -782,7 +784,8 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
                 "type": "object",
                 "properties": {
                     "scene": {"type": "string",
-                              "description": "relax|reading|movie|focus|night|party|romantic|sunset"},
+                              "description": "relax|reading|movie|focus|"
+                                             "night|party|romantic|sunset"},
                     "where": {"type": "string",
                               "description": "Room or light name; omit for all lights"},
                 },
