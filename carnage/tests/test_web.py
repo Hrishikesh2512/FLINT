@@ -323,3 +323,51 @@ def test_a_temporary_directory_is_enough_to_run_one():
                       phone=BrowserPhone())
     assert (root / "memory.json").parent.exists()
     assert carnage.describe()
+
+
+# ── which body wins ─────────────────────────────────────────────────────────
+def test_a_native_phone_beats_the_browser_even_when_the_page_is_on(monkeypatch):
+    """Serving a page must not downgrade a real phone.
+
+    On Termux the native side sends an SMS that actually goes; the browser can
+    only pre-fill one. Picking the browser because a page happens to be enabled
+    would quietly break the emergency path on the one device where it works.
+    """
+    from carnage import __main__ as entry
+    from carnage.platform import TermuxPhone
+
+    native = TermuxPhone(runner=lambda *a: None, has=lambda tool: True)
+    monkeypatch.setattr("carnage.platform.detect", lambda *a, **k: native)
+
+    chosen = entry._body_for(CarnageConfig(web=WebConfig(enabled=True)))
+    assert chosen is native
+    assert chosen.sends_directly is True
+
+
+def test_the_browser_is_the_fallback_when_there_is_no_native_phone(monkeypatch):
+    from carnage import __main__ as entry
+    from carnage.platform import AbsentPhone
+
+    monkeypatch.setattr("carnage.platform.detect", lambda *a, **k: AbsentPhone())
+    chosen = entry._body_for(CarnageConfig(web=WebConfig(enabled=True)))
+    assert isinstance(chosen, BrowserPhone)
+
+
+def test_with_no_page_and_no_phone_she_simply_has_no_phone_skills(monkeypatch):
+    from carnage import __main__ as entry
+    from carnage.platform import AbsentPhone
+
+    monkeypatch.setattr("carnage.platform.detect", lambda *a, **k: AbsentPhone())
+    chosen = entry._body_for(CarnageConfig(web=WebConfig(enabled=False)))
+    assert isinstance(chosen, AbsentPhone)
+
+
+def test_the_installer_serves_the_page_to_localhost():
+    """localhost is a secure context by definition — no cert, no flag."""
+    script = (Path(__file__).resolve().parents[1]
+              / "provisioning" / "install.sh").read_text(encoding="utf-8")
+    block = script.split('cat > "$CONFIG" <<JSON\n', 1)[1].split("\nJSON\n", 1)[0]
+    config = json.loads(block.replace("$TOKEN", "x" * 32))
+    assert config["web"]["enabled"] is True
+    assert config["web"]["host"] == "127.0.0.1"
+    assert config["web"]["token"] == config["hub"]["token"]

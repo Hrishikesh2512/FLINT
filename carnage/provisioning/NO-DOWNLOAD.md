@@ -4,6 +4,25 @@ Run Carnage on a machine you already have. Open a link on the phone. Add it to
 the home screen. It launches from an icon, full screen, with no browser bars —
 and there was no app store, no APK and no terminal anywhere in that.
 
+> ## Read this before you choose this route
+>
+> **She is only awake while that machine is.** Serving the page from a laptop
+> means she sleeps when the lid closes, and the phone shows an icon that opens
+> onto nothing. That is not a bug to be fixed here; it is what "run her
+> somewhere else" means.
+>
+> If you want an assistant that is simply *there* — the entire point of a
+> phone — she has to run on the phone, which is the
+> **[Termux route](README.md)**. It costs three F-Droid apps and one command,
+> and it is better on every axis afterwards: no laptop, no certificate, no
+> `chrome://flags`, no firewall rule, and real SMS instead of "tap send". The
+> page is served to `http://localhost`, which browsers treat as a secure
+> context by definition, so everything below stops being necessary.
+>
+> This route is the right one for exactly two cases: trying her out in the next
+> five minutes, or reaching her from a device that cannot run Termux — a
+> desktop, a tablet, an iPhone.
+
 The browser gives her three of the four things that made a phone body worth
 having: **GPS**, **battery**, and **your voice**. The fourth — sending an SMS
 without you — a web page genuinely cannot do, and the section at the bottom is

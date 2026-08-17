@@ -1,0 +1,7 @@
+build/
+.gradle/
+local.properties
+# Copied in from the repo at build time — see app/build.gradle.kts. Vendoring
+# them would create a second copy of the assistant that could drift.
+app/src/main/python/flint_core/
+app/src/main/python/carnage/

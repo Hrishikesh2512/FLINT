@@ -75,6 +75,14 @@ else
     "peers": ["venom", "flint"]
   },
 
+  "_web": "Her face, served to this phone's own browser. Bound to loopback on purpose: http://localhost is a secure context by definition, so the browser grants GPS, the microphone and Add to Home Screen with no certificate, no flag and nothing exposed to the network.",
+  "web": {
+    "enabled": true,
+    "host": "127.0.0.1",
+    "port": 8791,
+    "token": "$TOKEN"
+  },
+
   "_devices": "Her other bodies. 'can' is read out loud, so write it the way she would say it.",
   "devices": [
     {
@@ -151,10 +159,19 @@ PY
 
 cat <<DONE
 
-  Carnage is installed.
+  Carnage is installed — on the phone itself, so nothing else has to be
+  awake for her to be.
 
   Start her now:      python -m carnage
   She starts herself: on every reboot, via Termux:Boot
+
+  Open her in Chrome, then use the menu to Add to Home Screen:
+
+    http://localhost:8791/?k=$TOKEN
+
+  No certificate and no chrome://flags needed — a browser treats localhost
+  as a secure context, so GPS, the microphone and installing to the home
+  screen all just work when she is served from this phone.
 
   Point Venom at her — add this to /etc/venom/venom.toml, then
   'sudo systemctl restart venom':

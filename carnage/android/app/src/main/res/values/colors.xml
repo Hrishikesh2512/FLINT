@@ -1,0 +1,10 @@
+<resources>
+    <color name="bg">#FF0B0D10</color>
+    <color name="panel">#FF141820</color>
+    <color name="line">#FF232A35</color>
+    <color name="ink">#FFE8ECF2</color>
+    <color name="dim">#FF8B97A8</color>
+    <color name="her">#FF7FD1C4</color>
+    <color name="him">#FF9DB4FF</color>
+    <color name="him_panel">#FF1B2740</color>
+</resources>

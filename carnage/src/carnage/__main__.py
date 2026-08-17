@@ -19,6 +19,8 @@ import sys
 from carnage.config import load_config
 from carnage.runtime import Carnage
 
+log = logging.getLogger("carnage")
+
 
 def _setup_logging(verbose: bool) -> None:
     logging.basicConfig(
@@ -32,6 +34,34 @@ async def _run(carnage: Carnage) -> None:
         await asyncio.Event().wait()          # until interrupted
     finally:
         await carnage.stop()
+
+
+def _body_for(config):
+    """Which phone body to use — the native one whenever there is one.
+
+    Order matters and the wrong order is expensive. Serving the page does not
+    make the browser the body: on Termux the native side is strictly better at
+    the same jobs — a real GPS fix rather than one relayed through a tab, and
+    an SMS that actually *sends* instead of one the user must tap. Choosing the
+    browser because a page happens to be enabled would silently downgrade the
+    emergency path on the one device where it works properly.
+
+    So the browser body is the fallback, for when she is served from a machine
+    that is not the phone at all: then the tab genuinely is the only phone in
+    the picture, and its senses are the only ones there are.
+    """
+    from carnage.platform import detect
+
+    native = detect()
+    if native.available():
+        log.info("body: %s (native)", native.name)
+        return native
+    if config.web.enabled:
+        from carnage.browserphone import BrowserPhone
+
+        log.info("body: browser — senses come from whatever page is open")
+        return BrowserPhone()
+    return native
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -52,15 +82,7 @@ def main(argv: list[str] | None = None) -> int:
         from dataclasses import replace
 
         config = replace(config, web=replace(config.web, enabled=True))
-    phone = None
-    if config.web.enabled:
-        # A page is the body. Detecting Termux underneath would be wrong: the
-        # senses are coming from the browser, and two bodies claiming the same
-        # phone would disagree about where he is.
-        from carnage.browserphone import BrowserPhone
-
-        phone = BrowserPhone()
-    carnage = Carnage(config, phone=phone)
+    carnage = Carnage(config, phone=_body_for(config))
 
     if args.once:
         print(json.dumps({

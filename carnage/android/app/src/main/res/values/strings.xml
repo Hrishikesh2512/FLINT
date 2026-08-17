@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">Jarvis</string>
+    <string name="hint">Say something…</string>
+    <string name="send">Send</string>
+    <string name="mic">🎙</string>
+    <string name="shade">Notifications</string>
+    <string name="listening">Listening…</string>
+    <string name="no_dictation">No dictation on this phone.</string>
+    <string name="opening_note">She has the same memory here as on your other devices.</string>
+</resources>

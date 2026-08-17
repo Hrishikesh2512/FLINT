@@ -1,5 +1,16 @@
 # Getting Carnage onto the phone
 
+This is the route where she runs **on the phone**, which is the one that makes
+her always there — no laptop awake, no server elsewhere, nothing to be online
+for her to answer.
+
+It also removes every workaround the other route needs. Because she serves her
+page to this phone's own `http://localhost`, the browser treats it as a secure
+context by definition: GPS, the microphone and Add to Home Screen all work with
+**no certificate, no `chrome://flags` and no firewall rule**. And Termux can
+actually send an SMS, so `sos_sms` reaches your contacts without you tapping
+send.
+
 Four things need a human with the phone in their hand. Everything after that
 is one command.
 
@@ -58,6 +69,18 @@ otherwise kill a backgrounded Termux within the hour. **Settings → Apps →
 Termux → Battery → Unrestricted.**
 
 ---
+
+## Talking to her
+
+Once the installer finishes it prints a link. Open it in Chrome on the phone,
+then ⋮ → **Add to Home Screen**:
+
+```
+http://localhost:8791/?k=<the token it printed>
+```
+
+From then on she is an icon on the home screen that opens full-screen, and she
+is running whether or not you opened it.
 
 ## Connecting the Pi
 
