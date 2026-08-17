@@ -33,6 +33,15 @@ jobs:
           # rather than on anything they were written to check.
           python -m pip install --quiet "./venom[voice]"
           python -m pip install --quiet ./carnage
+      # vcs.py and shipping.py exercise real git operations, and a runner has
+      # no configured identity — so `git commit` fails before the code under
+      # test is reached.
+      - name: Give git an identity to commit as
+        run: |
+          git config --global user.email "ci@example.invalid"
+          git config --global user.name "FLINT CI"
+          git config --global init.defaultBranch main
+
       - name: Lint (correctness rules)
         run: |
           ruff check .

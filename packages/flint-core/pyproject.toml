@@ -5,6 +5,7 @@ description = "flint-core — shared, platform-free domain layer of FLINT (confi
 requires-python = ">=3.11"
 dependencies = [
     "requests>=2.31",
+    "beautifulsoup4>=4.12",   # reading.py: extracting text from fetched HTML
 ]
 
 [build-system]
