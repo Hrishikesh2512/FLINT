@@ -1,5 +1,7 @@
 """Tests for the voice pipeline logic — no audio hardware, no network."""
 
+import platform
+
 import pytest
 
 from flint_core.memory import MemoryStore
@@ -187,6 +189,12 @@ def test_device_vitals_never_crashes():
     assert isinstance(out, str) and out  # graceful on any box
 
 
+@pytest.mark.skipif(
+    platform.system() == "Linux",
+    reason="this asserts the simulated reply, which is the non-Linux branch; "
+           "on Linux set_alsa_volume shells out to amixer and needs a real "
+           "sound card, which no CI runner has",
+)
 def test_set_volume_clamps_and_simulates_off_linux():
     assert "100%" in set_alsa_volume(250)
     assert "0%" in set_alsa_volume(-5)
