@@ -7,4 +7,24 @@
     <string name="listening">Listening…</string>
     <string name="no_dictation">No dictation on this phone.</string>
     <string name="opening_note">She has the same memory here as on your other devices.</string>
+
+    <string name="setup_title">Set her up</string>
+    <string name="setup_blurb">Two things and she is yours. Everything stays on this phone.</string>
+    <string name="your_name">What should she call you?</string>
+    <string name="your_name_hint">Your name</string>
+    <string name="gemini_key">Gemini API key</string>
+    <string name="gemini_key_hint">Paste it here</string>
+    <string name="gemini_key_where">Get one free at https://aistudio.google.com/apikey — without it she can hold no conversation.</string>
+    <string name="save">Save</string>
+    <string name="key_needed">She needs a key before she can think.</string>
+    <string name="pairing_title">Pairing your other devices</string>
+    <string name="pairing_body">token %1$s
+port  %2$d
+
+Put these in venom.toml under [sync] so the Pi shares her memory.</string>
+    <string name="pairing_unavailable">Not ready yet.</string>
+    <string name="copy_token">Copy token</string>
+    <string name="token_copied">Token copied.</string>
+    <string name="no_token_yet">No token yet — save first.</string>
+    <string name="settings">Set up</string>
 </resources>

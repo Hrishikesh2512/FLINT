@@ -54,4 +54,19 @@ object Brain {
 
     fun status(): String =
         runCatching { carnage?.callAttr("status")?.toString() }.getOrNull() ?: "{}"
+
+    /** True until she has a key to think with. */
+    fun needsSetup(): Boolean =
+        runCatching { carnage?.callAttr("needs_setup")?.toBoolean() }.getOrNull() ?: true
+
+    /** What Venom needs in order to sync with this phone, as JSON. */
+    fun pairing(): String =
+        runCatching { carnage?.callAttr("pairing")?.toString() }.getOrNull() ?: "{}"
+
+    /** Save the setup screen's answers. Rebuilds her; blocking. */
+    fun configure(userName: String, apiKey: String): String =
+        runCatching { carnage?.callAttr("configure", userName, apiKey)?.toString() }
+            .onFailure { Log.w(TAG, "configure failed", it) }
+            .getOrNull()
+            ?: "Could not save that."
 }

@@ -63,6 +63,19 @@ class MainActivity : AppCompatActivity() {
         CarnageService.start(this)
         askForWhatSheNeeds()
 
+        // A first launch has no key, and the config it lives in is unreachable
+        // from any file manager on Android 11+. Sending him to setup is not a
+        // nicety — it is the only route there is.
+        lifecycleScope.launch {
+            val fresh = withContext(Dispatchers.IO) {
+                Brain.start(applicationContext)
+                Brain.needsSetup()
+            }
+            if (fresh) {
+                startActivity(Intent(this@MainActivity, SetupActivity::class.java))
+            }
+        }
+
         speaker = TextToSpeech(this) { status ->
             if (status == TextToSpeech.SUCCESS) {
                 // Hinglish reads far better on an Indian English voice; the
@@ -75,6 +88,9 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.mic).setOnClickListener { listen() }
         findViewById<Button>(R.id.shade).setOnClickListener {
             startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+        }
+        findViewById<Button>(R.id.setup).setOnClickListener {
+            startActivity(Intent(this, SetupActivity::class.java))
         }
 
         note(getString(R.string.opening_note))
