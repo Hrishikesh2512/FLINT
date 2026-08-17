@@ -68,9 +68,12 @@ The installer prints the exact `[sync]` block to paste into
 sudo systemctl restart venom
 ```
 
-**Use the Tailscale address if you have it.** The Pi moves between your home
-Wi-Fi and the phone's own hotspot, so its route to the phone changes under it;
-a Tailscale name does not.
+**Use the Tailscale address if you have it** — the installer prefers it
+automatically when it finds one. The Pi moves between your home Wi-Fi and the
+phone's own hotspot, so its route to the phone changes under it; a Tailscale
+name does not. If Tailscale is installed on the phone but the installer printed
+a LAN address instead, Tailscale simply was not connected at the time — open
+the app, then use the phone's MagicDNS name (`ws://<phone-name>:8790`).
 
 Worth knowing: when the Pi is on the phone's hotspot, the phone *is* the
 gateway, so it is reachable at the hotspot address even with no internet at

@@ -121,15 +121,31 @@ PY
 
 ADDRS="$(python - <<'PY'
 import socket
-seen = set()
+
+# Tailscale hands out 100.64.0.0/10. Prefer it when it is there: a LAN address
+# is only right until the Pi hops onto the hotspot and the subnet changes
+# under it, which on a wearable is a daily event rather than an edge case.
+def tailscale(ip: str) -> bool:
+    try:
+        first, second = (int(part) for part in ip.split(".")[:2])
+    except ValueError:
+        return False
+    return first == 100 and 64 <= second <= 127
+
+found = set()
 try:
     for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
         ip = info[4][0]
         if not ip.startswith("127."):
-            seen.add(ip)
+            found.add(ip)
 except OSError:
     pass
-print(" or ".join(sorted(seen)) or "<this phone's IP>")
+
+mesh = sorted(a for a in found if tailscale(a))
+if mesh:
+    print(mesh[0] + "   # tailscale — survives changing networks")
+else:
+    print(" or ".join(sorted(found)) or "<this phone's IP>")
 PY
 )"
 
