@@ -15,6 +15,7 @@ voice = [
     "requests>=2.31",
     "sounddevice>=0.5",
     "numpy>=1.26,<2.5",
+    "scipy>=1.11",         # audio/denoise.py: the high-pass biquad
     "icalendar>=5.0",              # calendar: parse the secret .ics feed
     "recurring-ical-events>=2.1",  # calendar: expand RRULE recurrences
     "tinytuya>=1.13",              # smart lights: local LAN control of Tuya bulbs

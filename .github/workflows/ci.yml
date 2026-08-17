@@ -8,6 +8,12 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # The calendar tests assert spoken wall-clock times ("at 11:00 AM"), which
+    # only mean anything in a timezone. The device is worn in India; a runner
+    # defaulting to UTC renders the same instant 5.5 hours earlier and the
+    # assertions fail on the timezone rather than on the calendar.
+    env:
+      TZ: Asia/Kolkata
     strategy:
       matrix:
         python-version: ["3.11", "3.12"]
