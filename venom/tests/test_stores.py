@@ -7,7 +7,8 @@ import pytest
 
 from venom.config import VenomConfig
 from venom.stores import FavouritesStore, ListStore, NoteStore, ReminderStore
-from venom.tools_pi import TimerBoard, build_pi_registry, parse_reminder_time
+from flint_core.skills import parse_reminder_time
+from venom.tools_pi import TimerBoard, build_pi_registry
 
 
 # ── ReminderStore ─────────────────────────────────────────────────────────────

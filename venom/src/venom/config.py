@@ -398,6 +398,46 @@ class PermissionsConfig:
 
 
 @dataclass(frozen=True)
+class SyncConfig:
+    """Keeping this device's memory in step with the others.
+
+    Off by default, because it is only meaningful once there is a hub to sync
+    *to* — and because a device quietly shipping its owner's memory somewhere
+    should be something he switched on, not something that started happening
+    after an update.
+
+    `device` is the name every change made here is attributed to. Two devices
+    sharing one id would each treat the other's edits as their own, so it is
+    checked rather than defaulted silently.
+
+        [sync]
+        enabled = true
+        hub = "ws://carnage.local:8790"
+        token = "the-same-secret-carnage-has"
+    """
+
+    enabled: bool = False
+    device: str = "venom"
+    hub: str = ""
+    token: str = ""
+    #: Her other bodies: [{name, body, can: [...]}]. Read out in the prompt, so
+    #: `can` is written the way she would say it — "send a text", not "sms".
+    devices: tuple[dict, ...] = ()
+    #: Long enough that syncing is not a background drain on a wearable's
+    #: battery, short enough that a fact learned on the walk home is on the
+    #: laptop before he sits down.
+    interval_seconds: float = 300.0
+
+    @property
+    def ready(self) -> bool:
+        return self.enabled and bool(self.hub.strip()) and bool(self.device.strip())
+
+    def __post_init__(self) -> None:
+        if self.interval_seconds < 30:
+            raise ValueError("sync.interval_seconds must be at least 30")
+
+
+@dataclass(frozen=True)
 class KernelConfig:
     """Background jobs — work that outlives the conversation (venom/jobs.py).
 
@@ -531,6 +571,7 @@ class VenomConfig:
     permissions: PermissionsConfig = field(default_factory=PermissionsConfig)
     dev: DevConfig = field(default_factory=DevConfig)
     ambient: AmbientConfig = field(default_factory=AmbientConfig)
+    sync: SyncConfig = field(default_factory=SyncConfig)
 
     def __post_init__(self) -> None:
         if self.poll_interval <= 0:
@@ -633,6 +674,7 @@ def load_config(path: Path | None = None) -> VenomConfig:
     kernel = data.get("kernel", {})
     permissions = data.get("permissions", {})
     dev = data.get("dev", {})
+    sync = data.get("sync", {})
     ambient = data.get("ambient", {})
     raw_brains = data.get("brain", [])
 
@@ -768,6 +810,17 @@ def load_config(path: Path | None = None) -> VenomConfig:
             tick_seconds=float(kernel.get("tick_seconds", 30.0)),
             max_running=int(kernel.get("max_running", 2)),
             keep_finished_hours=float(kernel.get("keep_finished_hours", 72.0)),
+        ),
+        sync=SyncConfig(
+            enabled=bool(sync.get("enabled", False)),
+            device=str(sync.get("device", "venom")).strip() or "venom",
+            hub=str(sync.get("hub", "")).strip(),
+            token=str(sync.get("token", "")).strip(),
+            interval_seconds=float(sync.get("interval_seconds", 300.0)),
+            # [[sync.device]] blocks, or a plain list under [sync].
+            devices=tuple(dict(d) for d in (sync.get("device_list")
+                                            or data.get("device", []))
+                          if isinstance(d, dict) and d.get("name")),
         ),
         permissions=PermissionsConfig(
             enabled=bool(permissions.get("enabled", True)),

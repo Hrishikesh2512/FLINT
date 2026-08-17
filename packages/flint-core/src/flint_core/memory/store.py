@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import time
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from threading import Lock
@@ -22,9 +24,11 @@ DEFAULT_MAX_CHARS = 2200
 
 
 class MemoryStore:
-    def __init__(self, path: Path, max_chars: int = DEFAULT_MAX_CHARS):
+    def __init__(self, path: Path, max_chars: int = DEFAULT_MAX_CHARS,
+                 clock: Callable[[], float] = time.time):
         self._path = Path(path)
         self._max_chars = max_chars
+        self._clock = clock
         self._lock = Lock()
 
     @property
@@ -90,6 +94,15 @@ class MemoryStore:
             memory[category][key] = {
                 "value": value,
                 "updated": datetime.now().strftime("%Y-%m-%d"),
+                # Epoch seconds alongside the human date. `updated` is what
+                # trimming and rendering read; this is for sync, which has to
+                # decide which of two edits to the same fact is newer. A date
+                # cannot: two devices editing on the same day would tie, and
+                # the tie-break is the device id — so the device with the
+                # alphabetically larger name would win every same-day
+                # disagreement, permanently, and a stale fact would be spoken
+                # as current.
+                "t": int(self._clock()),
             }
             self._save(memory)
         return f"remembered {category}/{key}"

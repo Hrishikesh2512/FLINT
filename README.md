@@ -132,11 +132,33 @@ core/              # auth, i18n, async pipeline, cloud bridge, tool registry, pr
 actions/           # one module per tool (open_app, web_search, reminder, …)
 agent/             # task queue, planner, executor for multi-step goals
 memory/            # long-term memory + config manager
+packages/flint-core/  # the shared layer all three bodies run on
 venom/             # Raspberry Pi wearable runtime + pendrive provisioning kit
+carnage/           # Android phone runtime — and the hub the others sync to
 config/            # app_config (public) + per-machine secrets (gitignored)
 flint.spec         # PyInstaller build spec
 build_exe.ps1      # one-command build + zip
 ```
+
+## 🧠 One assistant, three bodies
+
+FLINT (desktop), **Venom** (a Raspberry Pi wearable) and **Carnage** (an
+Android phone) are not three assistants. They share `flint-core` — the same
+memory, the same searchable archive, the same projects and the same record of
+what she has learned — kept in step by `flint_core.sync`.
+
+Carnage is the hub, because it is the only device that is always powered,
+always networked and always carried; the Pi hops subnets and the laptop
+sleeps. The others are leaves that sync to it and never to each other.
+
+```
+venom (Pi)  ─┐
+             ├─▶  carnage (phone, hub)
+flint (PC)  ─┘
+```
+
+See [`carnage/README.md`](carnage/README.md) for the phone runtime and how to
+point a leaf at it.
 
 ## ⚙️ Configuration files
 

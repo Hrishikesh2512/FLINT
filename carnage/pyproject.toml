@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "carnage"
+version = "0.1.0"
+description = "The phone body of the assistant — and the hub the others sync to"
+requires-python = ">=3.11"
+dependencies = [
+    "flint-core",
+]
+
+[project.optional-dependencies]
+# The hub's websocket front door. Absent, Carnage still runs — it just has no
+# door for the other devices to knock on.
+hub = ["websockets>=12"]
+
+[project.scripts]
+carnage = "carnage.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

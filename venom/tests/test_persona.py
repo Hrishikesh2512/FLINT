@@ -79,15 +79,29 @@ def test_music_tools_are_journalled_but_reads_are_not():
 
 def test_every_journalled_tool_actually_exists():
     """A typo here is silent — the tool just never gets journalled, and the
-    'she claims she did it' bug quietly comes back for that tool."""
+    'she claims she did it' bug quietly comes back for that tool.
+
+    Tools now live in two places: the ones specific to this body stay in
+    `tools_pi`, and the ones any body has moved to `flint_core.skills`. Both
+    are scanned, because a name that exists in neither is the bug this test is
+    for — and a name that quietly stopped existing because it moved is exactly
+    as broken as one that was never written.
+    """
     import re
     from pathlib import Path
 
+    import flint_core.skills as skills
     import venom.tools_pi as tp
     from venom.live import ACTION_TOOLS
 
-    source = Path(tp.__file__).read_text(encoding="utf-8")
-    defined = set(re.findall(r"^\s+def ([a-z_]+)\(", source, re.MULTILINE))
+    sources = [Path(tp.__file__)]
+    sources += sorted(Path(skills.__file__).parent.glob("*.py"))
+
+    defined: set[str] = set()
+    for path in sources:
+        defined |= set(re.findall(r"^\s+def ([a-z_]+)\(",
+                                  path.read_text(encoding="utf-8"),
+                                  re.MULTILINE))
     assert ACTION_TOOLS <= defined, ACTION_TOOLS - defined
 
 

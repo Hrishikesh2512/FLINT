@@ -191,6 +191,18 @@ class VoiceOrchestrator:
         self._ambient_task: asyncio.Task | None = None
         self.watchloop = None
         self._watch_task: asyncio.Task | None = None
+        # Keeping this device's memory in step with the others (venom/syncing).
+        self.syncloop = None
+        self._sync_task: asyncio.Task | None = None
+        # Her other bodies, and work handed between them. Built whether or not
+        # sync is on: a roster with nothing in it renders nothing, and she
+        # should be able to be *told* about a phone before one is wired up.
+        from flint_core.relay import RelayStore
+        from flint_core.roster import build_roster
+
+        self.roster = build_roster(config.sync.device, config.sync.devices,
+                                   path=state_dir / "roster.json")
+        self.relay = RelayStore(state_dir / "relay.json")
         # Bluetooth receive: laptop/phone audio into the earphone. A process-
         # wide singleton — orchestrators are rebuilt after crashes, and two
         # receivers would bridge every stream twice (doubled audio).
@@ -348,6 +360,14 @@ class VoiceOrchestrator:
                                           outcomes=self.outcomes,
                                           archive=self.archive,
                                           sos=self.sos)
+        # Being one assistant rather than several: she can hand a job to the
+        # body that can actually do it. Registered only when there is another
+        # body to hand it to — otherwise the tool exists solely to refuse.
+        if self.roster.others():
+            from flint_core.relay import register_relay_tools
+
+            register_relay_tools(self.registry, self.relay, self.roster,
+                                 config.sync.device)
         # Every tool call from here on is permission-checked and written down.
         # Default policy grants exactly what the active capabilities ask for —
         # this is his own device — but [permissions] denied = [...] switches
@@ -428,6 +448,7 @@ class VoiceOrchestrator:
         self._ambient_task = self._start_ambient()
         self._watch_task = self._start_watches()
         self._jobs_task = self._start_jobs()
+        self._sync_task = self._start_sync()
 
         first_cycle = True
         died_streak = 0
@@ -797,6 +818,51 @@ class VoiceOrchestrator:
                  self.config.watch.tick_seconds, len(self.watches.active()))
         return asyncio.create_task(self.watchloop.run())
 
+    def _carry_out_for_another_body(self, request: str) -> str:
+        """Do something one of her other bodies asked this one to do.
+
+        Queued as a proactive line rather than executed as a tool call. The
+        far body asked *her*, not a function — it said "put music on for him",
+        not `play_music(query=...)` — and the thing that turns a sentence into
+        the right tool call with the right arguments is the conversation, not
+        a parser here. It also means he hears about it, which he should: work
+        that happens on his wearable without him being told is indistinguishable
+        from a malfunction.
+        """
+        self.queue_proactive(
+            f"[Your other device asked you to do this: {request}] "
+            f"Do it now with your tools, then tell him in one line what you "
+            f"did — mention it came from your other body only if it matters.")
+        return "Passed to the conversation on the wearable."
+
+    # ── one memory, several bodies ───────────────────────────────────────────
+    def _start_sync(self) -> asyncio.Task | None:
+        """Launch the loop that keeps this Pi in step with the hub.
+
+        Additive like the rest: a device with no hub configured, or one whose
+        hub is unreachable, is a perfectly good assistant that is briefly out
+        of step — never a silent one.
+        """
+        if not self.config.sync.ready:
+            return None
+        try:
+            from venom.syncing import SyncLoop
+
+            self.syncloop = SyncLoop(
+                self.config.sync,
+                memory=self.memory, archive=self.archive,
+                projects=self.projects, outcomes=self.outcomes,
+                notes=self.notes, connections=self.connections,
+                state_dir=self.config.memory_path.parent,
+                relay=self.relay, roster=self.roster,
+                carry=self._carry_out_for_another_body)
+        except Exception:
+            log.exception("sync loop failed to start — continuing without it")
+            return None
+        log.info("sync on: %s → %s", self.config.sync.device,
+                 self.config.sync.hub)
+        return asyncio.create_task(self.syncloop.run())
+
     # ── background jobs (she goes away and does the work) ────────────────────
     def _start_jobs(self) -> asyncio.Task | None:
         """Launch the job scheduler, if one was built. Additive: a failure
@@ -858,6 +924,9 @@ class VoiceOrchestrator:
         if self._jobs_task is not None:
             self._jobs_task.cancel()
             self._jobs_task = None
+        if self._sync_task is not None:
+            self._sync_task.cancel()
+            self._sync_task = None
 
     def _ambient_busy(self) -> bool:
         """True whenever she must not open her mouth unprompted: DND, a live
@@ -1097,7 +1166,8 @@ class VoiceOrchestrator:
                            convlog=self.convlog,
                            capabilities=self.capabilities,
                            context=self.context,
-                           learned=self.outcomes)
+                           learned=self.outcomes,
+                           roster=self.roster)
 
     def _prepare_opening(self, session: LiveSession) -> None:
         """At the moment of waking, decide whether to lead with a briefing."""
