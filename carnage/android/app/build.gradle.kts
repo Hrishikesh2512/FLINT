@@ -82,7 +82,15 @@ val syncPythonPackages by tasks.registering(Copy::class) {
     exclude("**/__pycache__/**", "**/*.pyc")
 }
 
-tasks.withType<com.android.build.gradle.tasks.MergeSourceSetFolders>().configureEach {
+// Chaquopy's merge task consumes the directory the copy writes, so the
+// dependency has to be declared or Gradle is entitled to run them in either
+// order — and does, failing the build rather than silently shipping an APK
+// with no Python in it, which is the better of the two outcomes.
+//
+// Matched by name rather than by type: the task is Chaquopy's own
+// `OutputDirTask`, not AGP's `MergeSourceSetFolders`, and naming the class
+// would couple this to a plugin internal that is free to be renamed.
+tasks.matching { it.name.matches(Regex("merge.*PythonSources")) }.configureEach {
     dependsOn(syncPythonPackages)
 }
 tasks.named("preBuild") { dependsOn(syncPythonPackages) }
