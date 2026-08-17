@@ -5,9 +5,9 @@ import time
 
 import pytest
 
+from flint_core.skills import parse_reminder_time
 from venom.config import VenomConfig
 from venom.stores import FavouritesStore, ListStore, NoteStore, ReminderStore
-from flint_core.skills import parse_reminder_time
 from venom.tools_pi import TimerBoard, build_pi_registry
 
 
