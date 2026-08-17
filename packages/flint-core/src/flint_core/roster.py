@@ -204,7 +204,7 @@ class Roster:
         lines = ["[YOUR OTHER BODIES — you are one person in several places]"]
         for device in others:
             can = "; ".join(device.can)
-            detail = f": {can}" if can else ""
+            detail = f": {can}." if can else "."
             lines.append(f"  - {device.body or device.name} ({device.name})"
                          f"{detail} {device.presence(now)}")
         lines.append(
