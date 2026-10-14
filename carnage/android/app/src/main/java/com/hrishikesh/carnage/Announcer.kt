@@ -18,9 +18,11 @@ object Announcer {
 
     @Volatile private var tts: TextToSpeech? = null
     @Volatile private var ready = false
+    @Volatile private var appContext: Context? = null
 
     fun attach(context: Context) {
         if (tts != null) return
+        appContext = context.applicationContext
         tts = TextToSpeech(context.applicationContext) { status ->
             if (status == TextToSpeech.SUCCESS) {
                 // Hinglish reads far better on an Indian English voice.
@@ -38,6 +40,7 @@ object Announcer {
 
     fun say(text: String) {
         if (!ready || text.isBlank() || LiveVoice.active) return
+        if (!Headphones.connected(appContext ?: return)) return
         tts?.speak(text, TextToSpeech.QUEUE_ADD, null, text.hashCode().toString())
     }
 

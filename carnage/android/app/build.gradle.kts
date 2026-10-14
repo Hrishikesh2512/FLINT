@@ -17,10 +17,10 @@ android {
         versionCode = 1
         versionName = "0.1.0"
 
-        // One CPython runtime is bundled per ABI. These two cover every Android
-        // phone in use; adding the x86 variants would inflate the APK for
-        // emulators nobody here runs.
-        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
+        // 64-bit ARM only: Python 3.13 (needed for 16 KB memory pages, which
+        // Android 15+ phones use) has no 32-bit build, and every phone sold in
+        // years is 64-bit anyway.
+        ndk { abiFilters += listOf("arm64-v8a") }
     }
 
     buildTypes {
@@ -43,12 +43,15 @@ android {
 
     packaging {
         resources.excludes += setOf("META-INF/*.kotlin_module", "META-INF/LICENSE*")
+        // Native libraries stored uncompressed and 16 KB-aligned in the APK,
+        // as Android 15+ devices with 16 KB pages require.
+        jniLibs.useLegacyPackaging = false
     }
 }
 
 chaquopy {
     defaultConfig {
-        version = "3.11"
+        version = "3.13"
         pip {
             // Everything flint_core and carnage actually need. Both are pure
             // Python, which is the whole reason this is viable on a phone.
@@ -69,7 +72,7 @@ dependencies {
     // The Live API websocket for voice calls (LiveVoice.kt).
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     // "Hey Jarvis": the Pi's openWakeWord models, run on the phone.
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.20.0")
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.31.0")
 }
 
 // ── the Python she actually is ──────────────────────────────────────────────

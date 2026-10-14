@@ -28,10 +28,10 @@ jobs:
 
       # Chaquopy needs a host Python of the same version it bundles, to
       # resolve and cross-build the wheels that go into the APK.
-      - name: Python 3.11
+      - name: Python 3.13
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.13'
 
       # No gradle-wrapper.jar is committed — a binary in the tree that nobody
       # can read is a poor thing to ask reviewers to trust. The action pins the

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Everything she needs a body for. Each one maps to a skill that simply
          stays off if the permission is refused - a denied permission is never
@@ -120,5 +121,13 @@
                 <action android:name="android.service.notification.NotificationListenerService"/>
             </intent-filter>
         </service>
+
+        <!-- ONNX Runtime (the wake word) ships Microsoft usage telemetry that
+             starts itself through this provider. Nothing in Jarvis phones
+             home: removed outright. -->
+        <provider
+            android:name="ai.onnxruntime.TelemetryInitializer"
+            android:authorities="${applicationId}.onnxruntime_telemetry_initializer"
+            tools:node="remove"/>
     </application>
 </manifest>

@@ -82,6 +82,11 @@ class MainActivity : AppCompatActivity() {
 
         override fun onLine(who: String, text: String) {
             turn(text, mine = who == "you")
+            // No headphones means no voice: put her reply under the core too,
+            // where it can be read even over the lock screen.
+            if (who != "you" && !Headphones.connected(this@MainActivity)) {
+                voiceState.text = text
+            }
         }
     }
 
@@ -236,7 +241,7 @@ class MainActivity : AppCompatActivity() {
                 animateCore(period = 1100, reach = 1.16f, brightest = 1f)
             }
             "speaking" -> {
-                voiceState.text = getString(R.string.speaking)
+                if (Headphones.connected(this)) voiceState.text = getString(R.string.speaking)
                 animateCore(period = 420, reach = 1.22f, brightest = 1f)
             }
             "off" -> {
@@ -287,7 +292,9 @@ class MainActivity : AppCompatActivity() {
             waiting.text = reply
             scrollDown()
             send.isEnabled = true
-            speaker?.speak(reply, TextToSpeech.QUEUE_FLUSH, null, "jarvis")
+            if (Headphones.connected(this@MainActivity)) {
+                speaker?.speak(reply, TextToSpeech.QUEUE_FLUSH, null, "jarvis")
+            }
         }
     }
 

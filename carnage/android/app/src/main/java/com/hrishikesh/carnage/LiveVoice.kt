@@ -212,7 +212,11 @@ object LiveVoice {
                     val data = parts.optJSONObject(i)?.optJSONObject("inlineData")
                         ?.optString("data").orEmpty()
                     if (data.isNotEmpty()) {
-                        outgoing.offer(Base64.decode(data, Base64.DEFAULT))
+                        // Her voice only goes into headphones; without them the
+                        // reply still arrives as text (the transcript below).
+                        if (Headphones.connected(context)) {
+                            outgoing.offer(Base64.decode(data, Base64.DEFAULT))
+                        }
                         state("speaking")
                     }
                 }
@@ -321,6 +325,7 @@ object LiveVoice {
             outgoing.sumOf { it.size }.toLong() * 1000 / (OUT_RATE * 2) + 800
 
         private fun chime() {
+            if (!Headphones.connected(context)) return
             runCatching {
                 val tone = ToneGenerator(AudioManager.STREAM_VOICE_CALL, 70)
                 tone.startTone(ToneGenerator.TONE_PROP_BEEP2, 180)
@@ -347,8 +352,8 @@ object LiveVoice {
         /**
          * Communication mode, routed to the Bluetooth earphone when one is
          * connected (its mic only exists in the call profile), else a wired
-         * headset, else the loudspeaker — never the earpiece, which nobody
-         * holding a phone at arm's length would hear.
+         * or USB headset. Never the loudspeaker: without headphones she is
+         * silent and answers in text.
          */
         private fun routeAudio() {
             previousMode = audio.mode
@@ -360,7 +365,6 @@ object LiveVoice {
                     AudioDeviceInfo.TYPE_BLE_HEADSET,
                     AudioDeviceInfo.TYPE_WIRED_HEADSET,
                     AudioDeviceInfo.TYPE_USB_HEADSET,
-                    AudioDeviceInfo.TYPE_BUILTIN_SPEAKER,
                 ).firstNotNullOfOrNull { type -> devices.firstOrNull { it.type == type } }
                 if (pick != null) audio.setCommunicationDevice(pick)
             } else {
@@ -368,8 +372,6 @@ object LiveVoice {
                 if (audio.isBluetoothScoAvailableOffCall && bluetoothHeadsetConnected()) {
                     audio.startBluetoothSco()
                     audio.isBluetoothScoOn = true
-                } else if (!audio.isWiredHeadsetOn) {
-                    audio.isSpeakerphoneOn = true
                 }
             }
         }
