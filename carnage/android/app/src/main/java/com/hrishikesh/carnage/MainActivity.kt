@@ -44,6 +44,11 @@ import java.util.Locale
  */
 class MainActivity : AppCompatActivity() {
 
+    companion object {
+        /** Open straight into a conversation (the tile, the notification). */
+        const val ACTION_TALK = "com.hrishikesh.carnage.action.TALK"
+    }
+
     private lateinit var log: LinearLayout
     private lateinit var scroll: ScrollView
     private lateinit var input: EditText
@@ -55,6 +60,8 @@ class MainActivity : AppCompatActivity() {
     private var speaker: TextToSpeech? = null
     private var pulse: Animator? = null
     private var shown = ""
+    /** Opened to talk (tile, Jarvis Talk, side button): close when the call ends. */
+    private var talkMode = false
 
     private val permissions = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -80,6 +87,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        talkMode = wantsTalk(intent)
+        if (talkMode) showOverLockScreen()
         setContentView(R.layout.activity_main)
 
         log = findViewById(R.id.log)
@@ -147,10 +156,51 @@ class MainActivity : AppCompatActivity() {
         }
 
         show(if (LiveVoice.active) "listening" else "off")
+        if (talkMode) startTalking()
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (wantsTalk(intent)) {
+            talkMode = true
+            showOverLockScreen()
+            startTalking()
+        }
+    }
+
+    // ── talk mode: one tap from the lock screen ─────────────────────────────
+    private fun wantsTalk(intent: Intent?): Boolean =
+        intent?.action == ACTION_TALK ||
+            intent?.component?.className?.endsWith(".Talk") == true
+
+    /** Over the lock screen, screen on — the conversation stays hidden there. */
+    private fun showOverLockScreen() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(
+                android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                    android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+            )
+        }
+    }
+
+    private fun startTalking() {
+        if (!LiveVoice.active) LiveVoice.start(this)
+    }
+
+    /** True while the phone is locked: nothing private may be on screen. */
+    private fun locked(): Boolean =
+        getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked
 
     override fun onResume() {
         super.onResume()
+        // Over the lock screen only the core shows — never the conversation.
+        val unlocked = !locked()
+        findViewById<View>(R.id.conversation).isVisible = unlocked
+        findViewById<View>(R.id.composer).isVisible = unlocked
         // Claim the mic and camera for screen-off use while this screen is
         // visible — the only moment Android allows it. Done on every open, so
         // a grant made in Settings later is picked up too.
@@ -190,6 +240,12 @@ class MainActivity : AppCompatActivity() {
             }
             "off" -> {
                 voiceState.text = getString(R.string.tap_to_talk)
+                // Opened just to talk: when the call is over, get out of the way
+                // (back to the lock screen, or wherever he was).
+                if (talkMode && shown.isNotEmpty() && pulse != null) {
+                    talkMode = false
+                    finish()
+                }
                 animateCore(period = 3200, reach = 1.04f, brightest = 0.55f)
             }
             else -> note(state)        // a sentence from LiveVoice: say it

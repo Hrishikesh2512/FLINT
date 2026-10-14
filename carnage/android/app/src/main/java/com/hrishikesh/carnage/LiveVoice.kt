@@ -135,6 +135,9 @@ object LiveVoice {
         fun open() {
             state("connecting")
             Thread({
+                // Opened from the lock screen or a tile, the process may be
+                // brand new: make sure the brain is up before asking it anything.
+                Brain.start(context)
                 val url = Brain.liveUrl()
                 val setup = Brain.liveSetup()
                 if (url.isEmpty() || setup == null) {

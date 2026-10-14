@@ -241,6 +241,9 @@ class CarnageService : android.app.Service() {
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(Notification.CATEGORY_SERVICE)
+            // Nothing private in it ("Jarvis is ready" and a Talk button), so
+            // it may show in full on the lock screen — that is the point of it.
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .build()
     }
 
