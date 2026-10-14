@@ -1,0 +1,598 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generated: the widget orb as a blood moon, live. 18 frames x 45 ms. -->
+<animation-list xmlns:android="http://schemas.android.com/apk/res/android" android:oneshot="false">
+    <item android:duration="45">
+        <layer-list>
+            <item android:left="0.0dp" android:top="0.0dp" android:right="0.0dp" android:bottom="0.0dp">
+                <shape android:shape="oval">
+                    <gradient android:type="radial" android:gradientRadius="50%p"
+                        android:startColor="#FFE8203A" android:centerColor="#CCE8203A" android:endColor="#00FF4A2E"/>
+                </shape>
+            </item>
+            <item android:left="17.1dp" android:top="23.9dp" android:right="17.1dp" android:bottom="23.9dp">
+                <shape android:shape="oval"><solid android:color="#73E8203A"/></shape>
+            </item>
+            <item android:left="18.4dp" android:top="25.2dp" android:right="18.4dp" android:bottom="25.2dp">
+                <shape android:shape="oval"><solid android:color="#73E8203A"/></shape>
+            </item>
+            <item android:left="19.6dp" android:top="26.4dp" android:right="19.6dp" android:bottom="26.4dp">
+                <layer-list>
+                    <item>
+                        <shape android:shape="oval">
+                            <gradient android:type="radial" android:gradientRadius="56%p"
+                                android:centerX="0.46" android:centerY="0.42"
+                                android:startColor="#FFFF8A5C" android:centerColor="#FFD21F33" android:endColor="#FF4A0610"/>
+                        </shape>
+                    </item>
+                    <item>
+                        <shape android:shape="oval">
+                            <gradient android:angle="300" android:startColor="#3398C8D2"
+                                android:centerColor="#1A98C8D2" android:endColor="#0098C8D2"/>
+                        </shape>
+                    </item>
+                </layer-list>
+            </item>
+        </layer-list>
+    </item>
+    <item android:duration="45">
+        <layer-list>
+            <item android:left="-1.4dp" android:top="-1.4dp" android:right="-1.4dp" android:bottom="-1.4dp">
+                <shape android:shape="oval">
+                    <gradient android:type="radial" android:gradientRadius="50%p"
+                        android:startColor="#FFE8203A" android:centerColor="#CCE8203A" android:endColor="#00FF4A2E"/>
+                </shape>
+            </item>
+            <item android:left="13.7dp" android:top="25.3dp" android:right="13.7dp" android:bottom="25.3dp">
+                <shape android:shape="oval"><solid android:color="#73E8203A"/></shape>
+            </item>
+            <item android:left="15.0dp" android:top="26.6dp" android:right="15.0dp" android:bottom="26.6dp">
+                <shape android:shape="oval"><solid android:color="#73E8203A"/></shape>
+            </item>
+            <item android:left="16.2dp" android:top="27.8dp" android:right="16.2dp" android:bottom="27.8dp">
+                <layer-list>
+                    <item>
+                        <shape android:shape="oval">
+                            <gradient android:type="radial" android:gradientRadius="56%p"
+                                android:centerX="0.46" android:centerY="0.42"
+                                android:startColor="#FFFF8A5C" android:centerColor="#FFD21F33" android:endColor="#FF4A0610"/>
+                        </shape>
+                    </item>
+                    <item>
+                        <shape android:shape="oval">
+                            <gradient android:angle="300" android:startColor="#3398C8D2"
+                                android:centerColor="#1A98C8D2" android:endColor="#0098C8D2"/>
+                        </shape>
+                    </item>
+                </layer-list>
+            </item>
+        </layer-list>
+    </item>
+    <item android:duration="45">
+        <layer-list>
+            <item android:left="-2.6dp" android:top="-2.6dp" android:right="-2.6dp" android:bottom="-2.6dp">
+                <shape android:shape="oval">
+                    <gradient android:type="radial" android:gradientRadius="50%p"
+                        android:startColor="#FFE8203A" android:centerColor="#CCE8203A" android:endColor="#00FF4A2E"/>
+                </shape>
+            </item>
+            <item android:left="13.1dp" android:top="24.0dp" android:right="13.1dp" android:bottom="24.0dp">
+                <shape android:shape="oval"><solid android:color="#73E8203A"/></shape>
+            </item>
+            <item android:left="14.4dp" android:top="25.3dp" android:right="14.4dp" android:bottom="25.3dp">
+                <shape android:shape="oval"><solid android:color="#73E8203A"/></shape>
+            </item>
+            <item android:left="15.6dp" android:top="26.5dp" android:right="15.6dp" android:bottom="26.5dp">
+                <layer-list>
+                    <item>
+                        <shape android:shape="oval">
+                            <gradient android:type="radial" android:gradientRadius="56%p"
+                                android:centerX="0.46" android:centerY="0.42"
+                                android:startColor="#FFFF8A5C" android:centerColor="#FFD21F33" android:endColor="#FF4A0610"/>
+                        </shape>
+                    </item>
+                    <item>
+                        <shape android:shape="oval">
+                            <gradient android:angle="300" android:startColor="#3398C8D2"
+                                android:centerColor="#1A98C8D2" android:endColor="#0098C8D2"/>
+                        </shape>
+                    </item>
+                </layer-list>
+            </item>
+        </layer-list>
+    </item>
+    <item android:duration="45">
+        <layer-list>
+            <item android:left="-3.5dp" android:top="-3.5dp" android:right="-3.5dp" android:bottom="-3.5dp">
+                <shape android:shape="oval">
+                    <gradient android:type="radial" android:gradientRadius="50%p"
+                        android:startColor="#FFE8203A" android:centerColor="#CCE8203A" android:endColor="#00FF4A2E"/>
+                </shape>
+            </item>
+            <item android:left="15.3dp" android:top="20.5dp" android:right="15.3dp" android:bottom="20.5dp">
+                <shape android:shape="oval"><solid android:color="#73E8203A"/></shape>
+            </item>
+            <item android:left="16.6dp" android:top="21.8dp" android:right="16.6dp" android:bottom="21.8dp">
+                <shape android:shape="oval"><solid android:color="#73E8203A"/></shape>
+            </item>
+            <item android:left="17.8dp" android:top="23.0dp" android:right="17.8dp" android:bottom="23.0dp">
+                <layer-list>
+                    <item>
+                        <shape android:shape="oval">
+                            <gradient android:type="radial" android:gradientRadius="56%p"
+                                android:centerX="0.46" android:centerY="0.42"
+                                android:startColor="#FFFF8A5C" android:centerColor="#FFD21F33" android:endColor="#FF4A0610"/>
+                        </shape>
+                    </item>
+                    <item>
+                        <shape android:shape="oval">
+                            <gradient android:angle="300" android:startColor="#3398C8D2"
+                                android:centerColor="#1A98C8D2" android:endColor="#0098C8D2"/>
+                        </shape>
+                    </item>
+                </layer-list>
+            </item>
+        </layer-list>
+    </item>
+    <item android:duration="45">
+        <layer-list>
+            <item android:left="-3.9dp" android:top="-3.9dp" android:right="-3.9dp" android:bottom="-3.9dp">
+                <shape android:shape="oval">
+                    <gradient android:type="radial" android:gradientRadius="50%p"
+                        android:startColor="#FFE8203A" android:centerColor="#CCE8203A" android:endColor="#00FF4A2E"/>
+                </shape>
+            </item>
+            <item android:left="19.0dp" android:top="16.1dp" android:right="19.0dp" android:bottom="16.1dp">
+                <shape android:shape="oval"><solid android:color="#73E8203A"/></shape>
+            </item>
+            <item android:left="20.3dp" android:top="17.4dp" android:right="20.3dp" android:bottom="17.4dp">
+                <shape android:shape="oval"><solid android:color="#73E8203A"/></shape>
+            </item>
+            <item android:left="21.5dp" android:top="18.6dp" android:right="21.5dp" android:bottom="18.6dp">
+                <layer-list>
+                    <item>
+                        <shape android:shape="oval">
+                            <gradient android:type="radial" android:gradientRadius="56%p"
+                                android:centerX="0.46" android:centerY="0.42"
+                                android:startColor="#FFFF8A5C" android:centerColor="#FFD21F33" android:endColor="#FF4A0610"/>
+                        </shape>
+                    </item>
+                    <item>
+                        <shape android:shape="oval">
+                            <gradient android:angle="300" android:startColor="#3398C8D2"
+                                android:centerColor="#1A98C8D2" android:endColor="#0098C8D2"/>
+                        </shape>
+                    </item>
+                </layer-list>
+            </item>
+        </layer-list>
+    </item>
+    <item android:duration="45">
+        <layer-list>
+            <item android:left="-3.9dp" android:top="-3.9dp" android:right="-3.9dp" android:bottom="-3.9dp">
+                <shape android:shape="oval">
+                    <gradient android:type="radial" android:gradientRadius="50%p"
+                        android:startColor="#FFE8203A" android:centerColor="#CCE8203A" android:endColor="#00FF4A2E"/>
+                </shape>
+            </item>
+            <item android:left="22.4dp" android:top="12.7dp" android:right="22.4dp" android:bottom="12.7dp">
+                <shape android:shape="oval"><solid android:color="#73E8203A"/></shape>
+            </item>
+            <item android:left="23.7dp" android:top="14.0dp" android:right="23.7dp" android:bottom="14.0dp">
+                <shape android:shape="oval"><solid android:color="#73E8203A"/></shape>
+            </item>
+            <item android:left="24.9dp" android:top="15.2dp" android:right="24.9dp" android:bottom="15.2dp">
+                <layer-list>
+                    <item>
+                        <shape android:shape="oval">
+                            <gradient android:type="radial" android:gradientRadius="56%p"
+                                android:centerX="0.46" android:centerY="0.42"
+                                android:startColor="#FFFF8A5C" android:centerColor="#FFD21F33" android:endColor="#FF4A0610"/>
+                        </shape>
+                    </item>
+                    <item>
+                        <shape android:shape="oval">
+                            <gradient android:angle="300" android:startColor="#3398C8D2"
+                                android:centerColor="#1A98C8D2" android:endColor="#0098C8D2"/>
+                        </shape>
+                    </item>
+                </layer-list>
+            </item>
+        </layer-list>
+    </item>
+    <item android:duration="45">
+        <layer-list>
+            <item android:left="-3.5dp" android:top="-3.5dp" android:right="-3.5dp" android:bottom="-3.5dp">
+                <shape android:shape="oval">
+                    <gradient android:type="radial" android:gradientRadius="50%p"
+                        android:startColor="#FFE8203A" android:centerColor="#CCE8203A" android:endColor="#00FF4A2E"/>
+                </shape>
+            </item>
+            <item android:left="23.9dp" android:top="11.9dp" android:right="23.9dp" android:bottom="11.9dp">
+                <shape android:shape="oval"><solid android:color="#73E8203A"/></shape>
+            </item>
+            <item android:left="25.2dp" android:top="13.2dp" android:right="25.2dp" android:bottom="13.2dp">
+                <shape android:shape="oval"><solid android:color="#73E8203A"/></shape>
+            </item>
+            <item android:left="26.4dp" android:top="14.4dp" android:right="26.4dp" android:bottom="14.4dp">
+                <layer-list>
+                    <item>
+                        <shape android:shape="oval">
+                            <gradient android:type="radial" android:gradientRadius="56%p"
+                                android:centerX="0.46" android:centerY="0.42"
+                                android:startColor="#FFFF8A5C" android:centerColor="#FFD21F33" android:endColor="#FF4A0610"/>
+                        </shape>
+                    </item>
+                    <item>
+                        <shape android:shape="oval">
+                            <gradient android:angle="300" android:startColor="#3398C8D2"
+                                android:centerColor="#1A98C8D2" android:endColor="#0098C8D2"/>
+                        </shape>
+                    </item>
+                </layer-list>
+            </item>
+        </layer-list>
+    </item>
+    <item android:duration="45">
+        <layer-list>
+            <item android:left="-2.6dp" android:top="-2.6dp" android:right="-2.6dp" android:bottom="-2.6dp">
+                <shape android:shape="oval">
+                    <gradient android:type="radial" android:gradientRadius="50%p"
+                        android:startColor="#FFE8203A" android:centerColor="#CCE8203A" android:endColor="#00FF4A2E"/>
+                </shape>
+            </item>
+            <item android:left="22.9dp" android:top="14.3dp" android:right="22.9dp" android:bottom="14.3dp">
+                <shape android:shape="oval"><solid android:color="#73E8203A"/></shape>
+            </item>
+            <item android:left="24.2dp" android:top="15.6dp" android:right="24.2dp" android:bottom="15.6dp">
+                <shape android:shape="oval"><solid android:color="#73E8203A"/></shape>
+            </item>
+            <item android:left="25.4dp" android:top="16.8dp" android:right="25.4dp" android:bottom="16.8dp">
+                <layer-list>
+                    <item>
+                        <shape android:shape="oval">
+                            <gradient android:type="radial" android:gradientRadius="56%p"
+                                android:centerX="0.46" android:centerY="0.42"
+                                android:startColor="#FFFF8A5C" android:centerColor="#FFD21F33" android:endColor="#FF4A0610"/>
+                        </shape>
+                    </item>
+                    <item>
+                        <shape android:shape="oval">
+                            <gradient android:angle="300" android:startColor="#3398C8D2"
+                                android:centerColor="#1A98C8D2" android:endColor="#0098C8D2"/>
+                        </shape>
+                    </item>
+                </layer-list>
+            </item>
+        </layer-list>
+    </item>
+    <item android:duration="45">
+        <layer-list>
+            <item android:left="-1.4dp" android:top="-1.4dp" android:right="-1.4dp" android:bottom="-1.4dp">
+                <shape android:shape="oval">
+                    <gradient android:type="radial" android:gradientRadius="50%p"
+                        android:startColor="#FFE8203A" android:centerColor="#CCE8203A" android:endColor="#00FF4A2E"/>
+                </shape>
+            </item>
+            <item android:left="20.1dp" android:top="18.9dp" android:right="20.1dp" android:bottom="18.9dp">
+                <shape android:shape="oval"><solid android:color="#73E8203A"/></shape>
+            </item>
+            <item android:left="21.4dp" android:top="20.2dp" android:right="21.4dp" android:bottom="20.2dp">
+                <shape android:shape="oval"><solid android:color="#73E8203A"/></shape>
+            </item>
+            <item android:left="22.6dp" android:top="21.4dp" android:right="22.6dp" android:bottom="21.4dp">
+                <layer-list>
+                    <item>
+                        <shape android:shape="oval">
+                            <gradient android:type="radial" android:gradientRadius="56%p"
+                                android:centerX="0.46" android:centerY="0.42"
+                                android:startColor="#FFFF8A5C" android:centerColor="#FFD21F33" android:endColor="#FF4A0610"/>
+                        </shape>
+                    </item>
+                    <item>
+                        <shape android:shape="oval">
+                            <gradient android:angle="300" android:startColor="#3398C8D2"
+                                android:centerColor="#1A98C8D2" android:endColor="#0098C8D2"/>
+                        </shape>
+                    </item>
+                </layer-list>
+            </item>
+        </layer-list>
+    </item>
+    <item android:duration="45">
+        <layer-list>
+            <item android:left="-0.0dp" android:top="-0.0dp" android:right="-0.0dp" android:bottom="-0.0dp">
+                <shape android:shape="oval">
+                    <gradient android:type="radial" android:gradientRadius="50%p"
+                        android:startColor="#FFE8203A" android:centerColor="#CCE8203A" android:endColor="#00FF4A2E"/>
+                </shape>
+            </item>
+            <item android:left="17.1dp" android:top="23.9dp" android:right="17.1dp" android:bottom="23.9dp">
+                <shape android:shape="oval"><solid android:color="#73E8203A"/></shape>
+            </item>
+            <item android:left="18.4dp" android:top="25.2dp" android:right="18.4dp" android:bottom="25.2dp">
+                <shape android:shape="oval"><solid android:color="#73E8203A"/></shape>
+            </item>
+            <item android:left="19.6dp" android:top="26.4dp" android:right="19.6dp" android:bottom="26.4dp">
+                <layer-list>
+                    <item>
+                        <shape android:shape="oval">
+                            <gradient android:type="radial" android:gradientRadius="56%p"
+                                android:centerX="0.46" android:centerY="0.42"
+                                android:startColor="#FFFF8A5C" android:centerColor="#FFD21F33" android:endColor="#FF4A0610"/>
+                        </shape>
+                    </item>
+                    <item>
+                        <shape android:shape="oval">
+                            <gradient android:angle="300" android:startColor="#3398C8D2"
+                                android:centerColor="#1A98C8D2" android:endColor="#0098C8D2"/>
+                        </shape>
+                    </item>
+                </layer-list>
+            </item>
+        </layer-list>
+    </item>
+    <item android:duration="45">
+        <layer-list>
+            <item android:left="1.4dp" android:top="1.4dp" android:right="1.4dp" android:bottom="1.4dp">
+                <shape android:shape="oval">
+                    <gradient android:type="radial" android:gradientRadius="50%p"
+                        android:startColor="#FFE8203A" android:centerColor="#CCE8203A" android:endColor="#00FF4A2E"/>
+                </shape>
+            </item>
+            <item android:left="15.7dp" android:top="27.3dp" android:right="15.7dp" android:bottom="27.3dp">
+                <shape android:shape="oval"><solid android:color="#73E8203A"/></shape>
+            </item>
+            <item android:left="17.0dp" android:top="28.6dp" android:right="17.0dp" android:bottom="28.6dp">
+                <shape android:shape="oval"><solid android:color="#73E8203A"/></shape>
+            </item>
+            <item android:left="18.2dp" android:top="29.8dp" android:right="18.2dp" android:bottom="29.8dp">
+                <layer-list>
+                    <item>
+                        <shape android:shape="oval">
+                            <gradient android:type="radial" android:gradientRadius="56%p"
+                                android:centerX="0.46" android:centerY="0.42"
+                                android:startColor="#FFFF8A5C" android:centerColor="#FFD21F33" android:endColor="#FF4A0610"/>
+                        </shape>
+                    </item>
+                    <item>
+                        <shape android:shape="oval">
+                            <gradient android:angle="300" android:startColor="#3398C8D2"
+                                android:centerColor="#1A98C8D2" android:endColor="#0098C8D2"/>
+                        </shape>
+                    </item>
+                </layer-list>
+            </item>
+        </layer-list>
+    </item>
+    <item android:duration="45">
+        <layer-list>
+            <item android:left="2.6dp" android:top="2.6dp" android:right="2.6dp" android:bottom="2.6dp">
+                <shape android:shape="oval">
+                    <gradient android:type="radial" android:gradientRadius="50%p"
+                        android:startColor="#FFE8203A" android:centerColor="#CCE8203A" android:endColor="#00FF4A2E"/>
+                </shape>
+            </item>
+            <item android:left="17.0dp" android:top="27.9dp" android:right="17.0dp" android:bottom="27.9dp">
+                <shape android:shape="oval"><solid android:color="#73E8203A"/></shape>
+            </item>
+            <item android:left="18.3dp" android:top="29.2dp" android:right="18.3dp" android:bottom="29.2dp">
+                <shape android:shape="oval"><solid android:color="#73E8203A"/></shape>
+            </item>
+            <item android:left="19.5dp" android:top="30.4dp" android:right="19.5dp" android:bottom="30.4dp">
+                <layer-list>
+                    <item>
+                        <shape android:shape="oval">
+                            <gradient android:type="radial" android:gradientRadius="56%p"
+                                android:centerX="0.46" android:centerY="0.42"
+                                android:startColor="#FFFF8A5C" android:centerColor="#FFD21F33" android:endColor="#FF4A0610"/>
+                        </shape>
+                    </item>
+                    <item>
+                        <shape android:shape="oval">
+                            <gradient android:angle="300" android:startColor="#3398C8D2"
+                                android:centerColor="#1A98C8D2" android:endColor="#0098C8D2"/>
+                        </shape>
+                    </item>
+                </layer-list>
+            </item>
+        </layer-list>
+    </item>
+    <item android:duration="45">
+        <layer-list>
+            <item android:left="3.5dp" android:top="3.5dp" android:right="3.5dp" android:bottom="3.5dp">
+                <shape android:shape="oval">
+                    <gradient android:type="radial" android:gradientRadius="50%p"
+                        android:startColor="#FFE8203A" android:centerColor="#CCE8203A" android:endColor="#00FF4A2E"/>
+                </shape>
+            </item>
+            <item android:left="20.5dp" android:top="25.7dp" android:right="20.5dp" android:bottom="25.7dp">
+                <shape android:shape="oval"><solid android:color="#73E8203A"/></shape>
+            </item>
+            <item android:left="21.8dp" android:top="27.0dp" android:right="21.8dp" android:bottom="27.0dp">
+                <shape android:shape="oval"><solid android:color="#73E8203A"/></shape>
+            </item>
+            <item android:left="23.0dp" android:top="28.2dp" android:right="23.0dp" android:bottom="28.2dp">
+                <layer-list>
+                    <item>
+                        <shape android:shape="oval">
+                            <gradient android:type="radial" android:gradientRadius="56%p"
+                                android:centerX="0.46" android:centerY="0.42"
+                                android:startColor="#FFFF8A5C" android:centerColor="#FFD21F33" android:endColor="#FF4A0610"/>
+                        </shape>
+                    </item>
+                    <item>
+                        <shape android:shape="oval">
+                            <gradient android:angle="300" android:startColor="#3398C8D2"
+                                android:centerColor="#1A98C8D2" android:endColor="#0098C8D2"/>
+                        </shape>
+                    </item>
+                </layer-list>
+            </item>
+        </layer-list>
+    </item>
+    <item android:duration="45">
+        <layer-list>
+            <item android:left="3.9dp" android:top="3.9dp" android:right="3.9dp" android:bottom="3.9dp">
+                <shape android:shape="oval">
+                    <gradient android:type="radial" android:gradientRadius="50%p"
+                        android:startColor="#FFE8203A" android:centerColor="#CCE8203A" android:endColor="#00FF4A2E"/>
+                </shape>
+            </item>
+            <item android:left="24.9dp" android:top="22.0dp" android:right="24.9dp" android:bottom="22.0dp">
+                <shape android:shape="oval"><solid android:color="#73E8203A"/></shape>
+            </item>
+            <item android:left="26.2dp" android:top="23.3dp" android:right="26.2dp" android:bottom="23.3dp">
+                <shape android:shape="oval"><solid android:color="#73E8203A"/></shape>
+            </item>
+            <item android:left="27.4dp" android:top="24.5dp" android:right="27.4dp" android:bottom="24.5dp">
+                <layer-list>
+                    <item>
+                        <shape android:shape="oval">
+                            <gradient android:type="radial" android:gradientRadius="56%p"
+                                android:centerX="0.46" android:centerY="0.42"
+                                android:startColor="#FFFF8A5C" android:centerColor="#FFD21F33" android:endColor="#FF4A0610"/>
+                        </shape>
+                    </item>
+                    <item>
+                        <shape android:shape="oval">
+                            <gradient android:angle="300" android:startColor="#3398C8D2"
+                                android:centerColor="#1A98C8D2" android:endColor="#0098C8D2"/>
+                        </shape>
+                    </item>
+                </layer-list>
+            </item>
+        </layer-list>
+    </item>
+    <item android:duration="45">
+        <layer-list>
+            <item android:left="3.9dp" android:top="3.9dp" android:right="3.9dp" android:bottom="3.9dp">
+                <shape android:shape="oval">
+                    <gradient android:type="radial" android:gradientRadius="50%p"
+                        android:startColor="#FFE8203A" android:centerColor="#CCE8203A" android:endColor="#00FF4A2E"/>
+                </shape>
+            </item>
+            <item android:left="28.3dp" android:top="18.6dp" android:right="28.3dp" android:bottom="18.6dp">
+                <shape android:shape="oval"><solid android:color="#73E8203A"/></shape>
+            </item>
+            <item android:left="29.6dp" android:top="19.9dp" android:right="29.6dp" android:bottom="19.9dp">
+                <shape android:shape="oval"><solid android:color="#73E8203A"/></shape>
+            </item>
+            <item android:left="30.8dp" android:top="21.1dp" android:right="30.8dp" android:bottom="21.1dp">
+                <layer-list>
+                    <item>
+                        <shape android:shape="oval">
+                            <gradient android:type="radial" android:gradientRadius="56%p"
+                                android:centerX="0.46" android:centerY="0.42"
+                                android:startColor="#FFFF8A5C" android:centerColor="#FFD21F33" android:endColor="#FF4A0610"/>
+                        </shape>
+                    </item>
+                    <item>
+                        <shape android:shape="oval">
+                            <gradient android:angle="300" android:startColor="#3398C8D2"
+                                android:centerColor="#1A98C8D2" android:endColor="#0098C8D2"/>
+                        </shape>
+                    </item>
+                </layer-list>
+            </item>
+        </layer-list>
+    </item>
+    <item android:duration="45">
+        <layer-list>
+            <item android:left="3.5dp" android:top="3.5dp" android:right="3.5dp" android:bottom="3.5dp">
+                <shape android:shape="oval">
+                    <gradient android:type="radial" android:gradientRadius="50%p"
+                        android:startColor="#FFE8203A" android:centerColor="#CCE8203A" android:endColor="#00FF4A2E"/>
+                </shape>
+            </item>
+            <item android:left="29.1dp" android:top="17.1dp" android:right="29.1dp" android:bottom="17.1dp">
+                <shape android:shape="oval"><solid android:color="#73E8203A"/></shape>
+            </item>
+            <item android:left="30.4dp" android:top="18.4dp" android:right="30.4dp" android:bottom="18.4dp">
+                <shape android:shape="oval"><solid android:color="#73E8203A"/></shape>
+            </item>
+            <item android:left="31.6dp" android:top="19.6dp" android:right="31.6dp" android:bottom="19.6dp">
+                <layer-list>
+                    <item>
+                        <shape android:shape="oval">
+                            <gradient android:type="radial" android:gradientRadius="56%p"
+                                android:centerX="0.46" android:centerY="0.42"
+                                android:startColor="#FFFF8A5C" android:centerColor="#FFD21F33" android:endColor="#FF4A0610"/>
+                        </shape>
+                    </item>
+                    <item>
+                        <shape android:shape="oval">
+                            <gradient android:angle="300" android:startColor="#3398C8D2"
+                                android:centerColor="#1A98C8D2" android:endColor="#0098C8D2"/>
+                        </shape>
+                    </item>
+                </layer-list>
+            </item>
+        </layer-list>
+    </item>
+    <item android:duration="45">
+        <layer-list>
+            <item android:left="2.6dp" android:top="2.6dp" android:right="2.6dp" android:bottom="2.6dp">
+                <shape android:shape="oval">
+                    <gradient android:type="radial" android:gradientRadius="50%p"
+                        android:startColor="#FFE8203A" android:centerColor="#CCE8203A" android:endColor="#00FF4A2E"/>
+                </shape>
+            </item>
+            <item android:left="26.7dp" android:top="18.1dp" android:right="26.7dp" android:bottom="18.1dp">
+                <shape android:shape="oval"><solid android:color="#73E8203A"/></shape>
+            </item>
+            <item android:left="28.0dp" android:top="19.4dp" android:right="28.0dp" android:bottom="19.4dp">
+                <shape android:shape="oval"><solid android:color="#73E8203A"/></shape>
+            </item>
+            <item android:left="29.2dp" android:top="20.6dp" android:right="29.2dp" android:bottom="20.6dp">
+                <layer-list>
+                    <item>
+                        <shape android:shape="oval">
+                            <gradient android:type="radial" android:gradientRadius="56%p"
+                                android:centerX="0.46" android:centerY="0.42"
+                                android:startColor="#FFFF8A5C" android:centerColor="#FFD21F33" android:endColor="#FF4A0610"/>
+                        </shape>
+                    </item>
+                    <item>
+                        <shape android:shape="oval">
+                            <gradient android:angle="300" android:startColor="#3398C8D2"
+                                android:centerColor="#1A98C8D2" android:endColor="#0098C8D2"/>
+                        </shape>
+                    </item>
+                </layer-list>
+            </item>
+        </layer-list>
+    </item>
+    <item android:duration="45">
+        <layer-list>
+            <item android:left="1.4dp" android:top="1.4dp" android:right="1.4dp" android:bottom="1.4dp">
+                <shape android:shape="oval">
+                    <gradient android:type="radial" android:gradientRadius="50%p"
+                        android:startColor="#FFE8203A" android:centerColor="#CCE8203A" android:endColor="#00FF4A2E"/>
+                </shape>
+            </item>
+            <item android:left="22.1dp" android:top="20.9dp" android:right="22.1dp" android:bottom="20.9dp">
+                <shape android:shape="oval"><solid android:color="#73E8203A"/></shape>
+            </item>
+            <item android:left="23.4dp" android:top="22.2dp" android:right="23.4dp" android:bottom="22.2dp">
+                <shape android:shape="oval"><solid android:color="#73E8203A"/></shape>
+            </item>
+            <item android:left="24.6dp" android:top="23.4dp" android:right="24.6dp" android:bottom="23.4dp">
+                <layer-list>
+                    <item>
+                        <shape android:shape="oval">
+                            <gradient android:type="radial" android:gradientRadius="56%p"
+                                android:centerX="0.46" android:centerY="0.42"
+                                android:startColor="#FFFF8A5C" android:centerColor="#FFD21F33" android:endColor="#FF4A0610"/>
+                        </shape>
+                    </item>
+                    <item>
+                        <shape android:shape="oval">
+                            <gradient android:angle="300" android:startColor="#3398C8D2"
+                                android:centerColor="#1A98C8D2" android:endColor="#0098C8D2"/>
+                        </shape>
+                    </item>
+                </layer-list>
+            </item>
+        </layer-list>
+    </item>
+</animation-list>

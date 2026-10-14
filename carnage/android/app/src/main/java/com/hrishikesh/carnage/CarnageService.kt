@@ -63,9 +63,6 @@ class CarnageService : android.app.Service() {
             }
         }
 
-        override fun onLine(who: String, text: String) {
-            if (who != "you") CarnageWidget.show(this@CarnageService, last, reply = text)
-        }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -202,9 +199,37 @@ class CarnageService : android.app.Service() {
         }
     }
 
+    /**
+     * The widget and the notification talk through here, without opening the
+     * app — as long as this service holds the microphone. If Android has
+     * restarted it without one (after an update, say), the mic would be fed
+     * silence, so open the talk screen instead: one visible screen is all
+     * Android needs to hand the mic back.
+     */
+    private fun talkFromHere() {
+        if (LiveVoice.active) {
+            LiveVoice.stop()
+            return
+        }
+        val hasMic = Build.VERSION.SDK_INT < Build.VERSION_CODES.R ||
+            foregroundServiceType and ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE != 0
+        if (hasMic) {
+            LiveVoice.start(this)
+        } else {
+            Log.i("carnage", "no background mic: opening the talk screen")
+            runCatching {
+                startActivity(
+                    Intent(this, MainActivity::class.java)
+                        .setAction(MainActivity.ACTION_TALK)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            }.onFailure { Log.w("carnage", "could not open the talk screen", it) }
+        }
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_TALK -> LiveVoice.toggle(this)
+            ACTION_TALK -> talkFromHere()
             // Sent from the app's own screen once the mic is granted: claiming
             // the microphone type now, while visible, is what lets her keep
             // hearing him after the screen goes off.

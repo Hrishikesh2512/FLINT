@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Jarvis on the home screen: only the bubble, 136 dp. It breathes while
+     idle and wobbles while he listens or speaks; a tap talks, in place. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:contentDescription="@string/talk_to_jarvis">
+
+    <ProgressBar
+        android:id="@+id/widget_idle"
+        android:layout_width="136dp"
+        android:layout_height="136dp"
+        android:minWidth="136dp"
+        android:maxWidth="136dp"
+        android:minHeight="136dp"
+        android:maxHeight="136dp"
+        android:layout_gravity="center"
+        android:indeterminate="true"
+        android:indeterminateOnly="true"
+        android:indeterminateDrawable="@drawable/orb_wobble_idle"
+        android:visibility="visible"/>
+
+    <ProgressBar
+        android:id="@+id/widget_live"
+        android:layout_width="136dp"
+        android:layout_height="136dp"
+        android:minWidth="136dp"
+        android:maxWidth="136dp"
+        android:minHeight="136dp"
+        android:maxHeight="136dp"
+        android:layout_gravity="center"
+        android:indeterminate="true"
+        android:indeterminateOnly="true"
+        android:indeterminateDrawable="@drawable/orb_wobble_live"
+        android:visibility="gone"/>
+</FrameLayout>
