@@ -1,7 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Setting up Carnage: the same night sky and glass as the main screen, in
-     three cards — who you are and Jarvis's key, what Jarvis listens for, and
-     pairing the Pi. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -21,74 +18,42 @@
             android:padding="18dp">
 
             <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/brand"
-                android:textColor="@color/carnage"
-                android:textSize="11sp"
-                android:textStyle="bold"
-                android:letterSpacing="0.42"
-                android:layout_marginTop="6dp"/>
-
-            <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="18dp"
+                android:fontFamily="sans-serif-light"
                 android:text="@string/setup_title"
                 android:textColor="@color/ink"
-                android:textSize="28sp"
-                android:fontFamily="sans-serif-light"/>
+                android:textSize="28sp"/>
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/setup_blurb"
-                android:textColor="@color/dim"
-                android:textSize="14sp"
-                android:layout_marginBottom="18dp"/>
-
-            <!-- ── you, and Jarvis's key ─────────────────────────────────── -->
+            <!-- you, and the key -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:background="@drawable/glass_card"
                 android:orientation="vertical"
-                android:padding="20dp">
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/your_name"
-                    android:textColor="@color/jarvis"
-                    android:textSize="12sp"
-                    android:layout_marginBottom="6dp"/>
+                android:padding="18dp">
 
                 <EditText
                     android:id="@+id/name"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:background="@drawable/glass_field"
-                    android:hint="@string/your_name_hint"
+                    android:hint="@string/your_name"
                     android:importantForAutofill="no"
                     android:inputType="textPersonName"
                     android:padding="14dp"
                     android:textColor="@color/ink"
-                    android:textColorHint="@color/dim"
-                    android:layout_marginBottom="18dp"/>
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/gemini_key"
-                    android:textColor="@color/jarvis"
-                    android:textSize="12sp"
-                    android:layout_marginBottom="6dp"/>
+                    android:textColorHint="@color/dim"/>
 
                 <EditText
                     android:id="@+id/key"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
                     android:background="@drawable/glass_field"
-                    android:hint="@string/gemini_key_hint"
+                    android:hint="@string/gemini_key"
                     android:importantForAutofill="no"
                     android:inputType="textVisiblePassword"
                     android:maxLines="3"
@@ -100,6 +65,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:autoLink="web"
+                    android:paddingStart="4dp"
                     android:paddingTop="8dp"
                     android:text="@string/gemini_key_where"
                     android:textColor="@color/dim"
@@ -107,24 +73,17 @@
                     android:textSize="12sp"/>
             </LinearLayout>
 
-            <!-- ── what Jarvis listens for ───────────────────────────────── -->
+            <!-- switches -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
+                android:layout_marginTop="12dp"
                 android:background="@drawable/glass_card"
                 android:orientation="vertical"
-                android:paddingStart="20dp"
-                android:paddingEnd="14dp"
-                android:paddingTop="16dp"
-                android:paddingBottom="10dp">
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/section_switches"
-                    android:textColor="@color/jarvis"
-                    android:textSize="12sp"/>
+                android:paddingStart="18dp"
+                android:paddingEnd="12dp"
+                android:paddingTop="6dp"
+                android:paddingBottom="6dp">
 
                 <com.google.android.material.materialswitch.MaterialSwitch
                     android:id="@+id/wake"
@@ -143,13 +102,22 @@
                     android:text="@string/announce_switch"
                     android:textColor="@color/ink"
                     android:textSize="15sp"/>
+
+                <TextView
+                    android:id="@+id/shade"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:gravity="center_vertical"
+                    android:text="@string/shade"
+                    android:textColor="@color/ink"
+                    android:textSize="15sp"/>
             </LinearLayout>
 
             <Button
                 android:id="@+id/save"
                 android:layout_width="match_parent"
-                android:layout_height="56dp"
-                android:layout_marginTop="18dp"
+                android:layout_height="54dp"
+                android:layout_marginTop="16dp"
                 android:background="@drawable/brand_button"
                 android:text="@string/save"
                 android:textAllCaps="false"
@@ -158,38 +126,36 @@
                 android:textStyle="bold"
                 app:backgroundTint="@null"/>
 
-            <!-- ── pairing the Pi ────────────────────────────────────────── -->
+            <!-- pairing -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="22dp"
+                android:layout_marginTop="20dp"
                 android:background="@drawable/glass_card"
                 android:orientation="vertical"
-                android:padding="20dp">
+                android:padding="18dp">
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:layout_marginBottom="10dp"
                     android:text="@string/pairing_title"
-                    android:textColor="@color/ink"
-                    android:textSize="17sp"
-                    android:layout_marginBottom="8dp"/>
+                    android:textColor="@color/dim"
+                    android:textSize="13sp"/>
 
                 <TextView
                     android:id="@+id/pairing"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:background="@drawable/glass_field"
                     android:fontFamily="monospace"
-                    android:padding="14dp"
-                    android:textColor="@color/dim"
+                    android:textColor="@color/ink"
                     android:textIsSelectable="true"
                     android:textSize="12sp"/>
 
                 <Button
                     android:id="@+id/copyToken"
                     android:layout_width="match_parent"
-                    android:layout_height="48dp"
+                    android:layout_height="46dp"
                     android:layout_marginTop="12dp"
                     android:background="@drawable/glass_pill"
                     android:text="@string/copy_token"

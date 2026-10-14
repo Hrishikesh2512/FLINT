@@ -112,8 +112,7 @@ def start(files_dir: str, bridge):
         config = replace(config, state_dir=state)
 
         def call(method: str, **kwargs):
-            # Java sees one Map; Python callers use keywords.
-            return bridge.call(method, kwargs)
+            return _call_bridge(bridge, method, kwargs)
 
         _carnage = Carnage(config, phone=AndroidPhone(call))
         log.info("carnage up: %s", _carnage.describe())
@@ -181,13 +180,48 @@ def configure(user_name: str, api_key: str) -> str:
         config = replace(load_config(path), state_dir=_state)
 
         def call(method: str, **kwargs):
-            return _bridge.call(method, kwargs)
+            return _call_bridge(_bridge, method, kwargs)
 
         previous = _carnage
         _carnage = Carnage(config, phone=AndroidPhone(call))
         log.info("reconfigured: %s", _carnage.describe())
         _serve(_carnage, previous)
         return _carnage.describe()
+
+
+def _call_bridge(bridge, method: str, kwargs: dict):
+    """One call across into Kotlin, with both directions translated.
+
+    Chaquopy converts neither way on its own: a Python dict is not a
+    java.util.Map, and the Map or List that Kotlin hands back is a Java object,
+    not a dict or a list — so without this every phone skill (battery, GPS,
+    music, the shade) quietly reads as "unavailable".
+    """
+    from java.util import HashMap
+
+    args = HashMap()
+    for key, value in kwargs.items():
+        args.put(str(key), value)
+    return _to_python(bridge.call(method, args))
+
+
+def _to_python(value):
+    """A Java return value as plain Python: Map -> dict, List -> list."""
+    if value is None or isinstance(value, (str, bool, int, float)):
+        return value
+    from java.lang import Boolean, Number
+    from java.util import List, Map
+
+    if isinstance(value, Map):
+        return {str(k): _to_python(value.get(k)) for k in value.keySet().toArray()}
+    if isinstance(value, List):
+        return [_to_python(item) for item in value.toArray()]
+    if isinstance(value, Boolean):
+        return bool(value.booleanValue())
+    if isinstance(value, Number):
+        number = value.doubleValue()
+        return int(number) if number.is_integer() else number
+    return str(value)
 
 
 def _live_brain():

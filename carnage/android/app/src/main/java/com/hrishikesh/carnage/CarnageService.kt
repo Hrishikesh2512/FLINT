@@ -47,7 +47,7 @@ class CarnageService : android.app.Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var buttons: MediaSession? = null
     private var wake: WakeListener? = null
-    private var status = "Starting up…"
+    private var status = "Starting"
 
     // Keeps the notification's button saying the right thing.
     private val voice = object : LiveVoice.Listener {
@@ -69,7 +69,7 @@ class CarnageService : android.app.Service() {
 
         scope.launch {
             val ok = Brain.start(applicationContext)
-            status = if (ok) Brain.describe() else "Could not start — check the logs"
+            status = if (ok) "Jarvis is ready" else "Jarvis could not start"
             update(status)
             if (ok) heartbeat()
         }
@@ -166,16 +166,18 @@ class CarnageService : android.app.Service() {
                         intent.getParcelableExtra(Intent.EXTRA_KEY_EVENT)
                     } ?: return false
                     if (key.action != KeyEvent.ACTION_DOWN) return true
-                    return when (key.keyCode) {
-                        KeyEvent.KEYCODE_HEADSETHOOK,
-                        KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
-                        KeyEvent.KEYCODE_MEDIA_PLAY,
-                        KeyEvent.KEYCODE_MEDIA_PAUSE -> {
-                            LiveVoice.toggle(this@CarnageService)
-                            true
-                        }
-                        else -> false
+                    Log.i("carnage", "media button ${KeyEvent.keyCodeToString(key.keyCode)}")
+                    // Only a real press. Bluetooth earbuds send PLAY/PAUSE on
+                    // their own when audio starts — answering those hung up
+                    // every call a second after it opened.
+                    if (key.keyCode != KeyEvent.KEYCODE_HEADSETHOOK &&
+                        key.keyCode != KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
+                    ) {
+                        return false
                     }
+                    if (LiveVoice.msSinceChange() < 2000) return true
+                    LiveVoice.toggle(this@CarnageService)
+                    return true
                 }
             })
             setPlaybackState(

@@ -69,6 +69,10 @@ object LiveVoice {
         .build()
 
     @Volatile private var call: Call? = null
+    @Volatile private var changedAt = 0L
+
+    /** Milliseconds since a call last started or ended. */
+    fun msSinceChange(): Long = android.os.SystemClock.elapsedRealtime() - changedAt
 
     val active: Boolean get() = call != null
 
@@ -87,14 +91,19 @@ object LiveVoice {
         if (ContextCompat.checkSelfPermission(app, Manifest.permission.RECORD_AUDIO)
             != PackageManager.PERMISSION_GRANTED
         ) {
-            state("I need the microphone permission to hear you.")
+            state("Allow the microphone to talk.")
             return
         }
+        changedAt = android.os.SystemClock.elapsedRealtime()
         call = Call(app).also { it.open() }
     }
 
     @Synchronized
     fun stop() {
+        if (call == null) return
+        // Who hung up, so a call that ends by itself can be traced.
+        Log.i(TAG, "hanging up", Throwable("stop() called from"))
+        changedAt = android.os.SystemClock.elapsedRealtime()
         call?.close()
         call = null
     }
@@ -129,7 +138,7 @@ object LiveVoice {
                 val url = Brain.liveUrl()
                 val setup = Brain.liveSetup()
                 if (url.isEmpty() || setup == null) {
-                    state("I've no key to think with — add it in Set up.")
+                    state("Add a Gemini key in Settings.")
                     LiveVoice.stop()
                     return@Thread
                 }
@@ -162,7 +171,7 @@ object LiveVoice {
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
             Log.w(TAG, "live socket failed (${response?.code})", t)
             if (open) {
-                state("Lost the connection — tap to try again.")
+                state("Connection lost. Tap to retry.")
                 main.post { LiveVoice.stop() }
             }
         }

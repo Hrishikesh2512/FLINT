@@ -10,7 +10,6 @@ import android.graphics.RenderEffect
 import android.graphics.Shader
 import android.os.Build
 import android.os.Bundle
-import android.provider.Settings
 import android.speech.tts.TextToSpeech
 import android.view.Gravity
 import android.view.View
@@ -22,6 +21,9 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -50,7 +52,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var glow: View
     private lateinit var ring: View
     private lateinit var voiceState: TextView
-    private lateinit var status: TextView
     private var speaker: TextToSpeech? = null
     private var pulse: Animator? = null
     private var shown = ""
@@ -89,12 +90,24 @@ class MainActivity : AppCompatActivity() {
         glow = findViewById(R.id.glow)
         ring = findViewById(R.id.ring)
         voiceState = findViewById(R.id.voiceState)
-        status = findViewById(R.id.status)
 
         // Real blur on the halo where the platform has it (Android 12+), so
         // the core glows through the glass instead of sitting on it.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             glow.setRenderEffect(RenderEffect.createBlurEffect(36f, 36f, Shader.TileMode.DECAL))
+        }
+
+        // While typing, the keyboard takes half the screen: tuck the core away
+        // so the conversation keeps the room instead of being squeezed out.
+        // Listened for on the outermost view: the inner column fits system
+        // windows and would consume the keyboard insets before the core saw them.
+        val core = findViewById<View>(R.id.core)
+        val root = findViewById<android.view.ViewGroup>(android.R.id.content).getChildAt(0)
+        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+            val typing = insets.isVisible(WindowInsetsCompat.Type.ime())
+            core.isVisible = !typing
+            voiceState.isVisible = !typing
+            insets
         }
 
         CarnageService.start(this)
@@ -129,16 +142,23 @@ class MainActivity : AppCompatActivity() {
             LiveVoice.toggle(this)
         }
         LiveVoice.addListener(voice)
-        findViewById<View>(R.id.shade).setOnClickListener {
-            startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-        }
         findViewById<View>(R.id.setup).setOnClickListener {
             startActivity(Intent(this, SetupActivity::class.java))
         }
 
-        note(getString(R.string.opening_note))
         show(if (LiveVoice.active) "listening" else "off")
-        refreshStatus()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Claim the mic and camera for screen-off use while this screen is
+        // visible — the only moment Android allows it. Done on every open, so
+        // a grant made in Settings later is picked up too.
+        val mic = checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        val camera = checkSelfPermission(Manifest.permission.CAMERA) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (mic || camera) CarnageService.claimMic(this)
     }
 
     override fun onDestroy() {
@@ -171,7 +191,6 @@ class MainActivity : AppCompatActivity() {
             "off" -> {
                 voiceState.text = getString(R.string.tap_to_talk)
                 animateCore(period = 3200, reach = 1.04f, brightest = 0.55f)
-                refreshStatus()
             }
             else -> note(state)        // a sentence from LiveVoice: say it
         }
@@ -260,11 +279,6 @@ class MainActivity : AppCompatActivity() {
         scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
     }
 
-    private fun refreshStatus() {
-        lifecycleScope.launch {
-            status.text = withContext(Dispatchers.IO) { Brain.describe() }
-        }
-    }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 

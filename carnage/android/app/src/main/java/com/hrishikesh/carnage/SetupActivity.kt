@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.provider.Settings
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
@@ -61,6 +62,10 @@ class SetupActivity : AppCompatActivity() {
             pairing.text = describePairing(json)
         }
 
+        findViewById<TextView>(R.id.shade).setOnClickListener {
+            startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+        }
+
         findViewById<Button>(R.id.copyToken).setOnClickListener {
             val token = runCatching { JSONObject(Brain.pairing()).optString("token") }
                 .getOrNull().orEmpty()
@@ -82,11 +87,11 @@ class SetupActivity : AppCompatActivity() {
             }
             save.isEnabled = false
             lifecycleScope.launch {
-                val described = withContext(Dispatchers.IO) {
+                withContext(Dispatchers.IO) {
                     Brain.configure(typedName, typedKey)
                 }
                 save.isEnabled = true
-                toast(described)
+                toast(getString(R.string.saved))
                 // Restarting the service picks up the rebuilt assistant, so the
                 // hub and her capabilities match the config that was just saved.
                 CarnageService.start(this@SetupActivity)
@@ -100,7 +105,7 @@ class SetupActivity : AppCompatActivity() {
         if (json == null) return getString(R.string.pairing_unavailable)
         val token = json.optString("token")
         val port = json.optInt("port", 8790)
-        return getString(R.string.pairing_body, token.ifBlank { "—" }, port)
+        return getString(R.string.pairing_body, token.ifBlank { "-" }, port)
     }
 
     private fun toast(text: String) {

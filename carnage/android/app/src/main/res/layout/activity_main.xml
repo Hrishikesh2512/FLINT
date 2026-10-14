@@ -28,8 +28,8 @@
             android:orientation="horizontal"
             android:paddingStart="20dp"
             android:paddingEnd="12dp"
-            android:paddingTop="14dp"
-            android:paddingBottom="14dp">
+            android:paddingTop="12dp"
+            android:paddingBottom="12dp">
 
             <LinearLayout
                 android:layout_width="0dp"
@@ -67,16 +67,6 @@
                         android:layout_marginStart="10dp"
                         android:background="@drawable/dot_alive"/>
                 </LinearLayout>
-
-                <TextView
-                    android:id="@+id/status"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/waking"
-                    android:textColor="@color/dim"
-                    android:textSize="12sp"
-                    android:maxLines="2"
-                    android:ellipsize="end"/>
             </LinearLayout>
 
             <ImageButton
@@ -116,6 +106,7 @@
 
         <!-- ── Jarvis's core: tap to talk ───────────────────────────────── -->
         <FrameLayout
+            android:id="@+id/core"
             android:layout_width="match_parent"
             android:layout_height="176dp"
             android:clipChildren="false">
@@ -198,22 +189,5 @@
                 android:src="@drawable/ic_send"
                 android:contentDescription="@string/send"/>
         </LinearLayout>
-
-        <TextView
-            android:id="@+id/shade"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginTop="10dp"
-            android:background="@drawable/glass_pill"
-            android:drawableStart="@drawable/ic_bell"
-            android:drawablePadding="6dp"
-            android:paddingStart="14dp"
-            android:paddingEnd="16dp"
-            android:paddingTop="7dp"
-            android:paddingBottom="7dp"
-            android:text="@string/shade"
-            android:textColor="@color/dim"
-            android:textSize="12sp"/>
     </LinearLayout>
 </FrameLayout>
