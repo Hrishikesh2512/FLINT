@@ -51,8 +51,20 @@ class CarnageService : android.app.Service() {
 
     // Keeps the notification's button saying the right thing.
     private val voice = object : LiveVoice.Listener {
+        private var last = ""
+
         override fun onState(state: String) {
             update(status)
+            // "speaking" arrives with every chunk of audio; the widget only
+            // needs to hear about real changes.
+            if (state != last) {
+                last = state
+                CarnageWidget.show(this@CarnageService, state)
+            }
+        }
+
+        override fun onLine(who: String, text: String) {
+            if (who != "you") CarnageWidget.show(this@CarnageService, last, reply = text)
         }
     }
 

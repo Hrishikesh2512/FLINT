@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The core while Jarvis is listening or speaking: brighter heart, a glowing
+     cyan ring round it. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="oval">
+            <gradient android:type="radial" android:gradientRadius="50%p"
+                android:startColor="#B34FE3FF" android:centerColor="#334FE3FF"
+                android:endColor="#004FE3FF"/>
+        </shape>
+    </item>
+    <item android:top="9dp" android:bottom="9dp" android:left="9dp" android:right="9dp">
+        <layer-list>
+            <item>
+                <shape android:shape="oval">
+                    <gradient android:type="radial" android:gradientRadius="50%p"
+                        android:centerX="0.5" android:centerY="0.42"
+                        android:startColor="#FF8CF2FF" android:centerColor="#E64FE3FF"
+                        android:endColor="#CC8B5CFF"/>
+                </shape>
+            </item>
+            <item>
+                <shape android:shape="oval">
+                    <stroke android:width="2dp" android:color="#E6FFFFFF"/>
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+</layer-list>

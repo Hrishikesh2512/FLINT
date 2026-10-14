@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 4x2: the core on the left; CARNAGE, Jarvis and what he is doing on the
+     right — or, with no headphones in, his last reply. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_glass"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="14dp"
+    android:paddingEnd="20dp"
+    android:paddingTop="12dp"
+    android:paddingBottom="12dp">
+
+    <ImageView
+        android:id="@+id/widget_orb"
+        android:layout_width="96dp"
+        android:layout_height="96dp"
+        android:src="@drawable/orb_widget"
+        android:contentDescription="@string/talk_to_jarvis"/>
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_marginStart="14dp"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/brand"
+            android:textColor="#FFFF3D6E"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.42"/>
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/assistant"
+                android:textColor="#FFF2F5FF"
+                android:textSize="26sp"
+                android:fontFamily="sans-serif-light"/>
+
+            <ImageView
+                android:id="@+id/widget_dot"
+                android:layout_width="8dp"
+                android:layout_height="8dp"
+                android:layout_marginStart="9dp"
+                android:src="@drawable/dot_alive"
+                android:contentDescription="@null"/>
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/widget_state"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:ellipsize="end"
+            android:maxLines="2"
+            android:text="@string/tap_to_talk"
+            android:textColor="#FF9AA4C7"
+            android:textSize="13sp"/>
+    </LinearLayout>
+</LinearLayout>

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The core at rest, sized for the widget: a soft halo, then the glass
+     sphere with its highlight. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="oval">
+            <gradient android:type="radial" android:gradientRadius="50%p"
+                android:startColor="#664FE3FF" android:centerColor="#1A8B5CFF"
+                android:endColor="#008B5CFF"/>
+        </shape>
+    </item>
+    <item android:top="9dp" android:bottom="9dp" android:left="9dp" android:right="9dp">
+        <layer-list>
+            <item>
+                <shape android:shape="oval">
+                    <gradient android:type="radial" android:gradientRadius="50%p"
+                        android:centerX="0.5" android:centerY="0.42"
+                        android:startColor="#F24FE3FF" android:centerColor="#B36A7BFF"
+                        android:endColor="#998B5CFF"/>
+                </shape>
+            </item>
+            <item>
+                <shape android:shape="oval">
+                    <stroke android:width="1.5dp" android:color="#8CFFFFFF"/>
+                </shape>
+            </item>
+            <item android:top="6dp" android:left="16dp" android:right="16dp" android:bottom="34dp">
+                <shape android:shape="oval">
+                    <gradient android:angle="270" android:startColor="#66FFFFFF"
+                        android:endColor="#00FFFFFF"/>
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+</layer-list>

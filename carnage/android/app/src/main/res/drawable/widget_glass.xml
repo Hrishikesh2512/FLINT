@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The widget's pane of glass: dark enough to read on any wallpaper, clear
+     enough to let it through, with Carnage's crimson and Jarvis's cyan
+     glowing in opposite corners and a bright edge where the light catches. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient android:angle="270" android:startColor="#80101430"
+                android:endColor="#99070A1A"/>
+            <corners android:radius="30dp"/>
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient android:type="radial" android:gradientRadius="160dp"
+                android:centerX="0.05" android:centerY="0.0"
+                android:startColor="#55FF3D6E" android:endColor="#00FF3D6E"/>
+            <corners android:radius="30dp"/>
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient android:type="radial" android:gradientRadius="170dp"
+                android:centerX="0.95" android:centerY="1.0"
+                android:startColor="#4D4FE3FF" android:endColor="#004FE3FF"/>
+            <corners android:radius="30dp"/>
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient android:angle="270" android:startColor="#1FFFFFFF"
+                android:centerColor="#00FFFFFF" android:endColor="#00FFFFFF"/>
+            <stroke android:width="1dp" android:color="#40FFFFFF"/>
+            <corners android:radius="30dp"/>
+        </shape>
+    </item>
+</layer-list>

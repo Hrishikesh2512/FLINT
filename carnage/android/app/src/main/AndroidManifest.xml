@@ -69,6 +69,19 @@
         </activity>
 
 
+        <!-- Jarvis on the home screen. -->
+        <receiver
+            android:name=".CarnageWidget"
+            android:exported="true"
+            android:label="@string/assistant">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/carnage_widget"/>
+        </receiver>
+
         <!-- The "Jarvis" quick-settings tile: swipe down, tap, talk. -->
         <service
             android:name=".TalkTile"
