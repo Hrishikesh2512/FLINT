@@ -17,7 +17,7 @@ object Prefs {
         prefs(context).edit().putBoolean(WAKE, on).apply()
 
     /** Read new messages aloud while a Bluetooth earphone is connected. */
-    fun announce(context: Context): Boolean = prefs(context).getBoolean(ANNOUNCE, true)
+    fun announce(context: Context): Boolean = prefs(context).getBoolean(ANNOUNCE, false)
     fun setAnnounce(context: Context, on: Boolean) =
         prefs(context).edit().putBoolean(ANNOUNCE, on).apply()
 }
