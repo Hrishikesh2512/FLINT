@@ -1,0 +1,8 @@
+[Unit]
+Description=Reconnect Venom's Bluetooth headset if it dropped
+After=bluetooth.service
+Wants=bluetooth.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/venom/provision/venom-bt-reconnect.sh

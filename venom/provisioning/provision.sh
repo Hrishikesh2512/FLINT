@@ -245,8 +245,23 @@ install -m 0644 "$APP_DIR/venom/provisioning/venom-control.service" \
 # root outside the sandbox; socket is group-venom so only the console reaches it.
 install -m 0644 "$APP_DIR/venom/provisioning/venom-shell.service" \
     /etc/systemd/system/venom-shell.service
+# Headset watchdog: every 30s, grab the configured Bluetooth headset back if
+# it dropped (earbuds wander off to a phone, the radio blips).
+install -m 0755 "$APP_DIR/venom/provisioning/venom-bt-reconnect.sh" \
+    /opt/venom/provision/venom-bt-reconnect.sh
+install -m 0644 "$APP_DIR/venom/provisioning/venom-bt-reconnect.service" \
+    /etc/systemd/system/venom-bt-reconnect.service
+install -m 0644 "$APP_DIR/venom/provisioning/venom-bt-reconnect.timer" \
+    /etc/systemd/system/venom-bt-reconnect.timer
+rm -f /usr/local/bin/venom-bt-reconnect.sh  # hand-installed predecessor
+# Touch-to-pause used to be a local overlay re-applied to the installed
+# package before every start; it lives in voice.py now.
+rm -f /etc/systemd/system/venom.service.d/10-touch-patch.conf \
+    /usr/local/sbin/venom-touch-patch.py
+rmdir /etc/systemd/system/venom.service.d 2>/dev/null || true
 systemctl daemon-reload
 systemctl enable --now venom-control.path
+systemctl enable --now venom-bt-reconnect.timer || true
 # Non-critical add-on: never let a shell-daemon hiccup abort provisioning and
 # leave the voice service un-restarted. On failure the console just falls back
 # to its sandboxed in-process shell.
@@ -278,7 +293,7 @@ if [ -d "$WA_SRC" ]; then
     fi
     if command -v node >/dev/null 2>&1; then
         mkdir -p "$WA_DST"
-        cp -f "$WA_SRC/package.json" "$WA_SRC/index.js" "$WA_DST/"
+        cp -f "$WA_SRC/package.json" "$WA_SRC"/*.js "$WA_DST/"
         [ -f "$WA_SRC/README.md" ] && cp -f "$WA_SRC/README.md" "$WA_DST/"
         WA_HASH="$(sha256sum "$WA_DST/package.json" | cut -d' ' -f1)"
         if [ "$(cat "$WA_DST/.deps-hash" 2>/dev/null)" != "$WA_HASH" ]; then
@@ -297,16 +312,28 @@ if [ -d "$WA_SRC" ]; then
             /etc/venom/venom.toml 2>/dev/null | head -1)"
         WA_USER="$(sed -n 's/^[[:space:]]*user_name[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' \
             /etc/venom/venom.toml 2>/dev/null | head -1)"
+        # Any other settings added to the file by hand are carried over.
         {
             printf 'GEMINI_API_KEY=%s\n' "$WA_GEMINI"
             printf 'AUTO_REPLY_USER=%s\n' "$WA_USER"
-        } > /etc/venom/whatsapp.env
+            grep -vE '^(GEMINI_API_KEY|AUTO_REPLY_USER)=' /etc/venom/whatsapp.env 2>/dev/null || true
+        } > /etc/venom/whatsapp.env.new
+        mv -f /etc/venom/whatsapp.env.new /etc/venom/whatsapp.env
         chgrp venom /etc/venom/whatsapp.env && chmod 0640 /etc/venom/whatsapp.env
 
         install -m 0644 "$APP_DIR/venom/provisioning/venom-whatsapp.service" \
             /etc/systemd/system/venom-whatsapp.service
+        # Second bridge on Jarvis's OWN number. Only runs once its owner-only
+        # settings exist (WA_OWNER_JIDS etc. in /etc/venom/whatsapp-jarvis.env).
+        install -m 0644 "$APP_DIR/venom/provisioning/venom-whatsapp-jarvis.service" \
+            /etc/systemd/system/venom-whatsapp-jarvis.service
+        mkdir -p /var/lib/venom/whatsapp-jarvis
+        chown -R venom:venom /var/lib/venom/whatsapp-jarvis
         systemctl daemon-reload
         systemctl enable --now venom-whatsapp.service || true
+        if [ -f /etc/venom/whatsapp-jarvis.env ]; then
+            systemctl enable --now venom-whatsapp-jarvis.service || true
+        fi
         log "WhatsApp bridge up — pair it by scanning the QR:"
         log "  journalctl -u venom-whatsapp -n 40 --no-pager   (WhatsApp → Linked Devices)"
     fi

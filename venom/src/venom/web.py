@@ -1237,12 +1237,17 @@ class WebConsole:
                 "  memory del <category> <key>\n"
                 "  memory categories")
 
-    def prompt(self, text: str) -> bool:
+    def prompt(self, text: str, silent: bool = False) -> bool:
         orch, loop = self.orchestrator, self.loop
         if not text or orch is None or loop is None:
             return False
         orch.transcript.append(("you (console)", text))
-        loop.call_soon_threadsafe(orch.inbox.put_nowait, text)
+        # A silent prompt runs the full brain (tools included) but the Pi
+        # doesn't speak the reply — used by the WhatsApp owner path so texting
+        # Jarvis never makes the wearable talk. The text reply still lands in
+        # the transcript for the caller to read back.
+        item = {"text": text, "silent": True} if silent else text
+        loop.call_soon_threadsafe(orch.inbox.put_nowait, item)
         return True
 
     def music(self, action: str, query: str) -> str:
@@ -1528,7 +1533,8 @@ class WebConsole:
                 except (ValueError, json.JSONDecodeError):
                     data = {}
                 if self.path == "/api/prompt":
-                    ok = console.prompt(str(data.get("text", "")).strip())
+                    ok = console.prompt(str(data.get("text", "")).strip(),
+                                        bool(data.get("silent", False)))
                     self._send(json.dumps({"ok": ok}).encode())
                 elif self.path == "/api/music":
                     result = console.music(str(data.get("action", "")),

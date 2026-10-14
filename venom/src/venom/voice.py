@@ -34,6 +34,25 @@ from venom.live import LiveSession
 from venom.tools_pi import TimerBoard, build_pi_registry
 from venom.wake import WakeWordDetector
 
+
+class _NullSpeaker:
+    """The speaker of a headless session: there is no audio path, so replies
+    and chimes go nowhere (the text still lands in the transcript)."""
+    playing = False
+
+    def play(self, pcm: bytes) -> None:
+        pass
+
+    def flush(self) -> None:
+        pass
+
+
+class _NoMic:
+    """The microphone of a headless session — a queue nothing ever fills."""
+
+    def __init__(self) -> None:
+        self.frames: asyncio.Queue = asyncio.Queue()
+
 log = logging.getLogger("venom.voice")
 
 
@@ -410,6 +429,9 @@ class VoiceOrchestrator:
         # When the current conversation began — presses inside the grace
         # window never end it (see WAKE_TOGGLE_GRACE_SECONDS).
         self._conversation_started = 0.0
+        # True while an audio lifecycle has its streams open (headset connected,
+        # wake model loaded). While False, _serve_headless answers the inbox.
+        self._audio_live = False
 
     async def run(self) -> None:
         # The wake model takes minutes to load from slow flash — load it in
@@ -449,6 +471,8 @@ class VoiceOrchestrator:
         self._watch_task = self._start_watches()
         self._jobs_task = self._start_jobs()
         self._sync_task = self._start_sync()
+        # The console and WhatsApp brain must not depend on the earphone.
+        self._headless_task = asyncio.create_task(self._serve_headless())
 
         first_cycle = True
         died_streak = 0
@@ -472,6 +496,39 @@ class VoiceOrchestrator:
             first_cycle = False
             self.state = "reconnecting"
             await asyncio.sleep(3)
+
+    async def _serve_headless(self) -> None:
+        """Answer console and WhatsApp prompts while there is no audio path.
+
+        The voice lifecycle only reads the inbox once a headset is connected,
+        its microphone pinned and the wake model loaded — so with the earphone
+        off (or still connecting) a console prompt or the owner's WhatsApp DM
+        sat queued until the bridge gave up waiting. The brain needs no audio:
+        while the audio path is down this serves the inbox through a silent
+        session (no mic, no speaker; replies land in the transcript, tools
+        still run), and steps aside as soon as the voice lifecycle is live.
+        """
+        backoff = 2.0
+        while True:
+            await asyncio.sleep(0.25)
+            if self._audio_live or self.inbox.empty():
+                continue
+            log.info("no audio path — answering the console headless")
+            session = self._build_session(_NoMic(), _NullSpeaker())
+            session.silent = True
+            session.activate()
+            self.activity.session_active = True
+            try:
+                await session.run()
+                backoff = 2.0
+            except Exception:
+                # No internet, bad key, API hiccup: back off rather than spin
+                # on the still-queued prompt.
+                log.exception("headless session ended with error")
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, 60.0)
+            finally:
+                self.activity.session_active = False
 
     def _repin_defaults(self) -> None:
         """Re-assert PipeWire defaults on Venom's own headset. Called by the
@@ -584,6 +641,7 @@ class VoiceOrchestrator:
         speaker.start()
         mic.start()
         self._speaker = speaker  # let button handlers chime this lifecycle
+        self._audio_live = True  # the headless server steps aside
         try:
             chime(speaker)  # audible on every (re)connect: "Venom hears you"
             while True:
@@ -643,22 +701,32 @@ class VoiceOrchestrator:
                     except FocusRequested:
                         continue  # loop top re-enters via the focus path
                 self.state = "conversation"
-                # Chime FIRST — the instant "I heard you" — before the slower
-                # bookkeeping (pausing music can take a beat), so waking never
-                # feels laggy even when the rest of the setup takes a moment.
-                chime(speaker)
-                chime(speaker, frequency=1320.0)
-                # The music and the mic share one headset, so anything playing
-                # bleeds into the mic — Gemini never hears a clean end-of-speech
-                # and never replies. Pause our own player for the whole turn;
-                # the finally below resumes it when we go back to sleep.
-                self._duck_music()
-                # Same physics for the laptop/phone streaming into the
-                # earphone: AVRCP-pause it for the conversation (observed
-                # live — with music bleeding in she never answered).
-                if self.btreceiver is not None:
-                    self.btreceiver.hold_streams()
-                self._prepare_opening(session)
+                # Was this wake caused ONLY by silent prompt(s)? (WhatsApp/owner
+                # text turns queue {"text","silent"} on the inbox.) If so the
+                # whole thing runs headless: no chime, no music-duck, no stream
+                # hold, no mic-gate — the Pi behaves as if nothing happened, and
+                # the session itself streams no mic and speaks nothing.
+                pending = list(self.inbox._queue)
+                silent_wake = bool(pending) and all(
+                    isinstance(i, dict) and i.get("silent") for i in pending)
+                session.silent = silent_wake
+                if not silent_wake:
+                    # Chime FIRST — the instant "I heard you" — before the slower
+                    # bookkeeping (pausing music can take a beat), so waking never
+                    # feels laggy even when the rest of the setup takes a moment.
+                    chime(speaker)
+                    chime(speaker, frequency=1320.0)
+                    # The music and the mic share one headset, so anything
+                    # playing bleeds into the mic — Gemini never hears a clean
+                    # end-of-speech and never replies. Pause our own player for
+                    # the turn; the finally below resumes it when we sleep.
+                    self._duck_music()
+                    # Same physics for the laptop/phone streaming into the
+                    # earphone: AVRCP-pause it for the conversation (observed
+                    # live — with music bleeding in she never answered).
+                    if self.btreceiver is not None:
+                        self.btreceiver.hold_streams()
+                    self._prepare_opening(session)
                 session.activate()
                 self._conversation_started = time.monotonic()
                 self._session = session  # a wake press now barges in, not wakes
@@ -671,7 +739,7 @@ class VoiceOrchestrator:
                 # reads as "still talking" and it waits). Off during wake, where
                 # pure zeros would look like a dead capture path (see
                 # SilenceTracker) and trigger needless stream rebuilds.
-                if suppressor is not None:
+                if suppressor is not None and not silent_wake:
                     suppressor.gate = True
                 try:
                     await warm_task
@@ -694,6 +762,7 @@ class VoiceOrchestrator:
                 log.info("back to wake listening")
         finally:
             self._speaker = None
+            self._audio_live = False
             mic.stop()
             speaker.stop()
 
@@ -1114,6 +1183,15 @@ class VoiceOrchestrator:
             log.info("wake button — ending conversation (sleep)")
             session.request_stop()
             return
+        # A song is loaded → touch toggles play/pause; otherwise it wakes her.
+        try:
+            if self.music.playing:
+                log.info("touch — toggling music play/pause")
+                asyncio.get_running_loop().run_in_executor(
+                    None, self.music.toggle_pause)
+                return
+        except Exception:
+            log.exception("touch music toggle failed — waking instead")
         self._manual_wake.set()
 
     def _on_dnd_button(self) -> None:
@@ -1155,7 +1233,8 @@ class VoiceOrchestrator:
         except Exception:
             log.exception("could not resume music after the conversation")
 
-    def _build_session(self, mic: MicStream, speaker: SpeakerStream) -> LiveSession:
+    def _build_session(self, mic: MicStream | _NoMic,
+                       speaker: SpeakerStream | _NullSpeaker) -> LiveSession:
         """A pre-warmable session; the opening briefing is decided at wake."""
         return LiveSession(self.config, self.registry, self.memory,
                            self.timers, mic.frames, speaker,

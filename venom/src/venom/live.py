@@ -210,6 +210,17 @@ class LiveSession:
         # arriving (the server doesn't know about the press). Cleared at the
         # next turn boundary (interruption / new user speech / turn_complete).
         self._suppress_output = False
+        # Silent turn: a console/WhatsApp prompt marked silent runs the full
+        # brain (tools included) but its spoken audio is dropped, so the Pi
+        # stays quiet. The text reply is still captured in the transcript.
+        # Set when such a prompt is sent; cleared at the next turn boundary.
+        self._muted_turn = False
+        # Silent SESSION: the whole lifecycle is headless (a WhatsApp/owner
+        # text turn woke us, not a person). No spoken output ever, and the mic
+        # is NOT streamed to the model — so ambient sound and music can't
+        # trigger her, and nothing local happens. Set by the voice loop before
+        # activate() when the wake was a silent prompt.
+        self.silent = False
         # Live interpreter mode (Hindi <-> Kannada/Telugu). Toggled by the
         # translation_mode tool; a distinct chime marks each switch.
         self._translation_mode = False
@@ -381,6 +392,10 @@ class LiveSession:
                 frame = await asyncio.wait_for(self.mic_frames.get(), timeout=0.5)
             except TimeoutError:
                 continue
+            # Headless silent session (WhatsApp text turn): drain the mic queue
+            # but never stream it, so music/ambient can't reach the model.
+            if self.silent:
+                continue
             try:
                 await self._session.send_realtime_input(
                     audio=types.Blob(data=frame,
@@ -398,8 +413,12 @@ class LiveSession:
                 async for response in self._session.receive():
                     if response.data:
                         # After a button barge-in, drop the interrupted turn's
-                        # audio as it keeps arriving so she stays silent.
-                        if not self._suppress_output:
+                        # audio as it keeps arriving so she stays silent. A
+                        # muted (silent) turn drops its audio the same way —
+                        # tools still ran and the text is still transcribed. A
+                        # fully silent session never plays anything.
+                        if (not self._suppress_output and not self._muted_turn
+                                and not self.silent):
                             if self._reply_clock is not None:
                                 log.info("first-audio %.2fs",
                                          time.monotonic() - self._reply_clock)
@@ -427,6 +446,7 @@ class LiveSession:
                             self._turn_out += content.output_transcription.text
                         if getattr(content, "turn_complete", None):
                             self._suppress_output = False  # turn done → resume
+                            self._muted_turn = False       # silent turn ended
                             self._record("you", self._turn_in)
                             said = collapse_doubled(self._turn_out)
                             if said:
@@ -529,33 +549,47 @@ class LiveSession:
             self._idle.touch()
         while not self._ended.is_set():
             while self._inbox is not None and not self._inbox.empty():
-                text = self._inbox.get_nowait()
+                item = self._inbox.get_nowait()
+                # A prompt may be a plain string, or {"text", "silent"} — a
+                # silent one runs the full brain but its audio is dropped.
+                if isinstance(item, dict):
+                    text = str(item.get("text", ""))
+                    self._muted_turn = bool(item.get("silent"))
+                else:
+                    text = str(item)
+                    self._muted_turn = False
+                if not text:
+                    continue
                 self._reply_clock = time.monotonic()
                 await self._session.send_client_content(
                     turns={"role": "user", "parts": [{"text": text}]},
                     turn_complete=True)
                 self._idle.touch()
-            for timer in self.timers.pop_due():
-                chime(self.speaker)
-                chime(self.speaker, frequency=1100.0)
-                await self._session.send_client_content(
-                    turns={"parts": [{"text":
-                        f"[SYSTEM] The timer '{timer.label}' just finished. "
-                        f"Tell {self.config.voice.user_name} now, briefly."}]},
-                    turn_complete=True,
-                )
-                self._idle.touch()
-            # Reminders that fired while asleep, announced now that we're live.
-            if self._pending_reminders:
-                while self._pending_reminders:
-                    text = self._pending_reminders.pop(0)
-                    await self._announce_reminder(text)
-            # Reminders coming due during this conversation.
-            if self.reminders is not None:
-                for reminder in self.reminders.pop_due():
+            # A silent session can't be heard, so it must not take timers or
+            # reminders off the board — they'd be "announced" into nothing.
+            # They stay due for the next spoken session (or the asleep chime).
+            if not self.silent:
+                for timer in self.timers.pop_due():
                     chime(self.speaker)
-                    chime(self.speaker, frequency=880.0)
-                    await self._announce_reminder(reminder["text"])
+                    chime(self.speaker, frequency=1100.0)
+                    await self._session.send_client_content(
+                        turns={"parts": [{"text":
+                            f"[SYSTEM] The timer '{timer.label}' just finished. "
+                            f"Tell {self.config.voice.user_name} now, briefly."}]},
+                        turn_complete=True,
+                    )
+                    self._idle.touch()
+                # Reminders that fired while asleep, announced now that we're live.
+                if self._pending_reminders:
+                    while self._pending_reminders:
+                        text = self._pending_reminders.pop(0)
+                        await self._announce_reminder(text)
+                # Reminders coming due during this conversation.
+                if self.reminders is not None:
+                    for reminder in self.reminders.pop_due():
+                        chime(self.speaker)
+                        chime(self.speaker, frequency=880.0)
+                        await self._announce_reminder(reminder["text"])
             if self._idle.expired and not self.speaker.playing:
                 log.info("session idle %.0fs — closing", self._idle.idle_for)
                 self._ended.set()

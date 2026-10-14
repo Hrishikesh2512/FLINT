@@ -1,0 +1,10 @@
+[Unit]
+Description=Periodically ensure Venom's Bluetooth headset is connected
+
+[Timer]
+OnBootSec=30
+OnUnitActiveSec=30
+AccuracySec=5
+
+[Install]
+WantedBy=timers.target

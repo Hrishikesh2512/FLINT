@@ -1,0 +1,48 @@
+[Unit]
+Description=Venom WhatsApp bridge (Jarvis's OWN number) — parallel to the personal bridge
+Documentation=https://github.com/Hrishikesh2512/FLINT
+After=network-online.target nss-lookup.target venom.service
+Wants=network-online.target nss-lookup.target
+
+[Service]
+Type=simple
+User=venom
+WorkingDirectory=/opt/venom/whatsapp-service
+ExecStart=/usr/bin/node /opt/venom/whatsapp-service/index.js
+Restart=always
+RestartSec=5
+
+# Shared with the personal bridge: GEMINI_API_KEY + AUTO_REPLY_USER — so the
+# API key is never duplicated. Jarvis-only secrets (WA_OWNER_JIDS = owner's
+# number, WA_BRAIN_TOKEN = console PIN) live in the jarvis env file.
+EnvironmentFile=-/etc/venom/whatsapp.env
+EnvironmentFile=-/etc/venom/whatsapp-jarvis.env
+
+# Jarvis-critical settings LAST so they always win over anything in the shared
+# env file. Second instance: own port + own session state, so it links a
+# DIFFERENT WhatsApp number and never collides with the personal bridge (8788).
+Environment=WA_HOST=127.0.0.1
+Environment=WA_PORT=8790
+Environment=WA_STATE_DIR=/var/lib/venom/whatsapp-jarvis
+Environment=WA_JARVIS_MODE=1
+Environment=VENOM_NOTIFY_URL=off
+Environment=WA_BRAIN_URL=http://127.0.0.1:8787
+# The bridge reads the console PIN straight from this file (owned by the venom
+# user) at startup — the secret is never copied into an env value.
+Environment=WA_BRAIN_TOKEN_FILE=/var/lib/venom/web_token
+
+StateDirectory=venom
+
+MemoryHigh=200M
+MemoryMax=300M
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target
