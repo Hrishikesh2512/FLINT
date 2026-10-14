@@ -123,6 +123,27 @@ class Phone(Protocol):
 
     def vibrate(self, milliseconds: int = 400) -> bool: ...
 
+    # ── what the Pi does with mpv and a camera module ──────────────────────
+    def play_music(self, query: str) -> str | None:
+        """Start playing `query` in a music app; the app's name, or None."""
+        ...
+
+    def media(self, action: str) -> bool:
+        """pause / resume / next / previous / stop on whatever is playing."""
+        ...
+
+    def volume(self, percent: int | None = None) -> int | None:
+        """Set the media volume (0-100) when given; the current level, or None."""
+        ...
+
+    def photo(self) -> str | None:
+        """A JPEG from the back camera, base64-encoded, or None."""
+        ...
+
+
+#: The media controls a voice can ask for, and the only ones passed through.
+MEDIA_ACTIONS = ("pause", "resume", "next", "previous", "stop")
+
 
 class AbsentPhone:
     """No phone here — a laptop running the tests, or a dev box.
@@ -152,6 +173,18 @@ class AbsentPhone:
 
     def vibrate(self, milliseconds: int = 400) -> bool:
         return False
+
+    def play_music(self, query: str) -> str | None:
+        return None
+
+    def media(self, action: str) -> bool:
+        return False
+
+    def volume(self, percent: int | None = None) -> int | None:
+        return None
+
+    def photo(self) -> str | None:
+        return None
 
 
 Runner = Callable[[Sequence[str], float], "subprocess.CompletedProcess[str]"]
@@ -262,6 +295,20 @@ class TermuxPhone:
             return False
         return done.returncode == 0
 
+    # Termux:API has no music search and no silent camera worth using from a
+    # conversation; these stay off here rather than half-working.
+    def play_music(self, query: str) -> str | None:
+        return None
+
+    def media(self, action: str) -> bool:
+        return False
+
+    def volume(self, percent: int | None = None) -> int | None:
+        return None
+
+    def photo(self) -> str | None:
+        return None
+
 
 class AndroidPhone:
     """Android through a host app that embeds this package (Chaquopy).
@@ -328,6 +375,27 @@ class AndroidPhone:
 
     def vibrate(self, milliseconds: int = 400) -> bool:
         return bool(self._call("vibrate", milliseconds=int(milliseconds)))
+
+    def play_music(self, query: str) -> str | None:
+        app = self._call("play_music", query=query)
+        return str(app) if app else None
+
+    def media(self, action: str) -> bool:
+        if action not in MEDIA_ACTIONS:
+            return False
+        return bool(self._call("media", action=action))
+
+    def volume(self, percent: int | None = None) -> int | None:
+        level = self._call("volume", percent=-1 if percent is None
+                           else max(0, min(100, int(percent))))
+        try:
+            return int(level) if level is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    def photo(self) -> str | None:
+        jpeg = self._call("photo")
+        return str(jpeg) if jpeg else None
 
 
 def detect(bridge: Callable[..., Any] | None = None) -> Phone:

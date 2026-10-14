@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
+import com.google.android.material.materialswitch.MaterialSwitch
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -38,6 +39,17 @@ class SetupActivity : AppCompatActivity() {
         val key = findViewById<EditText>(R.id.key)
         val save = findViewById<Button>(R.id.save)
         val pairing = findViewById<TextView>(R.id.pairing)
+
+        // Saved the moment they flip, and the service picks them up on its
+        // next pass — no Save needed for a switch.
+        findViewById<MaterialSwitch>(R.id.wake).apply {
+            isChecked = Prefs.wakeWord(this@SetupActivity)
+            setOnCheckedChangeListener { _, on -> Prefs.setWakeWord(this@SetupActivity, on) }
+        }
+        findViewById<MaterialSwitch>(R.id.announce).apply {
+            isChecked = Prefs.announce(this@SetupActivity)
+            setOnCheckedChangeListener { _, on -> Prefs.setAnnounce(this@SetupActivity, on) }
+        }
 
         lifecycleScope.launch {
             val details = withContext(Dispatchers.IO) {

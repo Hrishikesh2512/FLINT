@@ -1,7 +1,22 @@
 <resources>
+    <!-- Carnage: glass over a night sky. The bars are see-through so the sky
+         runs edge to edge; the window itself is the same sky, so nothing
+         flashes black before a screen draws. -->
     <style name="Theme.Carnage" parent="Theme.Material3.Dark.NoActionBar">
-        <item name="android:windowBackground">@color/bg</item>
-        <item name="android:statusBarColor">@color/bg</item>
-        <item name="android:navigationBarColor">@color/bg</item>
+        <item name="android:windowBackground">@drawable/bg_app</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+
+        <!-- Jarvis cyan for anything Material colours: switches, cursors. -->
+        <item name="colorPrimary">@color/jarvis</item>
+        <item name="colorOnPrimary">@color/bg</item>
+        <item name="colorPrimaryContainer">#334FE3FF</item>
+        <item name="colorSecondary">@color/violet</item>
+        <item name="colorSurface">@color/bg</item>
+        <item name="colorOnSurface">@color/ink</item>
+        <item name="colorOutline">@color/glass_edge</item>
+        <item name="colorControlActivated">@color/jarvis</item>
+        <item name="android:textColorHighlight">#664FE3FF</item>
     </style>
 </resources>

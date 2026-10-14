@@ -11,6 +11,7 @@ the conditions sync creates.
 from __future__ import annotations
 
 import logging
+import time
 
 from flint_core.capabilities import ANY_PLATFORM
 from flint_core.memory import MemoryStore
@@ -20,6 +21,7 @@ from flint_core.projects import ProjectStore
 from flint_core.recall import Archive
 from flint_core.relay import RelayStore, carry_out
 from flint_core.roster import build_roster
+from flint_core.skills.everyday import TimerBoard
 from flint_core.stores import ConnectionStore, ListStore, NoteStore, ReminderStore
 from flint_core.sync import build_engine
 from flint_core.syncws import SyncServer
@@ -27,6 +29,7 @@ from flint_core.syncws import SyncServer
 from carnage.capabilities import build_capabilities
 from carnage.config import CarnageConfig
 from carnage.platform import detect
+from carnage.sos import SosStore
 
 log = logging.getLogger("carnage.runtime")
 
@@ -54,6 +57,10 @@ class Carnage:
         self.lists = ListStore(state / "lists.json")
         self.reminders = ReminderStore(state / "reminders.json")
         self.connections = ConnectionStore(state / "connections.json")
+        self.sos = SosStore(state / "sos.json")
+        # Wall-clock, not monotonic: the app polls `due()` from a service that
+        # Android may pause, and a timer must still fire on time afterwards.
+        self.timers = TimerBoard(clock=time.time)
 
         # Who else she is. Presence is filled in by the hub as devices sync.
         self.roster = build_roster(config.device, config.devices,
@@ -73,7 +80,8 @@ class Carnage:
             projects=self.projects, outcomes=self.outcomes,
             archive=self.archive, notes=self.notes, lists=self.lists,
             reminders=self.reminders, connections=self.connections,
-            relay=self.relay, roster=self.roster,
+            relay=self.relay, roster=self.roster, sos=self.sos,
+            timers=self.timers, describe=_describer_for(config),
             search=search or _search_for(config))
         # Built from the capability set rather than assembled by hand, so each
         # tool inherits its capability's permissions instead of silently
@@ -159,6 +167,22 @@ class Carnage:
                 self._gateway, self.registry, self.system_instruction)
         return self._conversation.ask(said)
 
+    def due(self) -> list[dict]:
+        """Timers and reminders whose moment has come, taken off the board.
+
+        Polled by the app's service; each one is announced there — a sound,
+        a notification and her voice — because on a phone nothing else is
+        listening for them.
+        """
+        out = [{"kind": "timer", "text": f"Your {t.label} timer is done."}
+               for t in self.timers.pop_due()]
+        try:
+            out += [{"kind": "reminder", "text": str(r.get("text", "")).strip()}
+                    for r in self.reminders.pop_due()]
+        except Exception:                   # noqa: BLE001
+            log.exception("could not read due reminders")
+        return [d for d in out if d["text"]]
+
     def run_relayed(self, run) -> list:
         """Carry out whatever her other bodies have asked this one to do.
 
@@ -197,6 +221,15 @@ def _gateway_for(config: CarnageConfig):
     except Exception:                       # noqa: BLE001
         log.exception("could not build an LLM gateway — she cannot converse")
         return None
+
+
+def _describer_for(config: CarnageConfig):
+    """The camera's vision call, when there is a key to make it with."""
+    if not config.gemini_api_key:
+        return None
+    from carnage.tools_media import gemini_describer
+
+    return gemini_describer(config.gemini_api_key)
 
 
 def _search_for(config: CarnageConfig):

@@ -1,90 +1,219 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- Carnage, the app — and Jarvis, the mind inside it.
+
+     Glass over a night sky: a header card naming her and how she is, the
+     conversation in one tall pane of glass, her core (the thing you tap to talk)
+     glowing beneath it, and a pill to type into. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="@color/bg"
-    android:fitsSystemWindows="true">
-
-    <TextView
-        android:id="@+id/status"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:padding="14dp"
-        android:textColor="@color/dim"
-        android:textSize="12sp"
-        android:visibility="gone"
-        android:background="@color/panel"/>
-
-    <ScrollView
-        android:id="@+id/scroll"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:padding="14dp"
-        android:clipToPadding="false">
-
-        <LinearLayout
-            android:id="@+id/log"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"/>
-    </ScrollView>
+    android:background="@drawable/bg_app">
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:padding="10dp"
-        android:gravity="center_vertical">
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:fitsSystemWindows="true"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="12dp"
+        android:paddingBottom="14dp">
 
-        <EditText
-            android:id="@+id/input"
-            android:layout_width="0dp"
+        <!-- ── header ───────────────────────────────────────────────────── -->
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:background="@drawable/glass_card"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="20dp"
+            android:paddingEnd="12dp"
+            android:paddingTop="14dp"
+            android:paddingBottom="14dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/brand"
+                    android:textColor="@color/carnage"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.42"/>
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/assistant"
+                        android:textColor="@color/ink"
+                        android:textSize="26sp"
+                        android:fontFamily="sans-serif-light"/>
+
+                    <View
+                        android:id="@+id/alive"
+                        android:layout_width="8dp"
+                        android:layout_height="8dp"
+                        android:layout_marginStart="10dp"
+                        android:background="@drawable/dot_alive"/>
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/status"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/waking"
+                    android:textColor="@color/dim"
+                    android:textSize="12sp"
+                    android:maxLines="2"
+                    android:ellipsize="end"/>
+            </LinearLayout>
+
+            <ImageButton
+                android:id="@+id/setup"
+                android:layout_width="46dp"
+                android:layout_height="46dp"
+                android:background="@drawable/glass_pill"
+                android:src="@drawable/ic_tune"
+                android:contentDescription="@string/settings"/>
+        </LinearLayout>
+
+        <!-- ── the conversation ─────────────────────────────────────────── -->
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
             android:layout_weight="1"
-            android:hint="@string/hint"
-            android:textColor="@color/ink"
-            android:textColorHint="@color/dim"
-            android:background="@drawable/bubble_her"
-            android:padding="14dp"
-            android:inputType="textCapSentences|textMultiLine"
-            android:maxLines="4"
-            android:imeOptions="actionSend"
-            android:importantForAutofill="no"/>
+            android:layout_marginTop="14dp"
+            android:background="@drawable/glass_card">
 
-        <Button
-            android:id="@+id/mic"
+            <ScrollView
+                android:id="@+id/scroll"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:fadingEdgeLength="28dp"
+                android:requiresFadingEdge="vertical"
+                android:padding="14dp"
+                android:scrollbars="none">
+
+                <LinearLayout
+                    android:id="@+id/log"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"/>
+            </ScrollView>
+        </FrameLayout>
+
+        <!-- ── Jarvis's core: tap to talk ───────────────────────────────── -->
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="176dp"
+            android:clipChildren="false">
+
+            <View
+                android:id="@+id/glow"
+                android:layout_width="170dp"
+                android:layout_height="170dp"
+                android:layout_gravity="center"
+                android:background="@drawable/orb_glow"/>
+
+            <View
+                android:id="@+id/ring"
+                android:layout_width="146dp"
+                android:layout_height="146dp"
+                android:layout_gravity="center"
+                android:background="@drawable/orb_ring"/>
+
+            <TextView
+                android:id="@+id/mic"
+                android:layout_width="112dp"
+                android:layout_height="112dp"
+                android:layout_gravity="center"
+                android:background="@drawable/orb_core"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:text="@string/talk"
+                android:textColor="@color/ink"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.08"
+                android:elevation="10dp"
+                android:contentDescription="@string/talk_to_jarvis"/>
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/voiceState"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="@string/tap_to_talk"
+            android:textColor="@color/dim"
+            android:textSize="13sp"
+            android:layout_marginBottom="12dp"/>
+
+        <!-- ── type instead ─────────────────────────────────────────────── -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/glass_pill"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="6dp">
+
+            <EditText
+                android:id="@+id/input"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@android:color/transparent"
+                android:hint="@string/hint"
+                android:importantForAutofill="no"
+                android:imeOptions="actionSend"
+                android:inputType="textCapSentences|textMultiLine"
+                android:maxLines="4"
+                android:paddingStart="16dp"
+                android:paddingEnd="8dp"
+                android:paddingTop="10dp"
+                android:paddingBottom="10dp"
+                android:textColor="@color/ink"
+                android:textColorHint="@color/dim"
+                android:textSize="15sp"/>
+
+            <ImageButton
+                android:id="@+id/send"
+                android:layout_width="46dp"
+                android:layout_height="46dp"
+                android:background="@drawable/send_button"
+                android:src="@drawable/ic_send"
+                android:contentDescription="@string/send"/>
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/shade"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
-            android:text="@string/talk"
-            android:minWidth="0dp"/>
-
-        <Button
-            android:id="@+id/send"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
-            android:text="@string/send"/>
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/glass_pill"
+            android:drawableStart="@drawable/ic_bell"
+            android:drawablePadding="6dp"
+            android:paddingStart="14dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="7dp"
+            android:paddingBottom="7dp"
+            android:text="@string/shade"
+            android:textColor="@color/dim"
+            android:textSize="12sp"/>
     </LinearLayout>
-
-    <Button
-        android:id="@+id/setup"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="10dp"
-        android:layout_marginEnd="10dp"
-        android:text="@string/settings"
-        style="?attr/materialButtonOutlinedStyle"/>
-
-    <Button
-        android:id="@+id/shade"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="10dp"
-        android:layout_marginEnd="10dp"
-        android:layout_marginBottom="10dp"
-        android:text="@string/shade"
-        style="?attr/materialButtonOutlinedStyle"/>
-</LinearLayout>
+</FrameLayout>

@@ -22,7 +22,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import org.json.JSONArray
 
 /**
  * What makes her an assistant rather than an app you have to open.
@@ -43,6 +46,7 @@ class CarnageService : android.app.Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var wakeLock: PowerManager.WakeLock? = null
     private var buttons: MediaSession? = null
+    private var wake: WakeListener? = null
     private var status = "Starting up…"
 
     // Keeps the notification's button saying the right thing.
@@ -59,13 +63,53 @@ class CarnageService : android.app.Service() {
         goForeground()
         acquireWakeLock()
         LiveVoice.addListener(voice)
+        Announcer.attach(this)
         listenToEarphoneButton()
+        wake = WakeListener(this).also { it.start() }
 
         scope.launch {
             val ok = Brain.start(applicationContext)
             status = if (ok) Brain.describe() else "Could not start — check the logs"
             update(status)
+            if (ok) heartbeat()
         }
+    }
+
+    /**
+     * Every 15 s: fire timers and reminders that have come due, and carry out
+     * work her other bodies handed this one. On the Pi the voice loop does
+     * this; on the phone nothing else is awake to.
+     */
+    private suspend fun heartbeat() {
+        while (scope.isActive) {
+            val due = runCatching { JSONArray(Brain.tick()) }.getOrNull()
+            if (due != null) {
+                for (i in 0 until due.length()) {
+                    val item = due.optJSONObject(i) ?: continue
+                    alert(item.optString("kind"), item.optString("text"))
+                }
+            }
+            delay(15_000)
+        }
+    }
+
+    /** A timer or reminder: a notification that makes a sound, and her voice. */
+    private fun alert(kind: String, text: String) {
+        if (text.isBlank()) return
+        val manager = getSystemService(NotificationManager::class.java)
+        val title = if (kind == "timer") "Timer" else "Reminder"
+        manager.notify(
+            text.hashCode(),
+            NotificationCompat.Builder(this, ALERTS)
+                .setContentTitle(title)
+                .setContentText(text)
+                .setSmallIcon(R.drawable.ic_presence)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setCategory(NotificationCompat.CATEGORY_ALARM)
+                .setAutoCancel(true)
+                .build(),
+        )
+        Announcer.say(text)
     }
 
     /**
@@ -90,11 +134,13 @@ class CarnageService : android.app.Service() {
         val micGranted = ContextCompat.checkSelfPermission(
             this, android.Manifest.permission.RECORD_AUDIO
         ) == PackageManager.PERMISSION_GRANTED
-        val types = if (micGranted) {
-            base or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
-        } else {
-            base
-        }
+        val cameraGranted = ContextCompat.checkSelfPermission(
+            this, android.Manifest.permission.CAMERA
+        ) == PackageManager.PERMISSION_GRANTED
+        var types = base
+        if (micGranted) types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+        // "What am I looking at?" with the screen off needs the camera type too.
+        if (cameraGranted) types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
         try {
             startForeground(NOTIFICATION_ID, first, types)
         } catch (e: Exception) {
@@ -159,6 +205,8 @@ class CarnageService : android.app.Service() {
     override fun onDestroy() {
         LiveVoice.removeListener(voice)
         LiveVoice.stop()
+        wake?.stop()
+        Announcer.shutdown()
         runCatching { buttons?.release() }
         scope.cancel()
         runCatching { wakeLock?.takeIf { it.isHeld }?.release() }
@@ -207,6 +255,7 @@ class CarnageService : android.app.Service() {
 
     companion object {
         private const val CHANNEL = "carnage.presence"
+        private const val ALERTS = "carnage.alerts"
         private const val NOTIFICATION_ID = 1
         const val ACTION_TALK = "com.hrishikesh.carnage.TALK"
         private const val ACTION_CLAIM_MIC = "com.hrishikesh.carnage.CLAIM_MIC"
@@ -235,6 +284,13 @@ class CarnageService : android.app.Service() {
         private fun ensureChannel(context: Context) {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
             val manager = context.getSystemService(NotificationManager::class.java)
+            if (manager.getNotificationChannel(ALERTS) == null) {
+                manager.createNotificationChannel(
+                    NotificationChannel(
+                        ALERTS, "Timers and reminders", NotificationManager.IMPORTANCE_HIGH
+                    ).apply { description = "When something you asked for comes due." }
+                )
+            }
             if (manager.getNotificationChannel(CHANNEL) != null) return
             manager.createNotificationChannel(
                 NotificationChannel(

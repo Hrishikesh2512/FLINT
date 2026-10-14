@@ -1,30 +1,44 @@
 <resources>
     <string name="app_name">Carnage</string>
-    <string name="hint">Say something…</string>
+    <string name="hint">Message Jarvis…</string>
     <string name="send">Send</string>
-    <string name="shade">Notifications</string>
-    <string name="listening">Listening…</string>
-    <string name="opening_note">She has the same memory here as on your other devices.</string>
+    <string name="shade">Notification access</string>
+    <string name="listening">Jarvis is listening…</string>
+    <string name="opening_note">Jarvis has the same memory here as on your other devices.</string>
 
-    <string name="setup_title">Set her up</string>
-    <string name="setup_blurb">Two things and she is yours. Everything stays on this phone.</string>
-    <string name="your_name">What should she call you?</string>
+    <string name="setup_title">Set up Carnage</string>
+    <string name="setup_blurb">Two things and Jarvis is yours. Everything stays on this phone.</string>
+    <string name="your_name">What should Jarvis call you?</string>
     <string name="your_name_hint">Your name</string>
     <string name="gemini_key">Gemini API key</string>
     <string name="gemini_key_hint">Paste it here</string>
-    <string name="gemini_key_where">Get one free at https://aistudio.google.com/apikey — without it she can hold no conversation.</string>
+    <string name="gemini_key_where">Get one free at https://aistudio.google.com/apikey — without it Jarvis can hold no conversation.</string>
     <string name="save">Save</string>
-    <string name="key_needed">She needs a key before she can think.</string>
+    <string name="key_needed">Jarvis needs a key to think with.</string>
     <string name="pairing_title">Pairing your other devices</string>
     <string name="pairing_body">token %1$s
 port  %2$d
 
-Put these in venom.toml under [sync] so the Pi shares her memory.</string>
+Put these in venom.toml under [sync] so the Pi shares Jarvis’s memory.</string>
     <string name="pairing_unavailable">Not ready yet.</string>
     <string name="copy_token">Copy token</string>
     <string name="token_copied">Token copied.</string>
     <string name="no_token_yet">No token yet — save first.</string>
     <string name="settings">Set up</string>
     <string name="talk">Talk</string>
+    <string name="wake_switch">Listen for “Hey Jarvis”</string>
+    <string name="announce_switch">Read new messages in my earphone</string>
+    <string name="camera_access">Camera</string>
     <string name="hang_up">Hang up</string>
+    <string name="brand">CARNAGE</string>
+    <string name="assistant">Jarvis</string>
+    <string name="waking">Waking Jarvis…</string>
+    <string name="talk_to_jarvis">Talk to Jarvis</string>
+    <string name="tap_to_talk">Tap to talk — or say “Hey Jarvis”</string>
+    <string name="connecting">Connecting to Jarvis…</string>
+    <string name="speaking">Jarvis is speaking…</string>
+    <string name="hang_up_hint">Tap to hang up</string>
+    <string name="you">You</string>
+    <string name="section_switches">Listening</string>
+    <string name="section_key">Jarvis</string>
 </resources>

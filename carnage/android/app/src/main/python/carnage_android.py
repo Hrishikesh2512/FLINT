@@ -15,6 +15,7 @@ rather than in Kotlin keeps the contract defined where it is consumed.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import secrets
@@ -31,6 +32,25 @@ _lock = threading.Lock()
 #: for. Rebuilt when `configure` replaces her, so a call never answers from an
 #: instance that has been thrown away.
 _live = None
+#: The hub's event loop, on a thread of its own for the life of the process.
+#: Without it the phone builds a sync server and never opens it, and the Pi
+#: finds nobody to sync with.
+_loop: asyncio.AbstractEventLoop | None = None
+
+
+def _serve(carnage, previous=None) -> None:
+    """Open her doors (the sync hub), closing a replaced instance's first."""
+    global _loop
+    if _loop is None:
+        _loop = asyncio.new_event_loop()
+        threading.Thread(target=_loop.run_forever, name="carnage-hub",
+                         daemon=True).start()
+    if previous is not None:
+        try:
+            asyncio.run_coroutine_threadsafe(previous.stop(), _loop).result(10)
+        except Exception:                   # noqa: BLE001
+            log.exception("could not stop the old hub cleanly")
+    asyncio.run_coroutine_threadsafe(carnage.start(), _loop)
 
 
 def _configure(state: Path) -> None:
@@ -55,8 +75,9 @@ def _configure(state: Path) -> None:
         "web": {"enabled": False},
         "devices": [
             {"name": "venom", "body": "the wearable on his body",
-             "can": ["listen on the walk", "the earphone",
-                     "look around with the camera"]},
+             "can": ["send WhatsApp messages", "the smart lights and the TV",
+                     "listen on the walk", "the earphone",
+                     "look around with its own camera"]},
             {"name": "flint", "body": "on his desktop",
              "can": ["the screen", "his files and repos"]},
         ],
@@ -96,6 +117,7 @@ def start(files_dir: str, bridge):
 
         _carnage = Carnage(config, phone=AndroidPhone(call))
         log.info("carnage up: %s", _carnage.describe())
+        _serve(_carnage)
         return _Handle()
 
 
@@ -161,8 +183,10 @@ def configure(user_name: str, api_key: str) -> str:
         def call(method: str, **kwargs):
             return _bridge.call(method, kwargs)
 
+        previous = _carnage
         _carnage = Carnage(config, phone=AndroidPhone(call))
         log.info("reconfigured: %s", _carnage.describe())
+        _serve(_carnage, previous)
         return _carnage.describe()
 
 
@@ -213,6 +237,25 @@ class _Handle:
         except Exception as exc:            # noqa: BLE001
             log.exception("answer failed")
             return f"Something went wrong in my head: {exc}"
+
+    # ── the heartbeat (CarnageService polls this) ───────────────────────────
+    def tick(self) -> str:
+        """What has come due, as JSON for the service to announce — and, on
+        the way, any work her other bodies handed this one (the Pi asking the
+        phone to send a text), answered with this body's own judgement."""
+        try:
+            carnage = self._live()
+        except Exception:                   # noqa: BLE001
+            return "[]"
+        try:
+            carnage.run_relayed(carnage.answer)
+        except Exception:                   # noqa: BLE001
+            log.exception("could not carry out relayed work")
+        try:
+            return json.dumps(carnage.due())
+        except Exception:                   # noqa: BLE001
+            log.exception("could not read what is due")
+            return "[]"
 
     # ── the live voice call (LiveVoice.kt) ──────────────────────────────────
     def live_url(self) -> str:

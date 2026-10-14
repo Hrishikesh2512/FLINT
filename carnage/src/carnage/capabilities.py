@@ -36,6 +36,8 @@ from flint_core.skills import (
     register_watch_tools,
 )
 
+from carnage.sos import register_sos_contact_tools
+from carnage.tools_media import register_camera_tools, register_music_tools
 from carnage.tools_phone import (
     register_phone_tools,
     register_sms_tools,
@@ -65,13 +67,32 @@ SOS_PROMPT = (
     "Always say afterwards exactly who was reached and who was not."
 )
 
+MUSIC_PROMPT = (
+    "MUSIC: play_music plays songs in his music app on the phone, and "
+    "music_control / set_volume steer it. Pause music yourself before a long "
+    "answer only if he asks; otherwise leave it alone."
+)
+
+CAMERA_PROMPT = (
+    "CAMERA: you can see through the phone's back camera. look_around when he "
+    "asks what something is or to read something; find_thing when he is "
+    "looking for one object. Tell him to point the phone at it first."
+)
+
+ON_THE_PI = (
+    "YOUR WEARABLE (venom) does what this phone cannot: WhatsApp messages "
+    "(including Jarvis's own number), the smart lights and the TV. For any of "
+    "those, use ask_other_device with device 'venom' and the task in full — "
+    "never say you can't do it."
+)
+
 
 def build_capabilities(config, *, phone=None, memory=None, projects=None,
                        outcomes=None, archive=None, jobs=None, watches=None,
                        sos=None, connections=None, notes=None, lists=None,
                        reminders=None, calendar=None, mailbox=None, audit=None,
                        timers=None, search=None, relay=None,
-                       roster=None) -> CapabilitySet:
+                       roster=None, describe=None) -> CapabilitySet:
     """Everything this phone can do, given what was actually wired up.
 
     Long argument list on purpose: each one is a thing that may or may not
@@ -222,6 +243,7 @@ def build_capabilities(config, *, phone=None, memory=None, projects=None,
         Capability(
             name="other_bodies", order=50,
             summary="Hand work to her other devices, and hear back.",
+            prompt=ON_THE_PI,
             available=relay is not None and roster is not None,
             register=(lambda reg: register_relay_tools(
                 reg, relay, roster, config.device))
@@ -247,12 +269,30 @@ def build_capabilities(config, *, phone=None, memory=None, projects=None,
             if has_phone else None,
         ),
         Capability(
+            name="music", order=62,
+            summary="Play music in his music app; pause, skip, volume.",
+            prompt=MUSIC_PROMPT, available=has_phone,
+            permissions=("audio",),
+            register=(lambda reg: register_music_tools(reg, phone))
+            if has_phone else None,
+        ),
+        Capability(
+            name="camera", order=63,
+            summary="Look through the phone's camera and say what is there.",
+            prompt=CAMERA_PROMPT,
+            available=has_phone and describe is not None,
+            permissions=("camera",),
+            register=(lambda reg: register_camera_tools(reg, phone, describe))
+            if has_phone and describe is not None else None,
+        ),
+        Capability(
             name="emergency_sms", order=90,
             summary="Reach emergency contacts by SMS when there is no data.",
             prompt=SOS_PROMPT,
             available=has_phone and sos is not None,
             permissions=("messaging", "location"),
-            register=(lambda reg: register_sos_sms(reg, phone, sos))
+            register=(lambda reg: (register_sos_sms(reg, phone, sos),
+                                   register_sos_contact_tools(reg, sos)))
             if has_phone and sos is not None else None,
         ),
     ])

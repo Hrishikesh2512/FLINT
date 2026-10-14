@@ -81,6 +81,24 @@ what she can do still come from Python: `carnage/live.py` builds the opening
 and files each finished call in the shared archive, so the Pi can recall what
 was said on the phone.
 
+## Everything the Pi does
+
+Carnage is the app; Jarvis is who lives in it — the same Jarvis as on the Pi.
+
+| On the Pi (Venom) | On the phone (Carnage) |
+|---|---|
+| "Hey Jarvis" (openWakeWord) | The same three models, run with ONNX Runtime (`WakeWord.kt`, a line-for-line port — identical scores to the Pi on the same audio) |
+| Live voice over the earphone | `LiveVoice.kt`, through the Bluetooth earphone when connected |
+| mpv music | `play_music`, `music_control`, `set_volume` drive his music app |
+| Camera module | `look_around`, `find_thing` on the back camera, same prompts |
+| Timers and reminders announced | `Carnage.due()`, polled by the service: sound, notification, voice |
+| Messages announced | New messages read aloud while a Bluetooth earphone is in |
+| SOS over WhatsApp | `sos_sms` over cellular, with contacts managed by voice |
+| WhatsApp, lights, TV | Handed to the Pi with `ask_other_device` |
+
+The sync hub is started on Android too (it was built and never opened), and
+relayed work from the Pi is carried out on each heartbeat.
+
 ## Running it
 
 ```bash

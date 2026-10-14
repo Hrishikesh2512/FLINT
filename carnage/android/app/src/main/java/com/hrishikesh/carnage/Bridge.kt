@@ -58,6 +58,13 @@ object Bridge {
                     kwargs["text"]?.toString().orEmpty(),
                 )
                 "notifications" -> ShadeListener.snapshot()
+                "play_music" -> Media.play(context, kwargs["query"]?.toString().orEmpty())
+                "media" -> Media.control(context, kwargs["action"]?.toString().orEmpty())
+                "volume" -> Media.volume(
+                    context,
+                    (kwargs["percent"] as? Number)?.toInt() ?: -1,
+                )
+                "photo" -> Camera.photo(context)
                 "vibrate" -> vibrate(
                     context,
                     (kwargs["milliseconds"] as? Number)?.toLong() ?: 400L,

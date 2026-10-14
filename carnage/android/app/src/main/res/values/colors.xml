@@ -1,10 +1,28 @@
 <resources>
-    <color name="bg">#FF0B0D10</color>
-    <color name="panel">#FF141820</color>
-    <color name="line">#FF232A35</color>
-    <color name="ink">#FFE8ECF2</color>
-    <color name="dim">#FF8B97A8</color>
-    <color name="her">#FF7FD1C4</color>
-    <color name="him">#FF9DB4FF</color>
-    <color name="him_panel">#FF1B2740</color>
+    <!-- Night sky the glass floats over. -->
+    <color name="bg">#FF070A1A</color>
+    <color name="bg_mid">#FF140C33</color>
+    <color name="bg_deep">#FF04202E</color>
+
+    <!-- Carnage (the app) is crimson; Jarvis (the mind inside) is cyan. -->
+    <color name="carnage">#FFFF3D6E</color>
+    <color name="violet">#FF8B5CFF</color>
+    <color name="jarvis">#FF4FE3FF</color>
+    <color name="alive">#FF4FFFB0</color>
+
+    <!-- Glass: white at low alpha, with a brighter edge catching the light. -->
+    <color name="glass">#17FFFFFF</color>
+    <color name="glass_hi">#26FFFFFF</color>
+    <color name="glass_lo">#0AFFFFFF</color>
+    <color name="glass_edge">#38FFFFFF</color>
+
+    <color name="ink">#FFF2F5FF</color>
+    <color name="dim">#FF9AA4C7</color>
+
+    <!-- Older names still used in code, mapped onto the new palette. -->
+    <color name="panel">#17FFFFFF</color>
+    <color name="line">#26FFFFFF</color>
+    <color name="her">#FF4FE3FF</color>
+    <color name="him">#FFFFFFFF</color>
+    <color name="him_panel">#593D1F7A</color>
 </resources>

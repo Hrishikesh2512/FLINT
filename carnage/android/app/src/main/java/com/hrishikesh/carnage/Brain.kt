@@ -63,6 +63,10 @@ object Brain {
     fun pairing(): String =
         runCatching { carnage?.callAttr("pairing")?.toString() }.getOrNull() ?: "{}"
 
+    /** What has come due, as a JSON array; also runs relayed work. Blocking. */
+    fun tick(): String =
+        runCatching { carnage?.callAttr("tick")?.toString() }.getOrNull() ?: "[]"
+
     // ── the live voice call: Kotlin carries the audio, Python is the brain ──
     /** The Live API websocket address with the key on it; empty with no key. */
     fun liveUrl(): String =

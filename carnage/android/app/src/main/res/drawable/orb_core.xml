@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Jarvis's core — the button you talk to. A glowing glass sphere: cyan
+     heart, violet rim, a bright ring and a highlight like light on glass. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="oval">
+            <gradient android:type="radial" android:gradientRadius="64dp"
+                android:centerX="0.5" android:centerY="0.42"
+                android:startColor="#F24FE3FF" android:centerColor="#B36A7BFF"
+                android:endColor="#998B5CFF"/>
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="oval">
+            <stroke android:width="2dp" android:color="#8CFFFFFF"/>
+        </shape>
+    </item>
+    <item android:top="10dp" android:left="26dp" android:right="26dp" android:bottom="62dp">
+        <shape android:shape="oval">
+            <gradient android:angle="270" android:startColor="#66FFFFFF"
+                android:endColor="#00FFFFFF"/>
+        </shape>
+    </item>
+</layer-list>

@@ -217,7 +217,7 @@ object LiveVoice {
             if (content.optBoolean("turnComplete")) {
                 flushTranscript()
                 if (hangUpAfterReply) {
-                    main.postDelayed({ LiveVoice.stop() }, drainMillis())
+                    main.postDelayed({ if (call === this) LiveVoice.stop() }, drainMillis())
                 } else {
                     state("listening")
                 }

@@ -1,3 +1,5 @@
+import java.net.URI
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -66,6 +68,8 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     // The Live API websocket for voice calls (LiveVoice.kt).
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // "Hey Jarvis": the Pi's openWakeWord models, run on the phone.
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.20.0")
 }
 
 // ── the Python she actually is ──────────────────────────────────────────────
@@ -96,3 +100,25 @@ tasks.matching { it.name.matches(Regex("merge.*PythonSources")) }.configureEach 
     dependsOn(syncPythonPackages)
 }
 tasks.named("preBuild") { dependsOn(syncPythonPackages) }
+
+// ── the wake word ───────────────────────────────────────────────────────────
+// The same openWakeWord v0.5.1 models the Pi downloads (sha256-identical),
+// fetched at build time rather than committed: a few MB of binaries nobody can
+// review do not belong in the tree. Skipped when already present.
+val wakeWordAssets = layout.projectDirectory.dir("src/main/assets/wakeword").asFile
+val fetchWakeWord by tasks.registering {
+    description = "Download the openWakeWord models into assets/wakeword"
+    outputs.dir(wakeWordAssets)
+    doLast {
+        wakeWordAssets.mkdirs()
+        val release = "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1"
+        for (name in listOf("melspectrogram.onnx", "embedding_model.onnx", "hey_jarvis_v0.1.onnx")) {
+            val target = wakeWordAssets.resolve(name)
+            if (target.exists() && target.length() > 0) continue
+            URI("$release/$name").toURL().openStream().use { input ->
+                target.outputStream().use { input.copyTo(it) }
+            }
+        }
+    }
+}
+tasks.named("preBuild") { dependsOn(fetchWakeWord) }

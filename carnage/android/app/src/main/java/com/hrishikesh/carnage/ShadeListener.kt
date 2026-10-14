@@ -1,5 +1,8 @@
 package com.hrishikesh.carnage
 
+import android.app.Notification
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 
@@ -23,9 +26,45 @@ class ShadeListener : NotificationListenerService() {
         instance = null
     }
 
+    /**
+     * Reads a new message aloud — only while a Bluetooth earphone is in, the
+     * way Venom announces on the wearable. Out loud on a phone speaker would
+     * be reading his messages to the room.
+     */
+    override fun onNotificationPosted(sbn: StatusBarNotification) {
+        val note = sbn.notification ?: return
+        if (!Prefs.announce(this) || sbn.packageName == packageName) return
+        if (sbn.isOngoing || note.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
+        val isMessage = note.category == Notification.CATEGORY_MESSAGE ||
+            sbn.packageName in MESSENGERS
+        if (!isMessage || !earphoneIn()) return
+        val title = note.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
+        val text = note.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty()
+        if (text.isBlank()) return
+        val said = "${sbn.packageName}|$title|$text"
+        if (said == lastSaid) return              // apps re-post the same message
+        lastSaid = said
+        Announcer.say("Message from $title: ${text.take(160)}")
+    }
+
+    private fun earphoneIn(): Boolean =
+        getSystemService(AudioManager::class.java)
+            .getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+            .any {
+                it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                    it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+            }
+
     companion object {
         @Volatile
         private var instance: ShadeListener? = null
+        private var lastSaid = ""
+
+        private val MESSENGERS = setOf(
+            "com.whatsapp", "com.whatsapp.w4b", "org.telegram.messenger",
+            "com.google.android.apps.messaging", "com.samsung.android.messaging",
+            "com.instagram.android",
+        )
 
         /** What is in the shade right now, as plain maps for Python. */
         @JvmStatic

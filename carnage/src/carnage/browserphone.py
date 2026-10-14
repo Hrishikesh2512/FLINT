@@ -169,6 +169,20 @@ class BrowserPhone:
         # useful to queue here, and pretending otherwise would be a lie.
         return False
 
+    # A browser tab can neither drive a music app nor take a photo unprompted,
+    # so these stay off rather than half-working.
+    def play_music(self, query: str) -> str | None:
+        return None
+
+    def media(self, action: str) -> bool:
+        return False
+
+    def volume(self, percent: int | None = None) -> int | None:
+        return None
+
+    def photo(self) -> str | None:
+        return None
+
     # ── drained by the page ─────────────────────────────────────────────────
     def take_outbox(self) -> list[dict]:
         """Messages for the page to open, oldest first. Drains the queue."""
