@@ -52,6 +52,9 @@ object Media {
                 return label(context, controller.packageName)
             }
 
+        // Opening a music app is blocked by Android while Carnage is not on
+        // screen; claiming "playing" then would be a lie.
+        if (!Actions.onScreen) return null
         val intent = Intent(MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH).apply {
             putExtra(SearchManager.QUERY, query)
             putExtra(MediaStore.EXTRA_MEDIA_FOCUS, "vnd.android.cursor.item/*")
