@@ -1,39 +1,40 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The night sky behind the glass: a deep gradient with three soft orbs of
-     light, so every translucent panel has colour to show through it. -->
+<!-- A storm at night: teal sky fading to a blood-dark street, mist glowing
+     high on the right and lantern-red low on the left, so the glass always
+     has colour behind it. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
         <shape android:shape="rectangle">
-            <gradient android:angle="300" android:type="linear"
-                android:startColor="@color/bg" android:centerColor="@color/bg_mid"
+            <gradient android:angle="270" android:type="linear"
+                android:startColor="@color/bg_mid" android:centerColor="@color/bg"
                 android:endColor="@color/bg_deep"/>
         </shape>
     </item>
-    <!-- crimson, top left: Carnage -->
-    <item android:width="420dp" android:height="420dp" android:gravity="top|start"
-        android:left="-160dp" android:top="-120dp">
-        <shape android:shape="oval">
-            <gradient android:type="radial" android:gradientRadius="210dp"
-                android:startColor="#66FF3D6E" android:centerColor="#22FF3D6E"
-                android:endColor="#00FF3D6E"/>
-        </shape>
-    </item>
-    <!-- violet, right middle -->
-    <item android:width="380dp" android:height="380dp" android:gravity="center_vertical|end"
-        android:right="-170dp">
-        <shape android:shape="oval">
-            <gradient android:type="radial" android:gradientRadius="190dp"
-                android:startColor="#558B5CFF" android:centerColor="#1E8B5CFF"
-                android:endColor="#008B5CFF"/>
-        </shape>
-    </item>
-    <!-- cyan, bottom left: Jarvis -->
-    <item android:width="460dp" android:height="460dp" android:gravity="bottom|start"
-        android:left="-120dp" android:bottom="-180dp">
+    <!-- storm mist, top right -->
+    <item android:width="460dp" android:height="420dp" android:gravity="top|end"
+        android:right="-170dp" android:top="-110dp">
         <shape android:shape="oval">
             <gradient android:type="radial" android:gradientRadius="230dp"
-                android:startColor="#554FE3FF" android:centerColor="#1A4FE3FF"
-                android:endColor="#004FE3FF"/>
+                android:startColor="#4D6FA8B5" android:centerColor="#1A6FA8B5"
+                android:endColor="#006FA8B5"/>
+        </shape>
+    </item>
+    <!-- the moon's glow, upper left -->
+    <item android:width="320dp" android:height="320dp" android:gravity="top|start"
+        android:left="-120dp" android:top="40dp">
+        <shape android:shape="oval">
+            <gradient android:type="radial" android:gradientRadius="160dp"
+                android:startColor="#40B3122A" android:centerColor="#14B3122A"
+                android:endColor="#00B3122A"/>
+        </shape>
+    </item>
+    <!-- lantern light on the wet street, bottom -->
+    <item android:width="520dp" android:height="440dp" android:gravity="bottom|center_horizontal"
+        android:bottom="-200dp">
+        <shape android:shape="oval">
+            <gradient android:type="radial" android:gradientRadius="260dp"
+                android:startColor="#66C8102E" android:centerColor="#1FC8102E"
+                android:endColor="#00C8102E"/>
         </shape>
     </item>
 </layer-list>

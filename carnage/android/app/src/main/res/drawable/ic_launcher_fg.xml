@@ -1,11 +1,22 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
-    <!-- Carnage's crimson outer ring around Jarvis's cyan core: the app, and
-         the mind inside it. -->
-    <path android:strokeColor="#FF3D6E" android:strokeWidth="3" android:fillColor="#00000000"
-        android:pathData="M54,26a28,28 0,1 0,0.1 0z" android:strokeAlpha="0.55"/>
-    <path android:strokeColor="#8B5CFF" android:strokeWidth="4" android:fillColor="#00000000"
-        android:pathData="M54,34a20,20 0,1 0,0.1 0z"/>
-    <path android:fillColor="#4FE3FF" android:pathData="M54,46a8,8 0,1 0,0.1 0z"/>
+    <!-- A blood moon in a storm sky: soft red glow, then the moon, lit a
+         little from the upper left. -->
+    <path android:pathData="M54,24a30,30 0,1 0,0.1 0z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="radial" android:centerX="54" android:centerY="54"
+                android:gradientRadius="30"
+                android:startColor="#80B3122A" android:endColor="#00B3122A"/>
+        </aapt:attr>
+    </path>
+    <path android:pathData="M54,35a19,19 0,1 0,0.1 0z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="radial" android:centerX="50" android:centerY="49"
+                android:gradientRadius="22"
+                android:startColor="#FFC9472F" android:centerColor="#FF8E1526"
+                android:endColor="#FF2A0509"/>
+        </aapt:attr>
+    </path>
 </vector>

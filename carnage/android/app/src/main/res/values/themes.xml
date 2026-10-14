@@ -8,15 +8,15 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">false</item>
 
-        <!-- Jarvis cyan for anything Material colours: switches, cursors. -->
-        <item name="colorPrimary">@color/jarvis</item>
-        <item name="colorOnPrimary">@color/bg</item>
-        <item name="colorPrimaryContainer">#334FE3FF</item>
-        <item name="colorSecondary">@color/violet</item>
+        <!-- Crimson for anything Material colours: switches, cursors. -->
+        <item name="colorPrimary">@color/carnage</item>
+        <item name="colorOnPrimary">@color/ink</item>
+        <item name="colorPrimaryContainer">#59B3122A</item>
+        <item name="colorSecondary">@color/jarvis</item>
         <item name="colorSurface">@color/bg</item>
         <item name="colorOnSurface">@color/ink</item>
         <item name="colorOutline">@color/glass_edge</item>
-        <item name="colorControlActivated">@color/jarvis</item>
-        <item name="android:textColorHighlight">#664FE3FF</item>
+        <item name="colorControlActivated">@color/carnage</item>
+        <item name="android:textColorHighlight">#66E8203A</item>
     </style>
 </resources>
