@@ -10,7 +10,6 @@ import android.graphics.RenderEffect
 import android.graphics.Shader
 import android.os.Build
 import android.os.Bundle
-import android.speech.tts.TextToSpeech
 import android.view.Gravity
 import android.view.View
 import android.view.animation.AccelerateDecelerateInterpolator
@@ -28,7 +27,6 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.Locale
 
 /**
  * Carnage's one screen: Jarvis, behind glass.
@@ -57,7 +55,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var glow: View
     private lateinit var ring: View
     private lateinit var voiceState: TextView
-    private var speaker: TextToSpeech? = null
     private var pulse: Animator? = null
     private var shown = ""
     /** Opened to talk (tile, Jarvis Talk, side button): close when the call ends. */
@@ -143,13 +140,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        speaker = TextToSpeech(this) { result ->
-            if (result == TextToSpeech.SUCCESS) {
-                // Hinglish reads far better on an Indian English voice; the
-                // default sounds American and mangles the Hindi words.
-                speaker?.language = Locale("en", "IN")
-            }
-        }
 
         send.setOnClickListener { ask(input.text.toString()) }
         mic.setOnClickListener {
@@ -226,7 +216,6 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         LiveVoice.removeListener(voice)
         pulse?.cancel()
-        speaker?.shutdown()
         super.onDestroy()
     }
 
@@ -298,9 +287,6 @@ class MainActivity : AppCompatActivity() {
             waiting.text = reply
             scrollDown()
             send.isEnabled = true
-            if (Headphones.connected(this@MainActivity)) {
-                speaker?.speak(reply, TextToSpeech.QUEUE_FLUSH, null, "jarvis")
-            }
         }
     }
 
