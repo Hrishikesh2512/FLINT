@@ -63,6 +63,32 @@ object Brain {
     fun pairing(): String =
         runCatching { carnage?.callAttr("pairing")?.toString() }.getOrNull() ?: "{}"
 
+    // ── the live voice call: Kotlin carries the audio, Python is the brain ──
+    /** The Live API websocket address with the key on it; empty with no key. */
+    fun liveUrl(): String =
+        runCatching { carnage?.callAttr("live_url")?.toString() }.getOrNull().orEmpty()
+
+    /** The `setup` frame — her prompt and every tool — as JSON. Blocking. */
+    fun liveSetup(): String? =
+        runCatching { carnage?.callAttr("live_setup")?.toString() }
+            .onFailure { Log.w(TAG, "live setup failed", it) }
+            .getOrNull()
+
+    /** A `toolCall` frame in; {"response": toolResponse, "end": bool} out. Blocking. */
+    fun liveTool(message: String): String? =
+        runCatching { carnage?.callAttr("live_tool", message)?.toString() }
+            .onFailure { Log.w(TAG, "live tool failed", it) }
+            .getOrNull()
+
+    fun liveRecord(who: String, text: String) {
+        runCatching { carnage?.callAttr("live_record", who, text) }
+    }
+
+    /** The call is over: file it in the shared archive. */
+    fun liveFinish() {
+        runCatching { carnage?.callAttr("live_finish") }
+    }
+
     /** Save the setup screen's answers. Rebuilds her; blocking. */
     fun configure(userName: String, apiKey: String): String =
         runCatching { carnage?.callAttr("configure", userName, apiKey)?.toString() }

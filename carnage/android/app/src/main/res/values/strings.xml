@@ -1,11 +1,9 @@
 <resources>
-    <string name="app_name">Jarvis</string>
+    <string name="app_name">Carnage</string>
     <string name="hint">Say something…</string>
     <string name="send">Send</string>
-    <string name="mic">🎙</string>
     <string name="shade">Notifications</string>
     <string name="listening">Listening…</string>
-    <string name="no_dictation">No dictation on this phone.</string>
     <string name="opening_note">She has the same memory here as on your other devices.</string>
 
     <string name="setup_title">Set her up</string>
@@ -27,4 +25,6 @@ Put these in venom.toml under [sync] so the Pi shares her memory.</string>
     <string name="token_copied">Token copied.</string>
     <string name="no_token_yet">No token yet — save first.</string>
     <string name="settings">Set up</string>
+    <string name="talk">Talk</string>
+    <string name="hang_up">Hang up</string>
 </resources>

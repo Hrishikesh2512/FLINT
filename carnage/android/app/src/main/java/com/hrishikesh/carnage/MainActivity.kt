@@ -4,7 +4,6 @@ import android.Manifest
 import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
-import android.speech.RecognizerIntent
 import android.speech.tts.TextToSpeech
 import android.view.View
 import android.widget.Button
@@ -38,17 +37,34 @@ class MainActivity : AppCompatActivity() {
     private lateinit var send: Button
     private var speaker: TextToSpeech? = null
 
+    private lateinit var mic: Button
+
     private val permissions = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { /* a refusal is not an error — the matching skill just stays off */ }
+    ) { granted ->
+        // A refusal is not an error — the matching skill just stays off. A
+        // grant of the mic is claimed by the service now, while this screen is
+        // visible, so voice keeps working with the screen off.
+        if (granted[Manifest.permission.RECORD_AUDIO] == true) CarnageService.claimMic(this)
+    }
 
-    private val dictation = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        val heard = result.data
-            ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-            ?.firstOrNull()
-        if (!heard.isNullOrBlank()) ask(heard)
+    // The live call reports here while this screen is open.
+    private val voice = object : LiveVoice.Listener {
+        override fun onState(state: String) {
+            mic.text = getString(if (LiveVoice.active) R.string.hang_up else R.string.talk)
+            when (state) {
+                "off", "speaking" -> Unit
+                "connecting", "listening" -> setStatus(
+                    if (state == "listening") getString(R.string.listening) else "Connecting…"
+                )
+                else -> note(state)
+            }
+            if (state == "off") refreshStatus()
+        }
+
+        override fun onLine(who: String, text: String) {
+            turn(text, mine = who == "you")
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -85,7 +101,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         send.setOnClickListener { ask(input.text.toString()) }
-        findViewById<Button>(R.id.mic).setOnClickListener { listen() }
+        mic = findViewById(R.id.mic)
+        mic.text = getString(if (LiveVoice.active) R.string.hang_up else R.string.talk)
+        mic.setOnClickListener { LiveVoice.toggle(this) }
+        LiveVoice.addListener(voice)
         findViewById<Button>(R.id.shade).setOnClickListener {
             startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
         }
@@ -98,6 +117,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        LiveVoice.removeListener(voice)
         speaker?.shutdown()
         super.onDestroy()
     }
@@ -118,19 +138,6 @@ class MainActivity : AppCompatActivity() {
             send.isEnabled = true
             speaker?.speak(reply, TextToSpeech.QUEUE_FLUSH, null, "her")
         }
-    }
-
-    private fun listen() {
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(
-                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
-            )
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-IN")
-            putExtra(RecognizerIntent.EXTRA_PROMPT, getString(R.string.listening))
-        }
-        runCatching { dictation.launch(intent) }
-            .onFailure { note(getString(R.string.no_dictation)) }
     }
 
     // ── the transcript ──────────────────────────────────────────────────────
@@ -170,6 +177,13 @@ class MainActivity : AppCompatActivity() {
         scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
     }
 
+    private fun setStatus(text: String) {
+        findViewById<TextView>(R.id.status).apply {
+            this.text = text
+            isVisible = true
+        }
+    }
+
     private fun refreshStatus() {
         lifecycleScope.launch {
             val described = withContext(Dispatchers.IO) { Brain.describe() }
@@ -192,6 +206,10 @@ class MainActivity : AppCompatActivity() {
         )
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
             wanted += Manifest.permission.POST_NOTIFICATIONS
+        }
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            // Routing a call to the Bluetooth earphone's mic.
+            wanted += Manifest.permission.BLUETOOTH_CONNECT
         }
         permissions.launch(wanted.toTypedArray())
     }

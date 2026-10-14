@@ -27,6 +27,10 @@ _carnage = None
 _state: Path | None = None
 _bridge = None
 _lock = threading.Lock()
+#: The brain of the voice call in progress, bound to the assistant it was made
+#: for. Rebuilt when `configure` replaces her, so a call never answers from an
+#: instance that has been thrown away.
+_live = None
 
 
 def _configure(state: Path) -> None:
@@ -162,6 +166,17 @@ def configure(user_name: str, api_key: str) -> str:
         return _carnage.describe()
 
 
+def _live_brain():
+    global _live
+    from carnage.live import LiveBrain
+
+    if _carnage is None:
+        raise RuntimeError("carnage is not started")
+    if _live is None or _live.carnage is not _carnage:
+        _live = LiveBrain(_carnage)
+    return _live
+
+
 class _Handle:
     """What Kotlin holds for the life of the process.
 
@@ -198,6 +213,34 @@ class _Handle:
         except Exception as exc:            # noqa: BLE001
             log.exception("answer failed")
             return f"Something went wrong in my head: {exc}"
+
+    # ── the live voice call (LiveVoice.kt) ──────────────────────────────────
+    def live_url(self) -> str:
+        """The websocket address with the key on it, or "" with no key."""
+        from carnage.live import LIVE_URL
+
+        key = str(_settings().get("gemini_api_key", "") or "").strip()
+        return f"{LIVE_URL}?key={key}" if key else ""
+
+    def live_setup(self) -> str:
+        return json.dumps(_live_brain().setup_message())
+
+    def live_tool(self, message_json: str) -> str:
+        from carnage.live import handle_json
+
+        return handle_json(_live_brain(), message_json)
+
+    def live_record(self, who: str, text: str) -> None:
+        try:
+            _live_brain().record(who, text)
+        except Exception:                   # noqa: BLE001
+            log.exception("could not record a voice turn")
+
+    def live_finish(self) -> None:
+        try:
+            _live_brain().finish()
+        except Exception:                   # noqa: BLE001
+            log.exception("could not file the voice conversation")
 
     def status(self) -> str:
         try:

@@ -66,6 +66,21 @@ connections, calendar, mail, projects, learning, background jobs, watches,
 documents, git and deployment. Carnage does not reimplement any of it and does
 not copy it — 31 tools on a phone, of which 4 are phone-specific.
 
+## Talking to her
+
+On the phone she holds the same live voice conversation Venom does: tap
+**Talk** (in the app or on the notification, so it works from the lock
+screen) or press the earphone's button, speak, interrupt her mid-sentence,
+and she uses her tools while talking. A Bluetooth earphone is used for both
+mic and sound when connected, otherwise the loudspeaker.
+
+The audio and the Live API websocket are native Kotlin (`LiveVoice.kt`)
+because the Pi's `google-genai` client has no Android wheels. Who she is and
+what she can do still come from Python: `carnage/live.py` builds the opening
+`setup` frame from the shared persona and registry, answers every tool call,
+and files each finished call in the shared archive, so the Pi can recall what
+was said on the phone.
+
 ## Running it
 
 ```bash

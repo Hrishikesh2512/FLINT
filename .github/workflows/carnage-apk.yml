@@ -51,12 +51,12 @@ jobs:
           src=carnage/android/app/build/outputs/apk/debug/app-debug.apk
           test -f "$src"
           mkdir -p dist
-          cp "$src" "dist/jarvis-${GITHUB_SHA::7}.apk"
+          cp "$src" "dist/carnage-${GITHUB_SHA::7}.apk"
           ls -lh dist/
 
       - uses: actions/upload-artifact@v4
         with:
-          name: jarvis-apk
+          name: carnage-apk
           path: dist/*.apk
           if-no-files-found: error
           retention-days: 60

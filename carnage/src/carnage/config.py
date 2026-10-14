@@ -26,6 +26,9 @@ log = logging.getLogger("carnage.config")
 
 DEFAULT_DEVICE = "carnage"
 DEFAULT_PORT = 8790
+#: Venom's defaults (venom/config.py), so the phone and the Pi share a voice.
+DEFAULT_LIVE_MODEL = "models/gemini-2.5-flash-native-audio-preview-12-2025"
+DEFAULT_VOICE = "Leda"
 
 
 def _default_state() -> Path:
@@ -91,6 +94,10 @@ class CarnageConfig:
     #: read out in the prompt, so it is written the way she would say it —
     #: "send a text", not "sms_send".
     devices: tuple[dict, ...] = ()
+    #: The live voice session — the same model and voice the Pi speaks with,
+    #: so she sounds like one person whichever body is talking.
+    live_model: str = DEFAULT_LIVE_MODEL
+    voice_name: str = DEFAULT_VOICE
 
     # ── the Workspace protocol, so flint_core.skills.dev works unchanged ────
     def repo_path(self, name: str) -> str:
@@ -161,4 +168,6 @@ def load_config(path: Path | None = None) -> CarnageConfig:
         deploy_targets=tuple(d for d in (raw.get("deploy_targets") or ())
                              if isinstance(d, dict)),
         devices=tuple(d for d in (raw.get("devices") or ())
-                      if isinstance(d, dict) and d.get("name")))
+                      if isinstance(d, dict) and d.get("name")),
+        live_model=str(raw.get("live_model") or DEFAULT_LIVE_MODEL),
+        voice_name=str(raw.get("voice_name") or DEFAULT_VOICE))
