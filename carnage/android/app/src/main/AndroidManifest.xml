@@ -67,20 +67,6 @@
             </intent-filter>
         </activity>
 
-        <!-- "Jarvis Talk": opens straight into a conversation, over the lock
-             screen. A separate entry so Samsung's side button (double press)
-             and lock-screen shortcuts can be pointed at it. -->
-        <activity-alias
-            android:name=".Talk"
-            android:exported="true"
-            android:icon="@mipmap/ic_launcher"
-            android:label="@string/talk_entry"
-            android:targetActivity=".MainActivity">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN"/>
-                <category android:name="android.intent.category.LAUNCHER"/>
-            </intent-filter>
-        </activity-alias>
 
         <!-- The "Jarvis" quick-settings tile: swipe down, tap, talk. -->
         <service

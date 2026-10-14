@@ -87,7 +87,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        talkMode = wantsTalk(intent)
+        // Opened while the phone is locked (Samsung's side-button double
+        // press, a lock-screen shortcut) means "let me talk": show over the
+        // lock screen and start listening, no unlock needed.
+        talkMode = wantsTalk(intent) || locked()
         if (talkMode) showOverLockScreen()
         setContentView(R.layout.activity_main)
 
@@ -161,7 +164,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        if (wantsTalk(intent)) {
+        if (wantsTalk(intent) || locked()) {
             talkMode = true
             showOverLockScreen()
             startTalking()
@@ -169,9 +172,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ── talk mode: one tap from the lock screen ─────────────────────────────
-    private fun wantsTalk(intent: Intent?): Boolean =
-        intent?.action == ACTION_TALK ||
-            intent?.component?.className?.endsWith(".Talk") == true
+    private fun wantsTalk(intent: Intent?): Boolean = intent?.action == ACTION_TALK
 
     /** Over the lock screen, screen on — the conversation stays hidden there. */
     private fun showOverLockScreen() {
@@ -356,6 +357,17 @@ class MainActivity : AppCompatActivity() {
             // Routing a call to the Bluetooth earphone's mic.
             wanted += Manifest.permission.BLUETOOTH_CONNECT
         }
-        permissions.launch(wanted.toTypedArray())
+        // Never over the lock screen (a dialog there is in the way of talking),
+        // and only what is still missing — once answered, not asked again on
+        // every open.
+        if (locked()) return
+        val missing = wanted.filter {
+            checkSelfPermission(it) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+        val asked = getSharedPreferences("carnage", MODE_PRIVATE)
+        val fresh = missing.filterNot { asked.getBoolean("asked:$it", false) }
+        if (fresh.isEmpty()) return
+        asked.edit().apply { fresh.forEach { putBoolean("asked:$it", true) } }.apply()
+        permissions.launch(fresh.toTypedArray())
     }
 }
