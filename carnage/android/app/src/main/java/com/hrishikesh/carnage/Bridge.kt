@@ -65,6 +65,17 @@ object Bridge {
                     (kwargs["percent"] as? Number)?.toInt() ?: -1,
                 )
                 "photo" -> Camera.photo(context)
+                "contacts" -> Actions.contacts(context, kwargs["query"]?.toString().orEmpty())
+                "call" -> Actions.call(context, kwargs["number"]?.toString().orEmpty())
+                "alarm" -> Actions.alarm(
+                    context,
+                    (kwargs["hour"] as? Number)?.toInt() ?: return null,
+                    (kwargs["minute"] as? Number)?.toInt() ?: 0,
+                    kwargs["label"]?.toString().orEmpty(),
+                )
+                "torch" -> Actions.torch(context, kwargs["on"] == true)
+                "open_app" -> Actions.openApp(context, kwargs["name"]?.toString().orEmpty())
+                "dnd" -> Actions.doNotDisturb(kwargs["on"] == true)
                 "vibrate" -> vibrate(
                     context,
                     (kwargs["milliseconds"] as? Number)?.toLong() ?: 400L,

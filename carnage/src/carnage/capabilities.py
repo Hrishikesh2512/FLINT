@@ -37,6 +37,7 @@ from flint_core.skills import (
 )
 
 from carnage.sos import register_sos_contact_tools
+from carnage.tools_actions import ACTIONS_PROMPT, register_action_tools
 from carnage.tools_media import register_camera_tools, register_music_tools
 from carnage.tools_phone import (
     register_phone_tools,
@@ -266,6 +267,15 @@ def build_capabilities(config, *, phone=None, memory=None, projects=None,
             permissions=("messaging",),
             register=(lambda reg: register_sms_tools(reg, phone,
                                                      contacts=connections))
+            if has_phone else None,
+        ),
+        Capability(
+            name="phone_actions", order=64,
+            summary="Calls, the phone book, alarms, torch, apps, Do Not Disturb.",
+            prompt=ACTIONS_PROMPT, available=has_phone,
+            permissions=("device_control", "personal_data"),
+            register=(lambda reg: register_action_tools(
+                reg, phone, connections=connections, reminders=reminders))
             if has_phone else None,
         ),
         Capability(

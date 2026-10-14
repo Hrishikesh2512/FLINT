@@ -183,6 +183,24 @@ class BrowserPhone:
     def photo(self) -> str | None:
         return None
 
+    def find_contacts(self, query: str) -> list[dict]:
+        return []
+
+    def place_call(self, number: str) -> bool:
+        return False
+
+    def set_alarm(self, hour: int, minute: int, label: str = "") -> bool:
+        return False
+
+    def torch(self, on: bool) -> bool:
+        return False
+
+    def open_app(self, name: str) -> str | None:
+        return None
+
+    def do_not_disturb(self, on: bool) -> bool:
+        return False
+
     # ── drained by the page ─────────────────────────────────────────────────
     def take_outbox(self) -> list[dict]:
         """Messages for the page to open, oldest first. Drains the queue."""

@@ -201,8 +201,14 @@ class MainActivity : AppCompatActivity() {
     private fun locked(): Boolean =
         getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked
 
+    override fun onPause() {
+        Actions.onScreen = false
+        super.onPause()
+    }
+
     override fun onResume() {
         super.onResume()
+        Actions.onScreen = true
         // Over the lock screen only the core shows — never the conversation.
         val unlocked = !locked()
         findViewById<View>(R.id.conversation).isVisible = unlocked
@@ -356,6 +362,8 @@ class MainActivity : AppCompatActivity() {
             Manifest.permission.SEND_SMS,
             Manifest.permission.RECORD_AUDIO,
             Manifest.permission.CAMERA,
+            Manifest.permission.READ_CONTACTS,
+            Manifest.permission.CALL_PHONE,
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             wanted += Manifest.permission.POST_NOTIFICATIONS

@@ -140,6 +140,27 @@ class Phone(Protocol):
         """A JPEG from the back camera, base64-encoded, or None."""
         ...
 
+    # ── phone actions ───────────────────────────────────────────────────────
+    def find_contacts(self, query: str) -> list[dict]:
+        """Phone-book entries whose name matches: [{name, number}], best first."""
+        ...
+
+    def place_call(self, number: str) -> bool:
+        """Dial and connect a call. True if it was placed."""
+        ...
+
+    def set_alarm(self, hour: int, minute: int, label: str = "") -> bool:
+        """An alarm in the clock app. False when the clock app can't be reached."""
+        ...
+
+    def torch(self, on: bool) -> bool: ...
+
+    def open_app(self, name: str) -> str | None:
+        """Open the installed app best matching `name`; its label, or None."""
+        ...
+
+    def do_not_disturb(self, on: bool) -> bool: ...
+
 
 #: The media controls a voice can ask for, and the only ones passed through.
 MEDIA_ACTIONS = ("pause", "resume", "next", "previous", "stop")
@@ -185,6 +206,24 @@ class AbsentPhone:
 
     def photo(self) -> str | None:
         return None
+
+    def find_contacts(self, query: str) -> list[dict]:
+        return []
+
+    def place_call(self, number: str) -> bool:
+        return False
+
+    def set_alarm(self, hour: int, minute: int, label: str = "") -> bool:
+        return False
+
+    def torch(self, on: bool) -> bool:
+        return False
+
+    def open_app(self, name: str) -> str | None:
+        return None
+
+    def do_not_disturb(self, on: bool) -> bool:
+        return False
 
 
 Runner = Callable[[Sequence[str], float], "subprocess.CompletedProcess[str]"]
@@ -309,6 +348,24 @@ class TermuxPhone:
     def photo(self) -> str | None:
         return None
 
+    def find_contacts(self, query: str) -> list[dict]:
+        return []
+
+    def place_call(self, number: str) -> bool:
+        return False
+
+    def set_alarm(self, hour: int, minute: int, label: str = "") -> bool:
+        return False
+
+    def torch(self, on: bool) -> bool:
+        return False
+
+    def open_app(self, name: str) -> str | None:
+        return None
+
+    def do_not_disturb(self, on: bool) -> bool:
+        return False
+
 
 class AndroidPhone:
     """Android through a host app that embeds this package (Chaquopy).
@@ -396,6 +453,29 @@ class AndroidPhone:
     def photo(self) -> str | None:
         jpeg = self._call("photo")
         return str(jpeg) if jpeg else None
+
+    def find_contacts(self, query: str) -> list[dict]:
+        rows = self._call("contacts", query=query)
+        if not isinstance(rows, list):
+            return []
+        return [{"name": str(r.get("name", "")), "number": str(r.get("number", ""))}
+                for r in rows if isinstance(r, dict) and r.get("number")]
+
+    def place_call(self, number: str) -> bool:
+        return bool(number.strip()) and bool(self._call("call", number=number))
+
+    def set_alarm(self, hour: int, minute: int, label: str = "") -> bool:
+        return bool(self._call("alarm", hour=int(hour), minute=int(minute), label=label))
+
+    def torch(self, on: bool) -> bool:
+        return bool(self._call("torch", on=bool(on)))
+
+    def open_app(self, name: str) -> str | None:
+        app = self._call("open_app", name=name)
+        return str(app) if app else None
+
+    def do_not_disturb(self, on: bool) -> bool:
+        return bool(self._call("dnd", on=bool(on)))
 
 
 def detect(bridge: Callable[..., Any] | None = None) -> Phone:

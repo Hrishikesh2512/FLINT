@@ -66,6 +66,9 @@ class ShadeListener : NotificationListenerService() {
             "com.instagram.android",
         )
 
+        /** The connected listener, when notification access is granted. */
+        fun live(): ShadeListener? = instance
+
         /** What is in the shade right now, as plain maps for Python. */
         @JvmStatic
         fun snapshot(): List<Map<String, Any?>> {

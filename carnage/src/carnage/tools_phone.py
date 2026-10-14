@@ -96,7 +96,11 @@ def register_sms_tools(reg, phone: Phone, contacts=None) -> None:
         },
     )
     def send_text(to: str, text: str) -> str:
-        number = _resolve(to, contacts)
+        from carnage.tools_actions import find_number
+
+        number, _, choices = find_number(to, phone, contacts)
+        if choices:
+            return f"Which one: {', '.join(choices)}?"
         if not number:
             return f"I don't have a number for {to}."
         if not phone.send_sms(number, text):
