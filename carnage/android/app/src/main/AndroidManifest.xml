@@ -27,6 +27,8 @@
     <!-- "What am I looking at?": one photo from the back camera. -->
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA"/>
+    <!-- Sharing his screen into a voice call (Vision.kt), only when he says. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
 
     <!-- Android 11+ hides other apps unless asked for by name: the music apps
@@ -43,6 +45,13 @@
         <intent>
             <action android:name="android.intent.action.SET_ALARM"/>
         </intent>
+        <!-- The phone's own speech recognizer, which RecognizerProxy hands
+             other apps' voice input on to. -->
+        <intent>
+            <action android:name="android.speech.RecognitionService"/>
+        </intent>
+        <!-- "Take me home": navigation goes to Google Maps. -->
+        <package android:name="com.google.android.apps.maps"/>
         <package android:name="com.google.android.apps.youtube.music"/>
         <package android:name="com.spotify.music"/>
         <package android:name="com.jio.media.jiobeats"/>
@@ -78,6 +87,19 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Share → Jarvis, from any app: a photo, a PDF, some text. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="image/*"/>
+                <data android:mimeType="application/pdf"/>
+                <data android:mimeType="text/plain"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="image/*"/>
+            </intent-filter>
         </activity>
 
 
@@ -109,6 +131,39 @@
                 android:value="true"/>
         </service>
 
+        <!-- Jarvis as the phone's digital assistant: hold the power button
+             over any app and she opens on top of it, able to see the screen.
+             All three are needed for Android to offer her in Default apps. -->
+        <service
+            android:name=".AssistService"
+            android:exported="true"
+            android:label="@string/assistant"
+            android:permission="android.permission.BIND_VOICE_INTERACTION">
+            <intent-filter>
+                <action android:name="android.service.voice.VoiceInteractionService"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.voice_interaction"
+                android:resource="@xml/voice_interaction"/>
+        </service>
+
+        <service
+            android:name=".AssistSessionService"
+            android:exported="true"
+            android:permission="android.permission.BIND_VOICE_INTERACTION"/>
+
+        <service
+            android:name=".RecognizerProxy"
+            android:exported="true"
+            android:label="@string/assistant">
+            <intent-filter>
+                <action android:name="android.speech.RecognitionService"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.speech"
+                android:resource="@xml/recognizer"/>
+        </service>
+
         <activity
             android:name=".SetupActivity"
             android:exported="false"
@@ -117,7 +172,7 @@
         <service
             android:name=".CarnageService"
             android:exported="false"
-            android:foregroundServiceType="specialUse|microphone|camera">
+            android:foregroundServiceType="specialUse|microphone|camera|mediaProjection">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="A personal assistant that must stay reachable for
@@ -135,6 +190,21 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED"/>
             </intent-filter>
         </receiver>
+
+        <!-- Hands: using his other apps when he asks (Hands.kt). Only ever
+             switched on by him, in Settings → Accessibility. -->
+        <service
+            android:name=".Hands"
+            android:exported="true"
+            android:label="@string/assistant"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/hands"/>
+        </service>
 
         <!-- Reading the notification shade. Optional: she works without it and
              simply has nothing to report when asked what he missed. -->

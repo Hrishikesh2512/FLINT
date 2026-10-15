@@ -75,14 +75,22 @@ class Carnage:
             notes=self.notes, connections=self.connections,
             state_path=state / "sync.json")
 
+        # One model for everything she thinks with: the voice model, over the
+        # Live API (carnage/livetext.py) — typed answers, seeing, searching
+        # and using his apps alike. A device with no key still runs as a hub
+        # and a set of tools; it just cannot hold a conversation.
+        self._live = _live_for(config)
+        live = self._live
         self.capabilities = build_capabilities(
             config, phone=self.phone, memory=self.memory,
             projects=self.projects, outcomes=self.outcomes,
             archive=self.archive, notes=self.notes, lists=self.lists,
             reminders=self.reminders, connections=self.connections,
             relay=self.relay, roster=self.roster, sos=self.sos,
-            timers=self.timers, describe=_describer_for(config),
-            search=search or _search_for(config))
+            timers=self.timers,
+            describe=live.describe if live else None,
+            search=search or (live.search if live else None),
+            decide=live.decide if live else None)
         # Built from the capability set rather than assembled by hand, so each
         # tool inherits its capability's permissions instead of silently
         # carrying none — the failure mode that turns a permission check into
@@ -90,9 +98,6 @@ class Carnage:
         self.registry = self.capabilities.build_registry(platform=ANY_PLATFORM)
         self.capabilities.log_summary()
 
-        # Built on first use: a device with no key still runs as a hub and a
-        # set of tools, it just cannot hold a conversation.
-        self._gateway = _gateway_for(config)
         self._conversation = None
 
         # The page the phone installs, when one is wanted. Off by default —
@@ -151,21 +156,40 @@ class Carnage:
                 alternatives=(conflict.discarded,))
 
     # ── talking to her ──────────────────────────────────────────────────────
-    def answer(self, said: str) -> str:
+    def answer(self, said: str, context: str = "", items: list[dict] | None = None,
+               on_text=None) -> str:
         """One turn of conversation. Never raises.
+
+        `items` are what he shared ({"name", "mime", "text" | "data"}): text
+        goes in as context, photos and PDFs go to the model with the question
+        in one session. `on_text` hears her words as they arrive.
 
         Built lazily and kept, so the last few turns survive between requests —
         a page that reloads should not make her forget the sentence before.
         """
         if self._conversation is None:
-            if self._gateway is None:
+            if self._live is None:
                 return ("I've no key to think with yet — put a Gemini API key "
                         "in carnage.json and I'll be able to answer properly.")
-            from carnage.conversation import Conversation
+            from carnage.livetext import LiveConversation
 
-            self._conversation = Conversation(
-                self._gateway, self.registry, self.system_instruction)
-        return self._conversation.ask(said)
+            self._conversation = LiveConversation(
+                self._live, self.registry, self.system_instruction)
+        from carnage.attachments import attachment_context
+
+        shared = attachment_context(items or [], said)
+        files = [{"mime": i.get("mime"), "data": i["data"]} for i in items or []
+                 if isinstance(i, dict) and i.get("data") and not i.get("too_big")]
+        context = "\n\n".join(c for c in (context, shared) if c)
+        return self._conversation.ask(said, context, files, on_text)
+
+    def read_screen(self, app: str, text: str, jpeg_b64: str = "") -> str:
+        """His screen as context for `answer`; "" when nothing came through."""
+        from carnage.screen import screen_context
+
+        # The screenshot itself goes with the question (`answer(items=...)`),
+        # not through a separate describing session: one wait, not two.
+        return screen_context(app, text, "", None)
 
     def due(self) -> list[dict]:
         """Timers and reminders whose moment has come, taken off the board.
@@ -210,40 +234,10 @@ class Carnage:
                 f"{len(list(self.registry))} tools — {active}")
 
 
-def _gateway_for(config: CarnageConfig):
-    """The shared LLM gateway, when there is a key for one."""
+def _live_for(config: CarnageConfig):
+    """The voice model, for everything that thinks — when there is a key."""
     if not config.gemini_api_key:
         return None
-    try:
-        from flint_core.config import FlintSettings, build_gateway
+    from carnage.livetext import LiveModel
 
-        return build_gateway(FlintSettings(gemini_api_key=config.gemini_api_key))
-    except Exception:                       # noqa: BLE001
-        log.exception("could not build an LLM gateway — she cannot converse")
-        return None
-
-
-def _describer_for(config: CarnageConfig):
-    """The camera's vision call, when there is a key to make it with."""
-    if not config.gemini_api_key:
-        return None
-    from carnage.tools_media import gemini_describer
-
-    return gemini_describer(config.gemini_api_key)
-
-
-def _search_for(config: CarnageConfig):
-    """Grounded web search, if there is a key for it.
-
-    Returns None without one, which switches the whole `core` capability off
-    rather than registering a `web_search` that fails on every call.
-    """
-    if not config.gemini_api_key:
-        return None
-
-    def search(query: str) -> str:
-        from flint_core.llm.providers import GeminiProvider
-
-        return GeminiProvider(config.gemini_api_key).grounded_search(query)
-
-    return search
+    return LiveModel(config.gemini_api_key, config.live_model)

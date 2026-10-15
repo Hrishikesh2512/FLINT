@@ -103,6 +103,16 @@
                     android:layout_height="wrap_content"
                     android:orientation="vertical"/>
             </ScrollView>
+
+            <!-- What the camera shows her, while he shares it in a call. -->
+            <TextureView
+                android:id="@+id/cameraView"
+                android:layout_width="132dp"
+                android:layout_height="176dp"
+                android:layout_gravity="top|end"
+                android:layout_margin="12dp"
+                android:contentDescription="@string/camera_view"
+                android:visibility="gone"/>
         </FrameLayout>
 
         <!-- ── Jarvis's core: tap to talk ───────────────────────────────── -->
@@ -154,6 +164,60 @@
             android:textSize="13sp"
             android:layout_marginBottom="12dp"/>
 
+        <!-- ── live video, while a call is on ───────────────────────────── -->
+        <LinearLayout
+            android:id="@+id/visionRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="10dp"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/shareCamera"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/glass_pill"
+                android:paddingStart="18dp"
+                android:paddingEnd="18dp"
+                android:paddingTop="9dp"
+                android:paddingBottom="9dp"
+                android:text="@string/camera_on"
+                android:textColor="@color/ink"
+                android:textSize="14sp"/>
+
+            <TextView
+                android:id="@+id/shareScreen"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:background="@drawable/glass_pill"
+                android:paddingStart="18dp"
+                android:paddingEnd="18dp"
+                android:paddingTop="9dp"
+                android:paddingBottom="9dp"
+                android:text="@string/screen_on"
+                android:textColor="@color/ink"
+                android:textSize="14sp"/>
+        </LinearLayout>
+
+        <!-- ── what is attached, above the box ──────────────────────────── -->
+        <HorizontalScrollView
+            android:id="@+id/attachedRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:scrollbars="none"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:id="@+id/attached"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"/>
+        </HorizontalScrollView>
+
         <!-- ── type instead ─────────────────────────────────────────────── -->
         <LinearLayout
             android:id="@+id/composer"
@@ -163,6 +227,14 @@
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:padding="6dp">
+
+            <ImageButton
+                android:id="@+id/attach"
+                android:layout_width="42dp"
+                android:layout_height="46dp"
+                android:background="@android:color/transparent"
+                android:src="@drawable/ic_attach"
+                android:contentDescription="@string/attach"/>
 
             <EditText
                 android:id="@+id/input"
@@ -175,7 +247,7 @@
                 android:imeOptions="actionSend"
                 android:inputType="textCapSentences|textMultiLine"
                 android:maxLines="4"
-                android:paddingStart="16dp"
+                android:paddingStart="4dp"
                 android:paddingEnd="8dp"
                 android:paddingTop="10dp"
                 android:paddingBottom="10dp"

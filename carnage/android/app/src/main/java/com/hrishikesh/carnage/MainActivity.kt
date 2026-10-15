@@ -6,6 +6,11 @@ import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
+import android.provider.OpenableColumns
+import android.util.Base64
 import android.graphics.RenderEffect
 import android.graphics.Shader
 import android.os.Build
@@ -13,6 +18,7 @@ import android.os.Bundle
 import android.view.Gravity
 import android.view.View
 import android.view.animation.AccelerateDecelerateInterpolator
+import android.view.TextureView
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.LinearLayout
@@ -55,7 +61,33 @@ class MainActivity : AppCompatActivity() {
     private lateinit var glow: View
     private lateinit var ring: View
     private lateinit var voiceState: TextView
+    private lateinit var visionRow: View
+    private lateinit var shareCamera: TextView
+    private lateinit var shareScreen: TextView
+    private lateinit var cameraView: TextureView
+    private lateinit var attachedRow: View
+    private lateinit var attached: LinearLayout
     private var pulse: Animator? = null
+
+    /** What he has attached or shared, kept until he removes it. */
+    private data class Staged(val name: String, val mime: String, val uri: Uri?, val text: String?)
+    private val staged = mutableListOf<Staged>()
+    /** [staged] read and packed, so follow-ups do not read it all again. */
+    @Volatile private var stagedItems: String? = null
+
+    /** Android's "start recording your screen?" — then the service shares it. */
+    private val screenConsent = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val consent = result.data
+        if (result.resultCode == RESULT_OK && consent != null && LiveVoice.active) {
+            CarnageService.shareScreen(this, result.resultCode, consent)
+        }
+    }
+
+    private val pickFiles = registerForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris -> uris.forEach(::stageUri) }
     private var shown = ""
     /** Opened to talk (tile, Jarvis Talk, side button): close when the call ends. */
     private var talkMode = false
@@ -104,6 +136,29 @@ class MainActivity : AppCompatActivity() {
         glow = findViewById(R.id.glow)
         ring = findViewById(R.id.ring)
         voiceState = findViewById(R.id.voiceState)
+        visionRow = findViewById(R.id.visionRow)
+        shareCamera = findViewById(R.id.shareCamera)
+        shareScreen = findViewById(R.id.shareScreen)
+        cameraView = findViewById(R.id.cameraView)
+        shareCamera.setOnClickListener {
+            if (Vision.source == Vision.Source.CAMERA) Vision.stop() else showCamera()
+        }
+        shareScreen.setOnClickListener {
+            if (Vision.source == Vision.Source.SCREEN) {
+                Vision.stop()
+            } else {
+                screenConsent.launch(
+                    getSystemService(android.media.projection.MediaProjectionManager::class.java)
+                        .createScreenCaptureIntent()
+                )
+            }
+        }
+        Vision.onChange = { showVision() }
+        attachedRow = findViewById(R.id.attachedRow)
+        attached = findViewById(R.id.attached)
+        findViewById<View>(R.id.attach).setOnClickListener {
+            pickFiles.launch(arrayOf("image/*", "application/pdf"))
+        }
 
         // Real blur on the halo where the platform has it (Android 12+), so
         // the core glows through the glass instead of sitting on it.
@@ -155,10 +210,12 @@ class MainActivity : AppCompatActivity() {
 
         show(if (LiveVoice.active) "listening" else "off")
         if (talkMode) startTalking()
+        takeShare(intent)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        takeShare(intent)
         if (wantsTalk(intent) || locked()) {
             talkMode = true
             showOverLockScreen()
@@ -213,8 +270,16 @@ class MainActivity : AppCompatActivity() {
         if (mic || camera) CarnageService.claimMic(this)
     }
 
+    override fun onStop() {
+        // The preview's surface goes with the screen: the camera cannot keep
+        // streaming into it. Sharing the screen carries on — that is its point.
+        if (Vision.source == Vision.Source.CAMERA) Vision.stop()
+        super.onStop()
+    }
+
     override fun onDestroy() {
         LiveVoice.removeListener(voice)
+        Vision.onChange = null
         pulse?.cancel()
         super.onDestroy()
     }
@@ -222,6 +287,7 @@ class MainActivity : AppCompatActivity() {
     // ── the core: idle, listening, speaking ─────────────────────────────────
     private fun show(state: String) {
         mic.text = getString(if (LiveVoice.active) R.string.hang_up else R.string.talk)
+        showVision()
         // "speaking" arrives with every chunk of audio: only a real change of
         // state may restart the animation, or the core would stutter.
         if (state == shown) return
@@ -276,19 +342,184 @@ class MainActivity : AppCompatActivity() {
     // ── typing ──────────────────────────────────────────────────────────────
     private fun ask(said: String) {
         val text = said.trim()
-        if (text.isEmpty()) return
+        val items = staged.toList()
+        if (text.isEmpty() && items.isEmpty()) return
+        val question = text.ifEmpty { getString(R.string.whats_this) }
         input.setText("")
         send.isEnabled = false
-        turn(text, mine = true)
+        val names = items.joinToString("\n") { "📎 ${it.name}" }
+        turn(if (names.isEmpty()) question else "$names\n$question", mine = true)
         val waiting = turn("…", mine = false)
 
         lifecycleScope.launch {
-            val reply = withContext(Dispatchers.IO) { Brain.ask(text) }
-            waiting.text = reply
+            var streamed = false
+            val reply = withContext(Dispatchers.IO) {
+                val packed = if (items.isEmpty()) "[]" else stagedItems
+                    ?: itemsJson(items).also { if (staged == items) stagedItems = it }
+                Brain.ask(question, "", packed) { words ->
+                    streamed = true
+                    runOnUiThread { waiting.text = words; scrollDown() }
+                }
+            }
+            if (streamed) Chat.show(waiting, reply) else Chat.reveal(waiting, reply) { scrollDown() }
             scrollDown()
             send.isEnabled = true
         }
     }
+
+    // ── live video in a call: camera, or his screen ────────────────────────
+    private fun showCamera() {
+        cameraView.isVisible = true
+        if (cameraView.isAvailable) {
+            Vision.startCamera(this, cameraView)
+            return
+        }
+        cameraView.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+            override fun onSurfaceTextureAvailable(t: android.graphics.SurfaceTexture, w: Int, h: Int) {
+                if (LiveVoice.active) Vision.startCamera(this@MainActivity, cameraView)
+            }
+            override fun onSurfaceTextureSizeChanged(t: android.graphics.SurfaceTexture, w: Int, h: Int) {}
+            override fun onSurfaceTextureDestroyed(t: android.graphics.SurfaceTexture) = true
+            override fun onSurfaceTextureUpdated(t: android.graphics.SurfaceTexture) {}
+        }
+    }
+
+    /** The buttons only during a call, and never over the lock screen. */
+    private fun showVision() {
+        val source = Vision.source
+        visionRow.isVisible = LiveVoice.active && !locked()
+        cameraView.isVisible = source == Vision.Source.CAMERA
+        shareCamera.setText(if (source == Vision.Source.CAMERA) R.string.camera_off else R.string.camera_on)
+        shareScreen.setText(if (source == Vision.Source.SCREEN) R.string.screen_off else R.string.screen_on)
+    }
+
+    // ── attachments: the paperclip, and Share → Jarvis ─────────────────────
+    private fun takeShare(intent: Intent?) {
+        when (intent?.action) {
+            Intent.ACTION_SEND -> {
+                streams(intent).forEach(::stageUri)
+                intent.getStringExtra(Intent.EXTRA_TEXT)?.takeIf { it.isNotBlank() }?.let {
+                    stage(Staged(intent.getStringExtra(Intent.EXTRA_SUBJECT)
+                        ?: getString(R.string.shared_text), "text/plain", null, it))
+                }
+            }
+            Intent.ACTION_SEND_MULTIPLE -> streams(intent).forEach(::stageUri)
+            else -> return
+        }
+        // Handled once: a rotation must not attach it all over again.
+        intent.action = Intent.ACTION_MAIN
+        input.requestFocus()
+    }
+
+    private fun streams(intent: Intent): List<Uri> =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                ?: listOfNotNull(intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java))
+        } else {
+            @Suppress("DEPRECATION")
+            runCatching { intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM) }.getOrNull()
+                ?: listOfNotNull(intent.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri)
+        }
+
+    private fun stageUri(uri: Uri) {
+        val mime = contentResolver.getType(uri).orEmpty()
+        if (!mime.startsWith("image/") && mime != "application/pdf" && mime != "text/plain") {
+            note(getString(R.string.only_photos_pdfs))
+            return
+        }
+        val name = runCatching {
+            contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+                ?.use { if (it.moveToFirst()) it.getString(0) else null }
+        }.getOrNull() ?: uri.lastPathSegment ?: "file"
+        stage(Staged(name, mime, uri, null))
+    }
+
+    private fun stage(item: Staged) {
+        staged += item
+        stagedItems = null
+        showStaged()
+    }
+
+    private fun showStaged() {
+        attached.removeAllViews()
+        staged.toList().forEach { item ->
+            attached.addView(TextView(this).apply {
+                text = "📎 ${item.name.take(24)}  ✕"
+                setTextColor(getColor(R.color.jarvis))
+                textSize = 13f
+                setBackgroundResource(R.drawable.glass_pill)
+                setPadding(dp(14), dp(7), dp(14), dp(7))
+                contentDescription = getString(R.string.remove_attachment) + " " + item.name
+                setOnClickListener {
+                    staged.remove(item)
+                    stagedItems = null
+                    showStaged()
+                }
+            }, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { marginEnd = dp(8) })
+        }
+        attachedRow.isVisible = staged.isNotEmpty()
+        input.setHint(if (staged.isEmpty()) R.string.hint else R.string.ask_about_this)
+    }
+
+    /** What was attached, read and packed for the brain. Blocking. */
+    private fun itemsJson(items: List<Staged>): String {
+        val out = org.json.JSONArray()
+        for (item in items) {
+            val row = org.json.JSONObject().put("name", item.name).put("mime", item.mime)
+            when {
+                item.text != null -> row.put("text", item.text)
+                item.uri == null -> continue
+                item.mime == "text/plain" -> row.put("text", readText(item.uri))
+                item.mime.startsWith("image/") -> {
+                    row.put("mime", "image/jpeg")
+                    row.put("data", readPhoto(item.uri) ?: continue)
+                }
+                else -> readFile(item.uri)?.let { row.put("data", it) } ?: row.put("too_big", true)
+            }
+            out.put(row)
+        }
+        return out.toString()
+    }
+
+    private fun readText(uri: Uri): String =
+        runCatching {
+            contentResolver.openInputStream(uri)?.use { it.reader().readText().take(20_000) }
+        }.getOrNull().orEmpty()
+
+    /** A photo, shrunk to what the model needs to read it, as base64 JPEG. */
+    private fun readPhoto(uri: Uri): String? = runCatching {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+        var sample = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 1600) sample *= 2
+        val bitmap = contentResolver.openInputStream(uri)?.use {
+            BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample })
+        } ?: return null
+        val bytes = java.io.ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 85, bytes)
+        Base64.encodeToString(bytes.toByteArray(), Base64.NO_WRAP)
+    }.getOrNull()
+
+    /** A PDF as base64, or null when too big to send (about 14 MB). */
+    private fun readFile(uri: Uri): String? = runCatching {
+        val limit = 14 * 1024 * 1024
+        val bytes = contentResolver.openInputStream(uri)?.use { stream ->
+            val buffer = java.io.ByteArrayOutputStream()
+            val chunk = ByteArray(64 * 1024)
+            while (true) {
+                val read = stream.read(chunk)
+                if (read < 0) break
+                buffer.write(chunk, 0, read)
+                if (buffer.size() > limit) return null
+            }
+            buffer.toByteArray()
+        } ?: return null
+        Base64.encodeToString(bytes, Base64.NO_WRAP)
+    }.getOrNull()
+
 
     // ── the transcript ──────────────────────────────────────────────────────
     private fun turn(text: String, mine: Boolean): TextView {

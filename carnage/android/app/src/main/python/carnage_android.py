@@ -265,12 +265,29 @@ class _Handle:
     def configure(self, user_name: str, api_key: str) -> str:
         return configure(user_name, api_key)
 
-    def answer(self, said: str) -> str:
+    def answer(self, said: str, context: str = "", items_json: str = "[]",
+               listener=None) -> str:
+        """`items_json`: what he shared or the screenshot, as
+        [{"name","mime","text"|"data"}]. `listener.words(text)` (Kotlin's
+        Brain.Words) is called with her reply so far as it arrives."""
         try:
-            return self._live().answer(said)
+            items = json.loads(items_json or "[]")
+            on_text = listener.words if listener is not None else None
+            return self._live().answer(said, context,
+                                       items if isinstance(items, list) else [], on_text)
         except Exception as exc:            # noqa: BLE001
             log.exception("answer failed")
             return f"Something went wrong in my head: {exc}"
+
+    # ── his screen, when he calls her up over another app (AssistSession) ──
+    def read_screen(self, app: str, text: str, jpeg_b64: str = "") -> str:
+        """Context for `answer` from the screen's text; the screenshot goes
+        to `answer` as an item. "" when nothing usable came through."""
+        try:
+            return self._live().read_screen(app, text, jpeg_b64)
+        except Exception:                   # noqa: BLE001
+            log.exception("could not read the screen")
+            return ""
 
     # ── the heartbeat (CarnageService polls this) ───────────────────────────
     def tick(self) -> str:

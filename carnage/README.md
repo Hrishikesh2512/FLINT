@@ -81,6 +81,52 @@ what she can do still come from Python: `carnage/live.py` builds the opening
 and files each finished call in the shared archive, so the Pi can recall what
 was said on the phone.
 
+## The phone's assistant, over any app
+
+Picked in **Settings → Default apps → Digital assistant app** (the app's
+settings screen has a button that opens it — Android lets no app take that
+slot by asking), Jarvis replaces Gemini: hold the power button, or swipe up
+from a bottom corner, and she opens as a sheet over whatever is on screen,
+already listening.
+
+She is handed that screen. `Screen.kt` flattens the app's view tree to text
+(password fields never read) and keeps the screenshot; `carnage/screen.py`
+turns the text into context. A typed question goes to the model with the
+screenshot in the same message; a live call gets the text as context and the
+screenshot as a video frame, so either way she looks at it herself. "What's
+this?", "reply to her" and "remind me about this" mean the thing in front of
+him. A chip says which app she is looking at; tapping it takes the screen
+away. Over the lock screen she opens the app's talk screen instead, where
+nothing of his shows.
+
+Android requires an assistant to name a speech recognizer, and makes it the
+phone's default when the assistant is picked. `RecognizerProxy` passes every
+request to the recognizer the phone already had, so voice typing in other
+apps keeps working.
+
+## One model for everything
+
+Carnage thinks with exactly one model: the native-audio Live model her voice
+calls use (`live_model` in `carnage.json`). It only answers in audio, so a
+typed question opens a short Live session and her reply is the transcript of
+what she would have said, streamed into the bubble as it comes
+(`carnage/livetext.py`). Seeing (camera, screen, shared photos and PDFs), web
+search and using his apps all go through the same model. Typed replies arrive
+at speaking speed, which is the price of one model.
+
+## Sharing, Maps, replies, and using his apps
+
+- **Share → Jarvis** from any app, or the paperclip: photos, PDFs, text. They
+  go with the question; follow-ups keep them until removed.
+- **navigate** starts Google Maps navigation; **reply_to_message** answers a
+  message through its notification's own reply box.
+- **use_phone** (`carnage/hands.py`, `Hands.kt`) taps and types through his
+  other apps, through an accessibility service he switches on himself. It
+  stops before anything that sends, pays, orders, posts or deletes, and only
+  `use_phone_confirm` — after his yes — makes that one tap.
+- **Live video in a call** (`Vision.kt`): the back camera or his screen,
+  about a frame a second, while he talks.
+
 ## Everything the Pi does
 
 Carnage is the app; Jarvis is who lives in it — the same Jarvis as on the Pi.

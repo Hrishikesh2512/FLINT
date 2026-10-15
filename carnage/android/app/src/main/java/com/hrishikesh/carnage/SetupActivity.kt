@@ -1,9 +1,11 @@
 package com.hrishikesh.carnage
 
+import android.app.role.RoleManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.Button
@@ -66,6 +68,25 @@ class SetupActivity : AppCompatActivity() {
             startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
         }
 
+        // Android will not hand the assistant slot over on request (there is
+        // no dialog for it, unlike the other default-app roles): the most an
+        // app can do is open the screen where he picks it.
+        findViewById<TextView>(R.id.assistantRole).setOnClickListener {
+            toast(getString(R.string.pick_assistant))
+            val picker = Intent(Settings.ACTION_VOICE_INPUT_SETTINGS)
+            runCatching { startActivity(picker) }.onFailure {
+                startActivity(Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS))
+            }
+        }
+
+        // Using his apps needs an accessibility service, which only he can
+        // switch on — and Android hides it for sideloaded apps until "Allow
+        // restricted settings" is chosen in the app's info screen.
+        findViewById<TextView>(R.id.hands).setOnClickListener {
+            toast(getString(R.string.pick_hands))
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        }
+
         findViewById<Button>(R.id.copyToken).setOnClickListener {
             val token = runCatching { JSONObject(Brain.pairing()).optString("token") }
                 .getOrNull().orEmpty()
@@ -100,6 +121,22 @@ class SetupActivity : AppCompatActivity() {
             }
         }
     }
+
+    override fun onResume() {
+        super.onResume()
+        findViewById<TextView>(R.id.assistantRole).setText(
+            if (isAssistant()) R.string.is_assistant else R.string.make_assistant)
+        findViewById<TextView>(R.id.hands).setText(
+            if (Hands.connected) R.string.hands_on else R.string.let_hands)
+    }
+
+    private fun isAssistant(): Boolean =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            getSystemService(RoleManager::class.java).isRoleHeld(RoleManager.ROLE_ASSISTANT)
+        } else {
+            Settings.Secure.getString(contentResolver, "voice_interaction_service")
+                ?.startsWith("$packageName/") == true
+        }
 
     private fun describePairing(json: JSONObject?): String {
         if (json == null) return getString(R.string.pairing_unavailable)

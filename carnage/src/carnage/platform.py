@@ -477,6 +477,33 @@ class AndroidPhone:
     def do_not_disturb(self, on: bool) -> bool:
         return bool(self._call("dnd", on=bool(on)))
 
+    # ── getting somewhere, replying (tools_extras) ──────────────────────────
+    def navigate(self, destination: str, mode: str = "d") -> bool:
+        return bool(self._call("navigate", destination=destination, mode=mode))
+
+    def reply_to(self, who: str, text: str) -> dict | None:
+        """{"status": "sent" | "no_reply_box" | "not_found", "to", "app"},
+        or None without notification access."""
+        result = self._call("reply", who=who, text=text)
+        return result if isinstance(result, dict) else None
+
+    # ── using other apps (hands.py, through Hands.kt) ───────────────────────
+    def screen_elements(self) -> dict | None:
+        """What is on screen to touch, or None while Hands is switched off."""
+        screen = self._call("hands_look")
+        return screen if isinstance(screen, dict) else None
+
+    def hands_act(self, action: str, id: int | None = None,      # noqa: A002
+                  text: str = "") -> bool:
+        return bool(self._call("hands_act", action=action,
+                               id=-1 if id is None else int(id), text=text))
+
+    def hands_begin(self) -> None:
+        self._call("hands_begin")
+
+    def hands_end(self) -> None:
+        self._call("hands_end")
+
 
 def detect(bridge: Callable[..., Any] | None = None) -> Phone:
     """The best phone this process can actually reach.

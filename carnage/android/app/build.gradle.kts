@@ -73,6 +73,8 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     // "Hey Jarvis": the Pi's openWakeWord models, run on the phone.
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.31.0")
+    // Her replies, formatted: bold, lists, code and links (Chat.kt).
+    implementation("io.noties.markwon:core:4.6.2")
 }
 
 // ── the Python she actually is ──────────────────────────────────────────────

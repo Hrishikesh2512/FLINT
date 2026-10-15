@@ -76,6 +76,25 @@ object Bridge {
                 "torch" -> Actions.torch(context, kwargs["on"] == true)
                 "open_app" -> Actions.openApp(context, kwargs["name"]?.toString().orEmpty())
                 "dnd" -> Actions.doNotDisturb(kwargs["on"] == true)
+                "navigate" -> Actions.navigate(
+                    context,
+                    kwargs["destination"]?.toString().orEmpty(),
+                    kwargs["mode"]?.toString().orEmpty(),
+                )
+                "reply" -> ShadeListener.reply(
+                    kwargs["who"]?.toString().orEmpty(),
+                    kwargs["text"]?.toString().orEmpty(),
+                )
+                // Using other apps (carnage/hands.py): look, act, and get the
+                // assistant sheet out of the way while she works.
+                "hands_look" -> Hands.look()
+                "hands_act" -> Hands.act(
+                    kwargs["action"]?.toString().orEmpty(),
+                    (kwargs["id"] as? Number)?.toInt() ?: -1,
+                    kwargs["text"]?.toString().orEmpty(),
+                )
+                "hands_begin" -> AssistSession.stepAside()
+                "hands_end" -> AssistSession.comeBack()
                 "vibrate" -> vibrate(
                     context,
                     (kwargs["milliseconds"] as? Number)?.toLong() ?: 400L,

@@ -9,6 +9,7 @@ import android.content.pm.PackageManager
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.AlarmClock
 import android.provider.ContactsContract
@@ -31,6 +32,14 @@ object Actions {
 
     /** Set by MainActivity: true while Carnage is the app on screen. */
     @Volatile var onScreen = false
+
+    /**
+     * Whether Android will let her start another app's screen now. Besides
+     * Carnage being on screen: the assistant sheet showing, or the Hands
+     * accessibility service being on — Android exempts both from its
+     * background-launch block, which otherwise drops the launch silently.
+     */
+    fun canLaunch(): Boolean = onScreen || AssistSession.showing || Hands.connected
 
     // ── the phone book ──────────────────────────────────────────────────────
     fun contacts(context: Context, query: String): List<Map<String, String>> {
@@ -75,7 +84,7 @@ object Actions {
 
     // ── alarms ──────────────────────────────────────────────────────────────
     fun alarm(context: Context, hour: Int, minute: Int, label: String): Boolean {
-        if (!onScreen) return false
+        if (!canLaunch()) return false
         val intent = Intent(AlarmClock.ACTION_SET_ALARM)
             .putExtra(AlarmClock.EXTRA_HOUR, hour)
             .putExtra(AlarmClock.EXTRA_MINUTES, minute)
@@ -100,7 +109,7 @@ object Actions {
 
     // ── apps ────────────────────────────────────────────────────────────────
     fun openApp(context: Context, name: String): String? {
-        if (!onScreen || name.isBlank()) return null
+        if (!canLaunch() || name.isBlank()) return null
         val pm = context.packageManager
         val launchers = pm.queryIntentActivities(
             Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0
@@ -127,6 +136,26 @@ object Actions {
         val launch = pm.getLaunchIntentForPackage(best.first.activityInfo.packageName)
             ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) ?: return null
         return runCatching { context.startActivity(launch); best.second }.getOrNull()
+            ?.also { AssistSession.launched() }
+    }
+
+    // ── getting somewhere ───────────────────────────────────────────────────
+    /** Google Maps, already navigating; [mode] is d, w, b or l (two-wheeler). */
+    fun navigate(context: Context, destination: String, mode: String): Boolean {
+        if (!canLaunch() || destination.isBlank()) return false
+        val how = mode.takeIf { it in setOf("d", "w", "b", "l") } ?: "d"
+        val navigation = Intent(
+            Intent.ACTION_VIEW,
+            Uri.parse("google.navigation:q=${Uri.encode(destination)}&mode=$how"),
+        ).setPackage("com.google.android.apps.maps").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        // No Google Maps: any maps app, showing the place instead.
+        val anyMap = Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=${Uri.encode(destination)}"))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val opened = runCatching { context.startActivity(navigation); true }.getOrElse {
+            runCatching { context.startActivity(anyMap); true }.getOrDefault(false)
+        }
+        if (opened) AssistSession.launched()
+        return opened
     }
 
     // ── Do Not Disturb ──────────────────────────────────────────────────────

@@ -127,7 +127,7 @@ class CarnageService : android.app.Service() {
      * the app was on screen — so the app starts this service from its own
      * screen, and a start from boot (no mic allowed yet) falls back quietly.
      */
-    private fun goForeground() {
+    private fun goForeground(projecting: Boolean = false) {
         val first = notification(status)
         // The typed form only matters from Android 11, where the microphone
         // type exists; before that the manifest's types simply apply.
@@ -150,6 +150,8 @@ class CarnageService : android.app.Service() {
         if (micGranted) types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
         // "What am I looking at?" with the screen off needs the camera type too.
         if (cameraGranted) types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+        // Sharing his screen into a call: only while he has just agreed to it.
+        if (projecting) types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
         try {
             startForeground(NOTIFICATION_ID, first, types)
         } catch (e: Exception) {
@@ -234,11 +236,39 @@ class CarnageService : android.app.Service() {
             // the microphone type now, while visible, is what lets her keep
             // hearing him after the screen goes off.
             ACTION_CLAIM_MIC -> goForeground()
+            ACTION_SHARE_SCREEN -> shareScreen(intent)
         }
         // START_STICKY: if Android kills her under memory pressure she should
         // come back on her own. An assistant that stays dead until someone
         // notices is not one.
         return START_STICKY
+    }
+
+    /**
+     * He agreed to share his screen (MainActivity asked Android): become a
+     * screen-capture service first — Android 14 refuses the capture
+     * otherwise — then hand it to [Vision], and drop the type again when the
+     * sharing ends.
+     */
+    private fun shareScreen(intent: Intent) {
+        val code = intent.getIntExtra(EXTRA_CODE, 0)
+        val consent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableExtra(EXTRA_CONSENT, Intent::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra(EXTRA_CONSENT)
+        } ?: return
+        goForeground(projecting = true)
+        val capture = runCatching {
+            getSystemService(android.media.projection.MediaProjectionManager::class.java)
+                .getMediaProjection(code, consent)
+        }.onFailure { Log.w("carnage", "screen capture refused", it) }.getOrNull()
+        if (capture == null) {
+            goForeground()
+            return
+        }
+        Vision.onScreenEnded = { goForeground() }
+        Vision.startScreen(this, capture)
     }
 
     override fun onDestroy() {
@@ -301,6 +331,22 @@ class CarnageService : android.app.Service() {
         private const val NOTIFICATION_ID = 1
         const val ACTION_TALK = "com.hrishikesh.carnage.TALK"
         private const val ACTION_CLAIM_MIC = "com.hrishikesh.carnage.CLAIM_MIC"
+        private const val ACTION_SHARE_SCREEN = "com.hrishikesh.carnage.SHARE_SCREEN"
+        private const val EXTRA_CODE = "code"
+        private const val EXTRA_CONSENT = "consent"
+
+        /** Start streaming his screen into the call, from his consent. */
+        fun shareScreen(context: Context, code: Int, consent: Intent) {
+            val intent = Intent(context, CarnageService::class.java)
+                .setAction(ACTION_SHARE_SCREEN)
+                .putExtra(EXTRA_CODE, code)
+                .putExtra(EXTRA_CONSENT, consent)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        }
 
         /** Call from a visible screen after RECORD_AUDIO is granted. */
         fun claimMic(context: Context) {

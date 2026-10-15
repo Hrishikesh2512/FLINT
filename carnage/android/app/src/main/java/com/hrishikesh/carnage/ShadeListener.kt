@@ -1,6 +1,10 @@
 package com.hrishikesh.carnage
 
 import android.app.Notification
+import android.app.RemoteInput
+import android.content.Intent
+import android.os.Build
+import android.os.Bundle
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.service.notification.NotificationListenerService
@@ -68,6 +72,49 @@ class ShadeListener : NotificationListenerService() {
 
         /** The connected listener, when notification access is granted. */
         fun live(): ShadeListener? = instance
+
+        /**
+         * Answers the newest message from [who] through its notification's
+         * own reply box, as the shade's Reply button does. A status map for
+         * Python: sent, no_reply_box (the app offers none), or not_found;
+         * null without notification access.
+         */
+        @JvmStatic
+        fun reply(who: String, text: String): Map<String, Any?>? {
+            val live = instance ?: return null
+            val wanted = who.trim().lowercase()
+            val active = runCatching { live.activeNotifications }.getOrNull() ?: return null
+            val match = active
+                .filter { it.packageName != live.packageName }
+                .sortedByDescending { it.postTime }
+                .firstOrNull { sbn ->
+                    val extras = sbn.notification?.extras ?: return@firstOrNull false
+                    listOf(Notification.EXTRA_TITLE, Notification.EXTRA_CONVERSATION_TITLE)
+                        .mapNotNull { extras.getCharSequence(it)?.toString()?.lowercase() }
+                        .any { wanted.isNotEmpty() && wanted in it }
+                }
+                ?: return mapOf("status" to "not_found")
+            val note = match.notification
+            val title = note.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: who
+            val app = runCatching {
+                live.packageManager.getApplicationLabel(
+                    live.packageManager.getApplicationInfo(match.packageName, 0)).toString()
+            }.getOrDefault(match.packageName)
+            val action = note.actions?.filter { !it.remoteInputs.isNullOrEmpty() }
+                ?.let { replies ->
+                    replies.firstOrNull {
+                        Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
+                            it.semanticAction == Notification.Action.SEMANTIC_ACTION_REPLY
+                    } ?: replies.firstOrNull()
+                }
+                ?: return mapOf("status" to "no_reply_box", "to" to title, "app" to app)
+            val fill = Intent()
+            val answers = Bundle()
+            action.remoteInputs.forEach { answers.putCharSequence(it.resultKey, text) }
+            RemoteInput.addResultsToIntent(action.remoteInputs, fill, answers)
+            action.actionIntent.send(live, 0, fill)
+            return mapOf("status" to "sent", "to" to title, "app" to app)
+        }
 
         /** What is in the shade right now, as plain maps for Python. */
         @JvmStatic

@@ -129,17 +129,3 @@ def register_camera_tools(reg, phone: Phone, describe) -> None:
     )
     def find_thing(thing: str) -> str:
         return _look(f"Is there {thing} in view? Where?", FIND_SYSTEM)
-
-
-def gemini_describer(api_key: str):
-    """The vision call Venom uses, bound to a key."""
-    from flint_core.llm.providers import GeminiProvider
-
-    provider = GeminiProvider(api_key)
-
-    def describe(prompt: str, jpeg_b64: str, system: str) -> str:
-        return provider.complete_vision(prompt, jpeg_b64, "image/jpeg",
-                                        provider.vision_models[0],
-                                        system=system, max_tokens=300)
-
-    return describe

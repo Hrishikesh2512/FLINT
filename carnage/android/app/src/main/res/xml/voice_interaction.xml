@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What makes Jarvis choosable as the digital assistant. Android insists on
+     a recognition service too; RecognizerProxy passes it through to the
+     phone's own. -->
+<voice-interaction-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:sessionService="com.hrishikesh.carnage.AssistSessionService"
+    android:recognitionService="com.hrishikesh.carnage.RecognizerProxy"
+    android:supportsAssist="true"
+    android:supportsLaunchVoiceAssistFromKeyguard="true"
+    android:supportsLocalInteraction="true"/>

@@ -32,6 +32,37 @@
     <string name="pairing_title">Pair with Venom</string>
     <string name="pairing_body">Token  %1$s\nPort   %2$d</string>
     <string name="pairing_unavailable">Not ready yet.</string>
+    <string name="make_assistant">Make Jarvis the phone\'s assistant</string>
+    <string name="is_assistant">Jarvis is the phone\'s assistant</string>
+    <string name="pick_assistant">Choose Jarvis under Digital assistant app.</string>
+
+    <!-- the assistant overlay (hold the power button) -->
+    <string name="ask_about_screen">Ask about this screen</string>
+    <string name="looking_at">Looking at %1$s</string>
+    <string name="looking_at_screen">Looking at your screen</string>
+    <string name="drop_screen">Don\'t use the screen</string>
+    <string name="open_app">Open Carnage</string>
+    <!-- live video in a call -->
+    <string name="camera_on">Camera</string>
+    <string name="camera_off">Stop camera</string>
+    <string name="screen_on">Share screen</string>
+    <string name="screen_off">Stop sharing</string>
+    <string name="camera_view">What Jarvis sees</string>
+
+    <!-- attachments and sharing -->
+    <string name="attach">Attach a photo or PDF</string>
+    <string name="whats_this">What\'s this?</string>
+    <string name="ask_about_this">Ask about this</string>
+    <string name="remove_attachment">Remove</string>
+    <string name="shared_text">Shared text</string>
+    <string name="only_photos_pdfs">Jarvis can read photos, PDFs and text.</string>
+
+    <!-- using other apps -->
+    <string name="let_hands">Let Jarvis use your apps</string>
+    <string name="hands_on">Jarvis can use your apps</string>
+    <string name="pick_hands">Turn on Jarvis under Installed apps.</string>
+    <string name="hands_description">Lets Jarvis do tasks in your other apps when you ask — opening them, reading what is on screen, tapping and typing. Jarvis only looks when you give it a task, never types into password fields, and stops to ask you before anything that sends, pays, orders, posts or deletes.</string>
+
     <string name="copy_token">Copy token</string>
     <string name="token_copied">Copied.</string>
     <string name="no_token_yet">Save first.</string>

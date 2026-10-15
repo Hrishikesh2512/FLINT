@@ -76,6 +76,10 @@ class LiveBrain:
             }},
             "inputAudioTranscription": {},
             "outputAudioTranscription": {},
+            # Without it Google ends a call with video in it after about two
+            # minutes; a sliding window keeps the call going as long as he
+            # does, forgetting only the oldest of what was seen and said.
+            "contextWindowCompression": {"slidingWindow": {}},
         }}
 
     # ── tool calls ──────────────────────────────────────────────────────────

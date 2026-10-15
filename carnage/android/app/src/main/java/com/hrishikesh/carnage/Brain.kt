@@ -46,11 +46,35 @@ object Brain {
             ?: "not started"
 
     /** One turn of conversation. Blocking — callers move it off the main thread. */
-    fun ask(said: String): String =
-        runCatching { carnage?.callAttr("answer", said)?.toString() }
+    /**
+     * One turn of conversation. Blocking — callers move it off the main
+     * thread. [itemsJson] is what goes with it ([{"name","mime","text"|
+     * "data"}]: a screenshot, a photo, a PDF, shared text); [onWords] hears
+     * her reply so far, on a background thread, as the voice model says it.
+     */
+    fun ask(
+        said: String,
+        context: String = "",
+        itemsJson: String = "[]",
+        onWords: ((String) -> Unit)? = null,
+    ): String =
+        runCatching {
+            carnage?.callAttr("answer", said, context, itemsJson, onWords?.let(::Words))
+                ?.toString()
+        }
             .onFailure { Log.w(TAG, "ask failed", it) }
             .getOrNull()
             ?: "Something went wrong in my head just then."
+
+    /**
+     * His screen's app and text as context for [ask]; the screenshot itself
+     * goes to [ask] as an item. "" if nothing came through.
+     */
+    fun readScreen(app: String, text: String, jpegB64: String): String =
+        runCatching { carnage?.callAttr("read_screen", app, text, jpegB64)?.toString() }
+            .onFailure { Log.w(TAG, "read screen failed", it) }
+            .getOrNull()
+            .orEmpty()
 
     fun status(): String =
         runCatching { carnage?.callAttr("status")?.toString() }.getOrNull() ?: "{}"
@@ -99,4 +123,12 @@ object Brain {
             .onFailure { Log.w(TAG, "configure failed", it) }
             .getOrNull()
             ?: "Could not save that."
+}
+
+/**
+ * Her reply so far, handed from Python as it arrives. A plain public class,
+ * not a lambda, so Chaquopy can always find and call `words` on it.
+ */
+class Words(private val deliver: (String) -> Unit) {
+    fun words(text: String) = deliver(text)
 }

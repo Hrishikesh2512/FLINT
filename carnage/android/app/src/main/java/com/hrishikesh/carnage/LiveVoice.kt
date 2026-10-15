@@ -79,6 +79,33 @@ object LiveVoice {
     fun addListener(listener: Listener) = synchronized(listeners) { listeners.add(listener) }
     fun removeListener(listener: Listener) = synchronized(listeners) { listeners.remove(listener) }
 
+    /**
+     * What is on his screen, for a call started over another app: [text] is
+     * the screen as context, [jpegB64] one frame of it so she can see it too.
+     * Held until the call is up, so it can arrive before or after it starts.
+     * Cleared with [stop]: a screen he has left is not his context any more.
+     */
+    @Volatile private var screen: Pair<String, String>? = null
+
+    fun share(text: String, jpegB64: String) {
+        if (text.isEmpty() && jpegB64.isEmpty()) return
+        screen = text to jpegB64
+        call?.sendScreen()
+    }
+
+    /** One frame of live video (Vision.kt): what the camera or screen shows. */
+    fun frame(jpegB64: String) {
+        call?.sendFrame(jpegB64)
+    }
+
+    /**
+     * A line of context she reads but does not answer: "he turned on his
+     * camera". Without it she would see frames start with no idea why.
+     */
+    fun note(text: String) {
+        call?.sendNote(text)
+    }
+
     /** Start talking if quiet, hang up if talking. What every button does. */
     fun toggle(context: Context) {
         if (active) stop() else start(context)
@@ -104,6 +131,9 @@ object LiveVoice {
         // Who hung up, so a call that ends by itself can be traced.
         Log.i(TAG, "hanging up", Throwable("stop() called from"))
         changedAt = android.os.SystemClock.elapsedRealtime()
+        screen = null
+        // Nothing is watched with nobody on the call to watch it.
+        Vision.stop()
         call?.close()
         call = null
     }
@@ -201,8 +231,65 @@ object LiveVoice {
             chime()
             startSpeaker()
             startMic()
+            began = true
+            sendScreen()
             state("listening")
             watchIdle()
+        }
+
+        @Volatile private var began = false
+        private var screenSent: Pair<String, String>? = null
+
+        fun sendFrame(jpeg: String) {
+            if (!began || !open) return
+            lastActivity = System.currentTimeMillis()   // watching is not idle
+            socket?.send(
+                """{"realtimeInput":{"video":{"data":"$jpeg","mimeType":"image/jpeg"}}}"""
+            )
+        }
+
+        fun sendNote(text: String) {
+            if (!began || !open) return
+            val turn = JSONObject().put("role", "user")
+                .put("parts", org.json.JSONArray().put(JSONObject().put("text", text)))
+            socket?.send(
+                JSONObject().put(
+                    "clientContent",
+                    JSONObject().put("turns", org.json.JSONArray().put(turn))
+                        .put("turnComplete", false),
+                ).toString()
+            )
+        }
+
+        /**
+         * His screen into the call: the text as context that does not ask for
+         * a reply (turnComplete false — she waits for him to speak), the
+         * screenshot as one video frame so she can see what text cannot say.
+         */
+        @Synchronized
+        fun sendScreen() {
+            val shared = screen ?: return
+            if (!began || !open || shared === screenSent) return
+            screenSent = shared
+            val (text, jpeg) = shared
+            if (text.isNotEmpty()) {
+                val turn = JSONObject()
+                    .put("role", "user")
+                    .put("parts", org.json.JSONArray().put(JSONObject().put("text", text)))
+                socket?.send(
+                    JSONObject().put(
+                        "clientContent",
+                        JSONObject()
+                            .put("turns", org.json.JSONArray().put(turn))
+                            .put("turnComplete", false),
+                    ).toString()
+                )
+            }
+            if (jpeg.isNotEmpty()) {
+                socket?.send(
+                    """{"realtimeInput":{"video":{"data":"$jpeg","mimeType":"image/jpeg"}}}"""
+                )
+            }
         }
 
         private fun content(content: JSONObject) {
@@ -241,6 +328,29 @@ object LiveVoice {
         }
 
         private fun answerTools(raw: String) {
+            // Watching live already: a one-photo look would be slower and
+            // older than what she sees. Answer those calls here, pointing
+            // her back to the live view.
+            if (Vision.source != Vision.Source.NONE) {
+                val calls = JSONObject(raw).optJSONObject("toolCall")
+                    ?.optJSONArray("functionCalls") ?: org.json.JSONArray()
+                val names = List(calls.length()) { calls.getJSONObject(it).optString("name") }
+                if (names.isNotEmpty() && names.all { it == "look_around" || it == "find_thing" }) {
+                    val replies = org.json.JSONArray()
+                    for (i in 0 until calls.length()) {
+                        val call = calls.getJSONObject(i)
+                        replies.put(JSONObject()
+                            .put("id", call.optString("id"))
+                            .put("name", call.optString("name"))
+                            .put("response", JSONObject().put("result",
+                                "You are already seeing his ${if (Vision.source == Vision.Source.SCREEN) "screen" else "camera"} " +
+                                    "live. Answer from what you see right now.")))
+                    }
+                    if (open) socket?.send(JSONObject().put("toolResponse",
+                        JSONObject().put("functionResponses", replies)).toString())
+                    return
+                }
+            }
             val answer = Brain.liveTool(raw)?.let { runCatching { JSONObject(it) }.getOrNull() }
                 ?: return
             if (answer.optBoolean("end")) hangUpAfterReply = true

@@ -127,13 +127,13 @@ def test_android_clamps_volume_and_filters_actions():
 def test_the_camera_photo_goes_to_the_vision_call(carnage, monkeypatch):
     seen = {}
 
-    def describe(prompt, jpeg, system):
+    def describe(self, prompt, jpeg, system="", **_):
         seen.update(prompt=prompt, jpeg=jpeg, system=system)
         return "A cup of chai on a desk."
 
-    from carnage import tools_media
+    from carnage.livetext import LiveModel
 
-    monkeypatch.setattr(tools_media, "gemini_describer", lambda key: describe)
+    monkeypatch.setattr(LiveModel, "describe", describe)
     fresh = Carnage(carnage.config, phone=FullPhone())
     assert tool(fresh, "look_around") == "A cup of chai on a desk."
     assert seen["jpeg"] == "anpeg"

@@ -111,6 +111,26 @@
                     android:text="@string/shade"
                     android:textColor="@color/ink"
                     android:textSize="15sp"/>
+
+                <!-- Holding the power button opens Jarvis instead of Gemini. -->
+                <TextView
+                    android:id="@+id/assistantRole"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:gravity="center_vertical"
+                    android:text="@string/make_assistant"
+                    android:textColor="@color/ink"
+                    android:textSize="15sp"/>
+
+                <!-- Hands: the accessibility service for using other apps. -->
+                <TextView
+                    android:id="@+id/hands"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:gravity="center_vertical"
+                    android:text="@string/let_hands"
+                    android:textColor="@color/ink"
+                    android:textSize="15sp"/>
             </LinearLayout>
 
             <Button

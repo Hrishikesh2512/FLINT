@@ -36,8 +36,15 @@ from flint_core.skills import (
     register_watch_tools,
 )
 
+from carnage.hands import HANDS_PROMPT, register_hands_tools
 from carnage.sos import register_sos_contact_tools
 from carnage.tools_actions import ACTIONS_PROMPT, register_action_tools
+from carnage.tools_extras import (
+    NAVIGATION_PROMPT,
+    REPLY_PROMPT,
+    register_navigation_tools,
+    register_reply_tools,
+)
 from carnage.tools_media import register_camera_tools, register_music_tools
 from carnage.tools_phone import (
     register_phone_tools,
@@ -77,7 +84,9 @@ MUSIC_PROMPT = (
 CAMERA_PROMPT = (
     "CAMERA: you can see through the phone's back camera. look_around when he "
     "asks what something is or to read something; find_thing when he is "
-    "looking for one object. Tell him to point the phone at it first."
+    "looking for one object. Tell him to point the phone at it first. During "
+    "a voice call he can also share his camera or his screen live; while he "
+    "does, you see it directly — answer from that, not from these tools."
 )
 
 ON_THE_PI = (
@@ -93,7 +102,7 @@ def build_capabilities(config, *, phone=None, memory=None, projects=None,
                        sos=None, connections=None, notes=None, lists=None,
                        reminders=None, calendar=None, mailbox=None, audit=None,
                        timers=None, search=None, relay=None,
-                       roster=None, describe=None) -> CapabilitySet:
+                       roster=None, describe=None, decide=None) -> CapabilitySet:
     """Everything this phone can do, given what was actually wired up.
 
     Long argument list on purpose: each one is a thing that may or may not
@@ -294,6 +303,31 @@ def build_capabilities(config, *, phone=None, memory=None, projects=None,
             permissions=("camera",),
             register=(lambda reg: register_camera_tools(reg, phone, describe))
             if has_phone and describe is not None else None,
+        ),
+        Capability(
+            name="navigation", order=65,
+            summary="Start Google Maps navigation to a place.",
+            prompt=NAVIGATION_PROMPT, available=has_phone,
+            permissions=("device_control",),
+            register=(lambda reg: register_navigation_tools(reg, phone))
+            if has_phone else None,
+        ),
+        Capability(
+            name="replies", order=66,
+            summary="Answer a message from its notification.",
+            prompt=REPLY_PROMPT, available=has_phone,
+            permissions=("messaging", "personal_data"),
+            register=(lambda reg: register_reply_tools(reg, phone))
+            if has_phone else None,
+        ),
+        Capability(
+            name="hands", order=68,
+            summary="Tap and type through his other apps to get a task done.",
+            prompt=HANDS_PROMPT,
+            available=has_phone and decide is not None,
+            permissions=("device_control", "personal_data", "messaging"),
+            register=(lambda reg: register_hands_tools(reg, phone, decide))
+            if has_phone and decide is not None else None,
         ),
         Capability(
             name="emergency_sms", order=90,
