@@ -487,6 +487,12 @@ class AndroidPhone:
         result = self._call("reply", who=who, text=text)
         return result if isinstance(result, dict) else None
 
+    # ── Shield, his store (tools_shield.py) ─────────────────────────────────
+    def shield_access(self) -> dict | None:
+        """{"token", "port"} from the Shield app on this phone, or None."""
+        found = self._call("shield")
+        return found if isinstance(found, dict) and found.get("token") else None
+
     # ── using other apps (hands.py, through Hands.kt) ───────────────────────
     def screen_elements(self) -> dict | None:
         """What is on screen to touch, or None while Hands is switched off."""

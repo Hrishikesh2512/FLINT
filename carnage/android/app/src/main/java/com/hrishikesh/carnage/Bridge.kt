@@ -87,6 +87,7 @@ object Bridge {
                 )
                 // Using other apps (carnage/hands.py): look, act, and get the
                 // assistant sheet out of the way while she works.
+                "shield" -> shield(context)
                 "hands_look" -> Hands.look()
                 "hands_act" -> Hands.act(
                     kwargs["action"]?.toString().orEmpty(),
@@ -180,6 +181,16 @@ object Bridge {
         }
         return true
     }
+
+    // ── Shield, his store ───────────────────────────────────────────────────
+    /** Shield's API token and port, from Shield itself; null if not installed. */
+    private fun shield(context: Context): Map<String, Any>? =
+        context.contentResolver.query(
+            android.net.Uri.parse("content://com.hrishikesh.shield.token"), null, null, null, null,
+        )?.use { row ->
+            if (!row.moveToFirst()) return null
+            mapOf("token" to row.getString(0), "port" to row.getInt(1))
+        }
 
     // ── odds and ends ───────────────────────────────────────────────────────
     private fun vibrate(context: Context, milliseconds: Long): Boolean {

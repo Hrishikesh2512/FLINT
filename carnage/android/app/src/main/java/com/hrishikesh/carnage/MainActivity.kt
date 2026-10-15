@@ -397,7 +397,10 @@ class MainActivity : AppCompatActivity() {
     private fun takeShare(intent: Intent?) {
         when (intent?.action) {
             Intent.ACTION_SEND -> {
-                streams(intent).forEach(::stageUri)
+                val subject = intent.getStringExtra(Intent.EXTRA_SUBJECT).orEmpty()
+                val (chats, others) = streams(intent).partition { maybeChat(it) }
+                chats.forEach { importChat(it, subject) }
+                others.forEach(::stageUri)
                 intent.getStringExtra(Intent.EXTRA_TEXT)?.takeIf { it.isNotBlank() }?.let {
                     stage(Staged(intent.getStringExtra(Intent.EXTRA_SUBJECT)
                         ?: getString(R.string.shared_text), "text/plain", null, it))
@@ -410,6 +413,57 @@ class MainActivity : AppCompatActivity() {
         intent.action = Intent.ACTION_MAIN
         input.requestFocus()
     }
+
+    // ── old WhatsApp chats: Export chat → Jarvis ───────────────────────────
+    /** A text file or a zip: possibly a WhatsApp export, worth a look. */
+    private fun maybeChat(uri: Uri): Boolean {
+        val mime = contentResolver.getType(uri).orEmpty()
+        return mime == "text/plain" || mime == "application/zip" ||
+            displayName(uri).endsWith(".zip", ignoreCase = true)
+    }
+
+    /**
+     * Files the chat in her memory if it is a WhatsApp export; anything else
+     * is attached as usual. Plain parsing on the phone — no model involved,
+     * so a long chat costs nothing to bring in.
+     */
+    private fun importChat(uri: Uri, subject: String) {
+        val name = displayName(uri)
+        val working = turn("…", mine = false)
+        lifecycleScope.launch {
+            val said = withContext(Dispatchers.IO) {
+                val text = readChat(uri) ?: return@withContext null
+                Brain.importWhatsApp(text, name, subject)
+            }
+            if (said != null) {
+                Chat.show(working, said)
+            } else {
+                log.removeView(working)
+                stageUri(uri)
+            }
+            scrollDown()
+        }
+    }
+
+    /** The export's text, from the .txt itself or the one inside its zip. */
+    private fun readChat(uri: Uri): String? = runCatching {
+        contentResolver.openInputStream(uri)?.use { stream ->
+            val mime = contentResolver.getType(uri).orEmpty()
+            if (mime == "application/zip" || displayName(uri).endsWith(".zip", true)) {
+                val zip = java.util.zip.ZipInputStream(stream)
+                generateSequence { zip.nextEntry }
+                    .firstOrNull { it.name.endsWith(".txt", ignoreCase = true) }
+                    ?.let { zip.reader().readText() }
+            } else {
+                stream.reader().readText()
+            }
+        }
+    }.getOrNull()
+
+    private fun displayName(uri: Uri): String = runCatching {
+        contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { if (it.moveToFirst()) it.getString(0) else null }
+    }.getOrNull() ?: uri.lastPathSegment.orEmpty()
 
     private fun streams(intent: Intent): List<Uri> =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

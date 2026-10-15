@@ -6,7 +6,7 @@ screenshot. The Kotlin side flattens the tree to text; this turns both into one
 block of context that rides along with what he says, so "reply to this",
 "what's this?" and "add that to my calendar" mean the thing in front of him.
 
-The text is the reliable half — exact names, numbers and messages, cheap to
+The text is the reliable half, exact names, numbers and messages, cheap to
 send. The screenshot is for what text cannot carry: a photo, a product, a
 chart, or an app that draws its own pixels and exposes no text at all. It is
 described once, when the screen arrives, not on every turn: the follow-ups in
@@ -36,8 +36,8 @@ DESCRIBE_SYSTEM = ("You describe phone screenshots precisely and briefly. "
 
 HOW_TO_USE = (
     "\"This\", \"it\", \"here\", \"this message\" and \"that\" mean what is on "
-    "this screen. Answer from it directly. If he asks you to act on it — reply, "
-    "save, remind, look something up — use the details on the screen; never "
+    "this screen. Answer from it directly. If he asks you to act on it, reply, "
+    "save, remind, look something up, use the details on the screen; never "
     "ask him to read out what is already in front of you.")
 
 
@@ -46,7 +46,7 @@ def screen_context(app: str, text: str, jpeg_b64: str = "",
     """One block of context about his screen; "" when there is nothing to say.
 
     `describe(prompt, jpeg_b64, system, max_tokens=...)` is the vision call.
-    Without it, or when it fails, the screen text alone is used — a missing
+    Without it, or when it fails, the screen text alone is used, a missing
     description makes her less sharp, never wrong.
     """
     app = (app or "").strip()
@@ -56,12 +56,12 @@ def screen_context(app: str, text: str, jpeg_b64: str = "",
         try:
             seen = str(describe(DESCRIBE_SCREEN, jpeg_b64, DESCRIBE_SYSTEM,
                                 max_tokens=700) or "").strip()
-        except Exception as exc:            # noqa: BLE001 — network / API
+        except Exception as exc:            # noqa: BLE001, network / API
             log.warning("could not describe the screen: %s", exc)
     if not (text or seen):
         return ""
 
-    lines = ["[WHAT IS ON HIS SCREEN RIGHT NOW — he called you up while "
+    lines = ["[WHAT IS ON HIS SCREEN RIGHT NOW, he called you up while "
              "looking at it]"]
     if app:
         lines.append(f"App: {app}")

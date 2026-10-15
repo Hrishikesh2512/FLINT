@@ -23,6 +23,7 @@ then the rarer ones, with SIGNING OFF last because it reads as a closing note.
 from __future__ import annotations
 
 from flint_core.capabilities import Capability, CapabilitySet
+from flint_core.skills.shield import SHIELD_PROMPT
 
 # ── prompt fragments ─────────────────────────────────────────────────────────
 # Text moved verbatim from live.py's PERSONA. Tuned on real hardware over many
@@ -493,6 +494,15 @@ def build_capabilities(config, *, music=None, chess=None, sos=None,
             tools=("find_my_phone",),
         ),
         # ── safety-critical, and the closing note ────────────────────────
+        Capability(
+            name="shield", order=80,
+            summary="His Shield store on the phone: find, read, save, organise.",
+            prompt=SHIELD_PROMPT,
+            available=bool(getattr(getattr(config, "shield", None), "ready", False)),
+            permissions=("files", "personal_data", "network"),
+            tools=("shield_search", "shield_read", "shield_list", "shield_save",
+                   "shield_organise"),
+        ),
         Capability(
             name="emergency", order=90,
             summary="SOS: alert emergency contacts and stay in emergency mode.",

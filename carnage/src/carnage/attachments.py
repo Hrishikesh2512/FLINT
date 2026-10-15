@@ -5,7 +5,7 @@ way his screen does (`carnage.screen`). A photo or a PDF is read once, by the
 vision model, with his question in mind; the follow-ups in the same sitting
 reuse that reading rather than paying for it again.
 
-Shared text goes in as it is — it is already words, and a model paraphrasing
+Shared text goes in as it is, it is already words, and a model paraphrasing
 a message before she answers about it only loses the exact wording.
 """
 
@@ -54,7 +54,7 @@ def attachment_context(items: list[dict], question: str = "",
         data = str(item.get("data") or "").strip()
         if item.get("too_big"):
             kind = _KINDS.get(mime, "photo" if mime.startswith("image/") else "file")
-            blocks.append(f"A {kind} ({name}) — too big to read; tell him so.")
+            blocks.append(f"A {kind} ({name}), too big to read; tell him so.")
         elif text:
             if len(text) > MAX_TEXT:
                 text = text[:MAX_TEXT] + " …(cut)"
@@ -71,9 +71,9 @@ def _read_file(name: str, mime: str, data: str, question: str,
     kind = _KINDS.get(mime, "photo" if mime.startswith("image/") else "file")
     if describe is None:
         # Not read separately: the file itself rides in the same message.
-        return f"A {kind} ({name}) — it is attached to this message; look at it."
+        return f"A {kind} ({name}), it is attached to this message; look at it."
     if len(data) * 3 // 4 > MAX_BYTES:
-        return f"A {kind} ({name}) — too big to read; tell him so."
+        return f"A {kind} ({name}), too big to read; tell him so."
     asked = f" He asks: \"{question.strip()}\"." if question.strip() else ""
     if kind == "PDF":
         prompt = (f"He shared this PDF.{asked} Say what it is, then give "
@@ -88,9 +88,9 @@ def _read_file(name: str, mime: str, data: str, question: str,
     try:
         seen = str(describe(prompt, data, READ_SYSTEM, max_tokens=budget,
                             mime=mime or "image/jpeg") or "").strip()
-    except Exception as exc:                # noqa: BLE001 — network / API
+    except Exception as exc:                # noqa: BLE001, network / API
         log.warning("could not read %s: %s", name, exc)
-        return f"A {kind} ({name}) — reading it failed just now; say so."
+        return f"A {kind} ({name}), reading it failed just now; say so."
     if not seen:
         return f"A {kind} ({name}) that came back unreadable."
     return f"A {kind} ({name}):\n{seen}"

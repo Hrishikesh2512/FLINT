@@ -57,3 +57,17 @@ def get_gemini_key() -> str | None:
 def is_configured() -> bool:
     key = get_gemini_key()
     return bool(key and len(key) > 15)
+
+
+def get_shield() -> tuple[str, str]:
+    """Shield, his store on the phone: (address, token), or ("", "") until set.
+
+    From `shield_url` and `shield_token` in the config file (Shield → Settings
+    shows both), or the SHIELD_URL and SHIELD_TOKEN environment variables.
+    """
+    import os
+
+    keys = load_api_keys()
+    url = str(keys.get("shield_url") or os.environ.get("SHIELD_URL") or "").strip().rstrip("/")
+    token = str(keys.get("shield_token") or os.environ.get("SHIELD_TOKEN") or "").strip()
+    return url, token

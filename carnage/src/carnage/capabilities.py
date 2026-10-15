@@ -51,6 +51,7 @@ from carnage.tools_phone import (
     register_sms_tools,
     register_sos_sms,
 )
+from carnage.tools_shield import SHIELD_PROMPT, register_shield_tools, shield_connector
 
 log = logging.getLogger("carnage.capabilities")
 
@@ -59,7 +60,9 @@ PHONE_PROMPT = (
     "cannot — a real GPS position rather than a city, the battery, and what "
     "is in the notification shade. Use where_am_i when a task turns on where "
     "he actually is. Mention the battery unprompted only when it is low and "
-    "he is about to rely on the phone."
+    "he is about to rely on the phone. WhatsApp chats he has shared with you "
+    "(Export chat) are in your archive: for what someone said or what was "
+    "planned on WhatsApp, search with remember_about using their name."
 )
 
 SMS_PROMPT = (
@@ -328,6 +331,15 @@ def build_capabilities(config, *, phone=None, memory=None, projects=None,
             permissions=("device_control", "personal_data", "messaging"),
             register=(lambda reg: register_hands_tools(reg, phone, decide))
             if has_phone and decide is not None else None,
+        ),
+        Capability(
+            name="shield", order=69,
+            summary="His Shield store: find, read, save and organise his things.",
+            prompt=SHIELD_PROMPT,
+            available=has_phone and hasattr(phone, "shield_access"),
+            permissions=("files", "personal_data"),
+            register=(lambda reg: register_shield_tools(reg, shield_connector(phone), describe))
+            if has_phone and hasattr(phone, "shield_access") else None,
         ),
         Capability(
             name="emergency_sms", order=90,

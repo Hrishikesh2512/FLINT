@@ -398,6 +398,24 @@ class PermissionsConfig:
 
 
 @dataclass(frozen=True)
+class ShieldConfig:
+    """Shield, his store on the phone, which all his AIs share.
+
+        [shield]
+        url   = "http://100.x.y.z:8791"   # Shield → Settings shows it
+        token = "…"                        # and the token
+
+    Off until both are set.
+    """
+    url: str = ""
+    token: str = ""
+
+    @property
+    def ready(self) -> bool:
+        return bool(self.url and self.token)
+
+
+@dataclass(frozen=True)
 class SyncConfig:
     """Keeping this device's memory in step with the others.
 
@@ -572,6 +590,7 @@ class VenomConfig:
     dev: DevConfig = field(default_factory=DevConfig)
     ambient: AmbientConfig = field(default_factory=AmbientConfig)
     sync: SyncConfig = field(default_factory=SyncConfig)
+    shield: ShieldConfig = field(default_factory=ShieldConfig)
 
     def __post_init__(self) -> None:
         if self.poll_interval <= 0:
@@ -675,6 +694,7 @@ def load_config(path: Path | None = None) -> VenomConfig:
     permissions = data.get("permissions", {})
     dev = data.get("dev", {})
     sync = data.get("sync", {})
+    shield = data.get("shield", {})
     ambient = data.get("ambient", {})
     raw_brains = data.get("brain", [])
 
@@ -821,6 +841,10 @@ def load_config(path: Path | None = None) -> VenomConfig:
             devices=tuple(dict(d) for d in (sync.get("device_list")
                                             or data.get("device", []))
                           if isinstance(d, dict) and d.get("name")),
+        ),
+        shield=ShieldConfig(
+            url=str(shield.get("url", "")).strip().rstrip("/"),
+            token=str(shield.get("token", "")).strip(),
         ),
         permissions=PermissionsConfig(
             enabled=bool(permissions.get("enabled", True)),

@@ -5,7 +5,7 @@ Two small things a phone assistant is expected to do:
 - **navigate** hands a destination to Google Maps, already navigating. Maps
   works out the route and the time; she does not pretend to.
 - **reply_to_message** answers a message straight from its notification, the
-  way the "Reply" button in the shade does — no app opened, nothing tapped.
+  way the "Reply" button in the shade does, no app opened, nothing tapped.
   Only apps that put a reply box on their notifications (WhatsApp, Messages,
   Telegram, Instagram…) can be answered this way, and she says so otherwise.
 Both reach Android through `phone` methods that only `AndroidPhone`
@@ -19,7 +19,7 @@ import logging
 log = logging.getLogger("carnage.extras")
 
 NAVIGATION_PROMPT = (
-    "GETTING SOMEWHERE: navigate starts Google Maps navigation to a place — "
+    "GETTING SOMEWHERE: navigate starts Google Maps navigation to a place, "
     "'take me home', 'office chalo', 'directions to the airport'. If he says "
     "home or work and you know the address from memory, pass the address. "
     "Maps gives the route and the time; never invent one.")
@@ -27,7 +27,7 @@ NAVIGATION_PROMPT = (
 REPLY_PROMPT = (
     "REPLYING: reply_to_message answers a message from its notification "
     "(WhatsApp, Messages, Telegram and others). Send only words he actually "
-    "gave you, or that he agreed to after you read them back — never "
+    "gave you, or that he agreed to after you read them back, never "
     "improvise a message in his name.")
 
 _MODES = {"drive": "d", "driving": "d", "car": "d", "walk": "w", "walking": "w",
@@ -55,7 +55,7 @@ def register_navigation_tools(reg, phone) -> None:
         start = getattr(phone, "navigate", None)
         code = _MODES.get((mode or "drive").strip().lower(), "d")
         if start is None or not start(destination, code):
-            return ("I couldn't open Maps — it may not be installed, or I "
+            return ("I couldn't open Maps, it may not be installed, or I "
                     "need to be on screen to open it.")
         return f"Navigating to {destination} in Maps."
 
@@ -78,7 +78,7 @@ def register_reply_tools(reg, phone) -> None:
         reply = getattr(phone, "reply_to", None)
         result = reply(who, text) if reply is not None else None
         if not isinstance(result, dict):
-            return ("I can't reach notifications — turn on notification "
+            return ("I can't reach notifications, turn on notification "
                     "access for Carnage first.")
         status = result.get("status")
         if status == "sent":

@@ -76,6 +76,18 @@ object Brain {
             .getOrNull()
             .orEmpty()
 
+    /**
+     * A WhatsApp "Export chat" text, filed in her memory. Her sentence about
+     * it, or null when the text is not an export (then it is an ordinary
+     * attachment). Blocking: a long chat takes a moment to file.
+     */
+    fun importWhatsApp(text: String, fileName: String, subject: String): String? =
+        runCatching {
+            val result = org.json.JSONObject(
+                carnage?.callAttr("import_whatsapp", text, fileName, subject)?.toString() ?: "{}")
+            if (result.optBoolean("imported")) result.optString("say") else null
+        }.getOrNull()
+
     fun status(): String =
         runCatching { carnage?.callAttr("status")?.toString() }.getOrNull() ?: "{}"
 

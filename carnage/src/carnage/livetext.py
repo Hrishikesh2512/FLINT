@@ -2,7 +2,7 @@
 
 Carnage thinks with one model only: the native-audio Live model her voice
 calls use (`config.live_model`). It lives on the Live API's websocket and
-answers in audio, never text — so a typed question opens a short Live
+answers in audio, never text, so a typed question opens a short Live
 session, and her reply is the transcript of what she would have said.
 
 Everything that needs a model goes through here:
@@ -70,7 +70,7 @@ class LiveModel:
         `turns` are Live `clientContent` turns, the last one being his.
         `on_call(name, args)` answers each function call she makes. With
         `first_call_only`, the session ends at her first function call and
-        returns "" — the call itself is the answer (see `decide`).
+        returns "", the call itself is the answer (see `decide`).
 
         Never waits longer than the timeout and a margin, whatever the network
         does: the session runs on its own thread and is abandoned, not waited
@@ -80,10 +80,21 @@ class LiveModel:
         box: dict = {}
 
         def session():
-            try:
-                box["answer"] = self._session(turns, **options)
-            except BaseException as exc:    # noqa: BLE001 — carried to the caller
-                box["error"] = exc
+            # Google's side sometimes drops a session ("Internal error"). One
+            # retry hides that, but only while nothing has been done yet: a
+            # tool that already ran (a text sent, a tap made) must never run
+            # twice because the session around it failed.
+            for attempt in (1, 2):
+                progress: dict = {"calls": 0}
+                try:
+                    box["answer"] = self._session(turns, progress=progress, **options)
+                    box.pop("error", None)
+                    return
+                except BaseException as exc:    # noqa: BLE001, carried to the caller
+                    box["error"] = exc
+                    if attempt == 2 or progress["calls"] or not _transient(exc):
+                        return
+                    log.info("live: Google dropped the session (%s), trying once more", exc)
 
         worker = threading.Thread(target=session, name="carnage-live-text", daemon=True)
         worker.start()
@@ -99,7 +110,8 @@ class LiveModel:
                  functions: list[dict] | None = None,
                  on_call: Callable[[str, dict], Any] | None = None,
                  search: bool = False, first_call_only: bool = False,
-                 on_text: Callable[[str], None] | None = None) -> str:
+                 on_text: Callable[[str], None] | None = None,
+                 progress: dict | None = None) -> str:
         tools: list[dict] = []
         if functions:
             tools.append({"functionDeclarations": functions})
@@ -141,8 +153,10 @@ class LiveModel:
                         name = str(call.get("name", ""))
                         args = call.get("args") or {}
                         calls += 1
+                        if progress is not None:
+                            progress["calls"] = calls
                         if calls > MAX_TOOL_CALLS:
-                            result = "Out of steps — answer him now with what you have."
+                            result = "Out of steps, answer him now with what you have."
                         else:
                             result = on_call(name, dict(args)) if on_call else "Unavailable."
                         if first_call_only:
@@ -161,7 +175,7 @@ class LiveModel:
                     if on_text is not None:
                         try:
                             on_text(_tidy("".join(said)))
-                        except Exception:   # noqa: BLE001 — the screen went away
+                        except Exception:   # noqa: BLE001, the screen went away
                             log.debug("live: could not show words so far")
                 # A turn can end with only a tool call in it; her words come
                 # in the turn after the result, so keep listening for them.
@@ -180,7 +194,7 @@ class LiveModel:
             raw = socket.recv(timeout=remaining)
         except TimeoutError as exc:
             raise LiveError("the voice model took too long to answer") from exc
-        except Exception as exc:            # noqa: BLE001 — closed, refused, quota
+        except Exception as exc:            # noqa: BLE001, closed, refused, quota
             raise LiveError(_closed_reason(exc)) from exc
         if isinstance(raw, bytes):
             raw = raw.decode("utf-8", "replace")
@@ -212,8 +226,10 @@ class LiveModel:
                     "the facts, with numbers, names and dates. No preamble."),
             search=True)
 
-    def decide(self, prompt: str, system: str, function: dict) -> dict:
-        """Have her answer by calling `function` once; its arguments back."""
+    def decide(self, prompt: str, system: str, function: dict,
+               files: list[dict] | None = None) -> dict:
+        """Have her answer by calling `function` once; its arguments back.
+        `files` ({"mime", "data"}) are looked at in the same turn."""
         caught: dict = {}
 
         def keep(name: str, args: dict):
@@ -221,7 +237,10 @@ class LiveModel:
                 caught.update(args)
             return "ok"
 
-        self.run([{"role": "user", "parts": [{"text": prompt}]}],
+        parts = [{"inlineData": {"mimeType": f["mime"], "data": f["data"]}}
+                 for f in files or [] if f.get("data")]
+        parts.append({"text": prompt})
+        self.run([{"role": "user", "parts": parts}],
                  system=system, functions=[function], on_call=keep,
                  first_call_only=True)
         return caught
@@ -243,7 +262,7 @@ class LiveConversation:
         """What she says back. Never raises.
 
         `context` (his screen, or what he shared) and `files` ({"mime",
-        "data"}: a screenshot, a photo, a PDF — looked at in this same
+        "data"}: a screenshot, a photo, a PDF, looked at in this same
         session, not described first) go into this turn only, not into the
         remembered history: the next turn brings them again if they still
         apply. `on_text` hears her words as they arrive.
@@ -290,17 +309,26 @@ class LiveConversation:
 
 
 def trouble(exc: Exception) -> str:
-    """What she says when the model would not answer — the real reason, in
+    """What she says when the model would not answer, the real reason, in
     words he can act on, never a vague "couldn't think"."""
     text = str(exc).lower()
     if "quota" in text or "resource_exhausted" in text or "429" in text:
         return ("Gemini says this key's free quota is used up for now. Give "
                 "it a minute, or add billing to the key to lift the limit.")
     if "api key" in text or "permission" in text or "403" in text or "401" in text:
-        return "Gemini refused the API key — check it in Settings."
+        return "Gemini refused the API key, check it in Settings."
     if "too long" in text:
         return "That took too long to think through. Ask me again?"
-    return "I couldn't reach Gemini just now — check the internet and ask again."
+    if _transient(exc):
+        return "Gemini had a hiccup on its side just now, ask me again?"
+    return "I couldn't reach Gemini just now, check the internet and ask again."
+
+
+def _transient(exc: BaseException) -> bool:
+    """A failure on Google's side that a second try usually gets past."""
+    text = str(exc).lower()
+    return any(word in text for word in (
+        "internal error", "internal", "unavailable", "1011", "try again"))
 
 
 def _closed_reason(exc: Exception) -> str:

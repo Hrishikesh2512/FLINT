@@ -44,6 +44,7 @@ def everything(tmp_path):
         laptop=_replace(cfg.laptop, host="laptop.local"),
         screen=_replace(cfg.screen, host="laptop.local"),
         phone=_replace(cfg.phone, ntfy_topic="topic"),
+        shield=_replace(cfg.shield, url="http://phone:8791", token="t"),
         documents_dir=str(tmp_path),
         dev=DevConfig(repos=(("flint", str(tmp_path)),),
                       deploy_targets=({"name": "vps", "host": "h"},)),

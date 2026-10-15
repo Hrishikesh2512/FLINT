@@ -455,6 +455,15 @@ def _build_registry() -> ToolRegistry:
         platforms=("any",),
     )
 
+    # Shield, his store on the phone: the same tools Jarvis has everywhere.
+    from memory.config_manager import get_shield
+
+    shield_url, shield_token = get_shield()
+    if shield_url and shield_token:
+        from flint_core.skills.shield import register_shield_tools, shield_for
+
+        register_shield_tools(reg, shield_for(shield_url, shield_token, "flint"))
+
     return reg
 
 

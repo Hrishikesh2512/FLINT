@@ -191,6 +191,22 @@ class Archive:
         with self._lock:
             return self._db.execute(sql, args).fetchall()
 
+    def about(self, subject: str) -> list[Entry]:
+        """Everything filed under one subject, oldest first (a whole imported
+        WhatsApp chat, say)."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT * FROM entries WHERE subject = ? ORDER BY ts", (subject,)).fetchall()
+        return [self._entry(r) for r in rows]
+
+    def subjects(self, prefix: str = "") -> list[str]:
+        """The subjects in the archive, optionally only those starting with `prefix`."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT DISTINCT subject FROM entries WHERE subject LIKE ? ORDER BY subject",
+                (prefix.replace("%", "") + "%",)).fetchall()
+        return [r[0] for r in rows if r[0]]
+
     def recent(self, limit: int = DEFAULT_LIMIT, kind: str = "") -> list[Entry]:
         rows = sorted(self._rows(kind), key=lambda r: r["ts"], reverse=True)
         return [self._entry(r) for r in rows[:limit]]

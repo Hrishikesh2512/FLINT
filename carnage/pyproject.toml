@@ -9,6 +9,7 @@ description = "The phone body of the assistant — and the hub the others sync t
 requires-python = ">=3.11"
 dependencies = [
     "flint-core",
+    "shield-client",   # Shield, his store (tools_shield.py)
 ]
 
 [project.optional-dependencies]

@@ -116,8 +116,27 @@ def start(files_dir: str, bridge):
 
         _carnage = Carnage(config, phone=AndroidPhone(call))
         log.info("carnage up: %s", _carnage.describe())
+        _keep_shield()
         _serve(_carnage)
         return _Handle()
+
+
+def _keep_shield() -> None:
+    """Her memory mirrored into Shield, and Shield's Inbox sorted, in the
+    background (carnage/shield_keeper.py). Started once per process."""
+    global _keeper
+    if _keeper is not None:
+        return
+    from carnage.shield_keeper import keep
+    from carnage.tools_shield import shield_connector
+
+    def connect():
+        return shield_connector(_carnage.phone)() if _carnage is not None else None
+
+    _keeper = keep(lambda: _carnage, connect)
+
+
+_keeper = None
 
 
 def _settings() -> dict:
@@ -278,6 +297,16 @@ class _Handle:
         except Exception as exc:            # noqa: BLE001
             log.exception("answer failed")
             return f"Something went wrong in my head: {exc}"
+
+    # ── old WhatsApp chats, shared from WhatsApp's "Export chat" ───────────
+    def import_whatsapp(self, text: str, file_name: str = "", subject: str = "") -> str:
+        """JSON {"imported": bool, "say": ...}; not imported means it was not
+        an export, and the app treats it as an ordinary attachment."""
+        try:
+            return json.dumps(self._live().import_whatsapp(text, file_name, subject))
+        except Exception:                   # noqa: BLE001
+            log.exception("could not import a WhatsApp export")
+            return json.dumps({"imported": False})
 
     # ── his screen, when he calls her up over another app (AssistSession) ──
     def read_screen(self, app: str, text: str, jpeg_b64: str = "") -> str:

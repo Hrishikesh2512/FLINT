@@ -5,5 +5,6 @@ local.properties
 # them would create a second copy of the assistant that could drift.
 app/src/main/python/flint_core/
 app/src/main/python/carnage/
+app/src/main/python/shield_client/
 # Downloaded at build time (see fetchWakeWord in app/build.gradle.kts).
 app/src/main/assets/wakeword/

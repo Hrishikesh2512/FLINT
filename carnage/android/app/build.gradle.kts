@@ -90,6 +90,8 @@ val syncPythonPackages by tasks.registering(Copy::class) {
     into(pythonSource)
     from("$repoRoot/packages/flint-core/src/flint_core") { into("flint_core") }
     from("$repoRoot/carnage/src/carnage") { into("carnage") }
+    // Shield's client: how she reads and writes his store (tools_shield.py).
+    from("$repoRoot/packages/shield-client/src/shield_client") { into("shield_client") }
     exclude("**/__pycache__/**", "**/*.pyc")
 }
 

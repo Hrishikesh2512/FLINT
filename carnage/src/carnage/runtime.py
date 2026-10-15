@@ -191,6 +191,17 @@ class Carnage:
         # not through a separate describing session: one wait, not two.
         return screen_context(app, text, "", None)
 
+    def import_whatsapp(self, text: str, *hints: str) -> dict:
+        """A WhatsApp "Export chat" filed in her archive; see carnage.whatsapp.
+        {"imported": False} when the text is not an export."""
+        from carnage import whatsapp
+
+        result = whatsapp.import_export(
+            self.archive, text, whatsapp.chat_name(*hints), me=self.config.user_name,
+            ledger=self.config.state_dir / "whatsapp_imports.json")
+        result["say"] = whatsapp.spoken(result)
+        return result
+
     def due(self) -> list[dict]:
         """Timers and reminders whose moment has come, taken off the board.
 

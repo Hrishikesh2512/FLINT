@@ -30,6 +30,9 @@
     <!-- Sharing his screen into a voice call (Vision.kt), only when he says. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
+    <!-- Shield, his store: granted only because both apps are signed by him,
+         it hands Jarvis the API token on the phone itself. -->
+    <uses-permission android:name="com.hrishikesh.shield.permission.ACCESS"/>
 
     <!-- Android 11+ hides other apps unless asked for by name: the music apps
          "play X" may hand a search to. -->
@@ -50,6 +53,7 @@
         <intent>
             <action android:name="android.speech.RecognitionService"/>
         </intent>
+        <package android:name="com.hrishikesh.shield"/>
         <!-- "Take me home": navigation goes to Google Maps. -->
         <package android:name="com.google.android.apps.maps"/>
         <package android:name="com.google.android.apps.youtube.music"/>
@@ -94,6 +98,8 @@
                 <data android:mimeType="image/*"/>
                 <data android:mimeType="application/pdf"/>
                 <data android:mimeType="text/plain"/>
+                <!-- WhatsApp's "Export chat" with media comes as a zip. -->
+                <data android:mimeType="application/zip"/>
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.SEND_MULTIPLE"/>

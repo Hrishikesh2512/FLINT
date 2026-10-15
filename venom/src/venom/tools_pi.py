@@ -1244,4 +1244,11 @@ def build_pi_registry(config: VenomConfig, memory: MemoryStore,
             return f"I couldn't shut down: {exc}"
         return "Powering off. Good night, take care."
 
+    # Shield, his store on the phone: the same tools Jarvis has there.
+    shield = getattr(config, "shield", None)
+    if shield is not None and shield.ready:
+        from flint_core.skills.shield import register_shield_tools, shield_for
+
+        register_shield_tools(reg, shield_for(shield.url, shield.token, "venom"))
+
     return reg

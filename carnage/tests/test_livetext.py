@@ -153,3 +153,42 @@ def test_a_shared_file_goes_in_the_same_turn_as_the_question():
     assert parts[0] == {"inlineData": {"mimeType": "application/pdf", "data": "PDF"}}
     assert [p.get("text") for p in parts[1:]] == ["context", "what is this?"]
     assert model.options["on_text"] == words.append
+
+
+def test_a_dropped_session_is_tried_once_more():
+    good = Socket([[{"setupComplete": {}}], [said("Hi.", done=True)]])
+
+    class Dropped(Socket):
+        def recv(self, timeout=None):
+            raise RuntimeError("received 1011 (internal error) Internal error occurred.")
+
+    sockets = iter([Dropped([]), good])
+    model = LiveModel("KEY", "m", connect=lambda url: next(sockets))
+    assert model.run([{"role": "user", "parts": [{"text": "hi"}]}]) == "Hi."
+
+
+def test_no_retry_once_a_tool_has_run():
+    class DropsAfterCall(Socket):
+        def recv(self, timeout=None):
+            if not self.queue:
+                raise RuntimeError("received 1011 (internal error) Internal error occurred.")
+            return super().recv(timeout)
+
+    opened, ran = [], []
+
+    def connect(url):
+        socket = DropsAfterCall([[{"setupComplete": {}}], [{"toolCall": {"functionCalls": [
+            {"id": "1", "name": "send_text", "args": {}}]}}]])
+        opened.append(socket)
+        return socket
+
+    with pytest.raises(LiveError):
+        LiveModel("KEY", "m", connect=connect).run(
+            [{"role": "user", "parts": [{"text": "text Ma"}]}],
+            functions=[{"name": "send_text"}], on_call=lambda n, a: ran.append(n))
+    assert ran == ["send_text"] and len(opened) == 1     # sent once, never again
+
+
+def test_a_google_hiccup_is_not_blamed_on_his_internet():
+    dropped = LiveError("the voice model closed the session: Internal error occurred.")
+    assert "hiccup" in trouble(dropped)
