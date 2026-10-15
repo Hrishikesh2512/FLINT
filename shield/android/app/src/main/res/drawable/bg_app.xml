@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Night steel: deep blue fading down, a cold glow high on the right. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient android:angle="270" android:startColor="@color/bg_mid"
+                android:centerColor="@color/bg" android:endColor="@color/bg_deep"/>
+        </shape>
+    </item>
+    <item android:width="460dp" android:height="420dp" android:gravity="top|end"
+        android:right="-170dp" android:top="-110dp">
+        <shape android:shape="oval">
+            <gradient android:type="radial" android:gradientRadius="230dp"
+                android:startColor="#4D5EC8E5" android:centerColor="#145EC8E5"
+                android:endColor="#005EC8E5"/>
+        </shape>
+    </item>
+    <item android:width="520dp" android:height="440dp" android:gravity="bottom|start"
+        android:left="-200dp" android:bottom="-220dp">
+        <shape android:shape="oval">
+            <gradient android:type="radial" android:gradientRadius="260dp"
+                android:startColor="#331E6F8C" android:endColor="#001E6F8C"/>
+        </shape>
+    </item>
+</layer-list>

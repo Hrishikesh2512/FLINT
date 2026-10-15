@@ -1,0 +1,23 @@
+<resources>
+    <style name="Theme.Shield" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="android:windowBackground">@drawable/bg_app</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="colorPrimary">@color/shield</item>
+        <item name="colorOnPrimary">@color/bg_deep</item>
+        <item name="colorSecondary">@color/ai</item>
+        <item name="colorSurface">@color/sheet</item>
+        <item name="colorOnSurface">@color/ink</item>
+        <item name="colorOutline">@color/glass_edge</item>
+        <item name="android:textColorHighlight">#665EC8E5</item>
+    </style>
+
+    <!-- The share target: no window of its own, just a toast. -->
+    <style name="Theme.Shield.Invisible" parent="Theme.Shield">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
+</resources>

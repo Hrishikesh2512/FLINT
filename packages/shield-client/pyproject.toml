@@ -1,0 +1,24 @@
+[project]
+name = "shield-client"
+version = "0.1.0"
+description = "Talk to Shield — the phone app that holds everything your AIs know — from any Python AI."
+requires-python = ">=3.10"
+dependencies = ["requests>=2.31"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

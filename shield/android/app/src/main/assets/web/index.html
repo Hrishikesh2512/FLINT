@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shield</title>
+<style>
+  :root {
+    --bg: #071318; --bg2: #0b2230; --panel: rgba(255,255,255,.06); --panel2: rgba(255,255,255,.1);
+    --edge: rgba(255,255,255,.14); --ink: #f1f4f6; --dim: #93a6b0; --accent: #5ec8e5; --ai: #e8a33d;
+    --danger: #e8203a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink);
+    background: radial-gradient(1200px 700px at 90% -10%, rgba(94,200,229,.18), transparent 60%),
+                linear-gradient(180deg, var(--bg2), var(--bg) 40%, #050c14); min-height: 100vh; }
+  button, input, textarea { font: inherit; color: inherit; }
+  button { background: var(--panel); border: 1px solid var(--edge); border-radius: 999px; padding: 7px 14px;
+    cursor: pointer; }
+  button:hover { background: var(--panel2); }
+  button.primary { background: linear-gradient(135deg, var(--accent), #1e6f8c); color: #04121a; border: 0;
+    font-weight: 600; }
+  input, textarea { background: var(--panel); border: 1px solid var(--edge); border-radius: 12px;
+    padding: 9px 12px; outline: none; width: 100%; }
+  input:focus, textarea:focus { border-color: var(--accent); }
+  .brand { letter-spacing: .42em; font-size: 11px; font-weight: 700; color: var(--accent); }
+  #gate { max-width: 380px; margin: 18vh auto; padding: 28px; background: var(--panel);
+    border: 1px solid var(--edge); border-radius: 24px; }
+  #gate h1 { font-weight: 300; margin: 6px 0 14px; }
+  #gate p { color: var(--dim); font-size: 14px; }
+  #app { display: none; grid-template-columns: 210px 1fr; min-height: 100vh; }
+  nav { padding: 22px 14px; border-right: 1px solid var(--edge); }
+  nav h1 { font-weight: 300; font-size: 26px; margin: 4px 0 18px; }
+  nav a { display: block; padding: 8px 12px; border-radius: 12px; color: var(--ink); text-decoration: none;
+    margin-bottom: 4px; cursor: pointer; }
+  nav a.on { background: rgba(94,200,229,.18); color: var(--accent); }
+  main { padding: 20px 22px; min-width: 0; }
+  .bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .bar input { flex: 1; min-width: 160px; border-radius: 999px; }
+  #crumbs { color: var(--dim); font-size: 13px; margin: 14px 2px 8px; }
+  #crumbs span { cursor: pointer; }
+  #crumbs span:hover { color: var(--accent); }
+  .row { display: grid; grid-template-columns: 40px 1fr auto; gap: 12px; align-items: center; padding: 10px 12px;
+    border-radius: 16px; background: rgba(255,255,255,.03); margin-bottom: 6px; cursor: pointer; }
+  .row:hover { background: var(--panel); }
+  .row.sel { outline: 1px solid var(--accent); }
+  .ico { width: 40px; height: 40px; border-radius: 12px; background: var(--panel); display: grid;
+    place-items: center; font-size: 19px; overflow: hidden; }
+  .ico img { width: 100%; height: 100%; object-fit: cover; }
+  .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .meta { color: var(--dim); font-size: 12px; }
+  .meta.ai { color: var(--ai); }
+  .star { color: var(--ai); }
+  #empty { color: var(--dim); text-align: center; padding: 60px 20px; }
+  #drop { display: none; position: fixed; inset: 0; background: rgba(5,12,20,.8); place-items: center;
+    font-size: 22px; color: var(--accent); z-index: 5; border: 2px dashed var(--accent); }
+  #detail { position: fixed; top: 0; right: 0; width: min(520px, 100%); height: 100vh; overflow: auto;
+    background: #0c1c26; border-left: 1px solid var(--edge); padding: 20px; display: none; z-index: 4; }
+  #detail h2 { font-weight: 300; margin: 0 0 4px; word-break: break-word; }
+  #detail .acts { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
+  #detail img, #detail iframe { width: 100%; border-radius: 14px; border: 0; background: #fff; }
+  #detail iframe { height: 70vh; }
+  #detail pre { white-space: pre-wrap; word-break: break-word; background: var(--panel); padding: 14px;
+    border-radius: 14px; font-size: 13px; }
+  #detail textarea { min-height: 300px; }
+  .label { letter-spacing: .2em; font-size: 11px; color: var(--dim); margin: 18px 0 6px; }
+  .about { background: var(--panel); border-radius: 14px; padding: 12px 14px; }
+  .hist { font-size: 13px; padding: 3px 0; }
+  .hist.ai { color: var(--ai); }
+  .tag { display: inline-block; padding: 3px 10px; border-radius: 999px; background: rgba(94,200,229,.15);
+    color: var(--accent); font-size: 12px; margin: 0 6px 6px 0; }
+  @media (max-width: 720px) {
+    #app { grid-template-columns: 1fr; }
+    nav { border-right: 0; border-bottom: 1px solid var(--edge); display: flex; flex-wrap: wrap; gap: 4px;
+      align-items: center; padding: 14px; }
+    nav h1 { width: 100%; margin: 0 0 8px; font-size: 22px; }
+    nav a { margin: 0; }
+  }
+</style>
+</head>
+<body>
+
+<div id="gate">
+  <div class="brand">SHIELD</div>
+  <h1>Open Shield</h1>
+  <p>Paste your key from Shield on your phone: Settings, then "On your laptop".</p>
+  <input id="key" type="password" placeholder="Your key" autocomplete="off">
+  <p id="gateErr" style="color:var(--danger);display:none"></p>
+  <button class="primary" id="enter" style="margin-top:12px;width:100%">Open</button>
+</div>
+
+<div id="app">
+  <nav>
+    <div class="brand">SHIELD</div>
+    <h1>Shield</h1>
+    <a data-v="files" class="on">Files</a>
+    <a data-v="starred">Starred</a>
+    <a data-v="ai">From your AIs</a>
+    <a data-v="recent">Recent</a>
+    <a data-v="activity">Activity</a>
+    <a data-v="trash">Trash</a>
+    <a id="lock" style="color:var(--dim)">Lock</a>
+  </nav>
+  <main>
+    <div class="bar">
+      <input id="q" placeholder="Search everything" autocomplete="off">
+      <button id="newFolder">New folder</button>
+      <button id="newNote">New note</button>
+      <button class="primary" id="upload">Upload</button>
+      <input id="files" type="file" multiple style="display:none">
+    </div>
+    <div id="crumbs"></div>
+    <div id="list"></div>
+    <div id="empty"></div>
+  </main>
+</div>
+
+<div id="detail"></div>
+<div id="drop">Drop to upload here</div>
+
+<script>
+"use strict";
+let key = localStorage.getItem("shieldKey") || "";
+let view = "files", folder = null, selected = null;
+const $ = (id) => document.getElementById(id);
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, { ...opts, headers: { "X-Shield-Owner": key, ...(opts.headers || {}) } });
+  if (res.status === 401) { lock(); throw new Error("locked"); }
+  const body = res.headers.get("content-type")?.includes("json") ? await res.json() : res;
+  if (!res.ok) throw new Error(body.error || res.statusText);
+  return body;
+}
+const post = (path, data) => api(path, { method: "POST", headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(data) });
+
+function lock() {
+  localStorage.removeItem("shieldKey"); key = "";
+  $("app").style.display = "none"; $("detail").style.display = "none"; $("gate").style.display = "block";
+}
+
+async function enter() {
+  key = $("key").value.trim();
+  try {
+    await api("/v1/health");
+    localStorage.setItem("shieldKey", key);
+    $("gate").style.display = "none"; $("app").style.display = "grid";
+    show();
+  } catch (e) {
+    $("gateErr").textContent = "That key didn't work."; $("gateErr").style.display = "block";
+  }
+}
+
+function who(agent) {
+  if (agent === "you") return "You";
+  if (agent === "shield") return "Shield";
+  return agent.split(/[ _-]/).map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
+}
+function ago(ms) {
+  const s = (Date.now() - ms) / 1000;
+  if (s < 60) return "just now";
+  if (s < 3600) return Math.floor(s / 60) + " min ago";
+  if (s < 86400) return Math.floor(s / 3600) + " h ago";
+  if (s < 604800) return Math.floor(s / 86400) + " d ago";
+  return new Date(ms).toLocaleDateString();
+}
+function size(b) {
+  if (b < 1024) return b + " B";
+  if (b < 1048576) return Math.round(b / 1024) + " KB";
+  return (b / 1048576).toFixed(1) + " MB";
+}
+const byAi = (i) => i.created_by !== "you" && i.created_by !== "shield";
+function icon(i) {
+  if (i.kind === "folder") return i.name === "Inbox" && !i.parent ? "📥" : "📁";
+  if (i.kind === "note") return "📝";
+  if (i.kind === "link") return "🔗";
+  if (i.mime.startsWith("image/")) return "🖼️";
+  if (i.mime === "application/pdf") return "📕";
+  return "📄";
+}
+function meta(i) {
+  const what = { folder: "Folder", note: "Note", link: "Link" }[i.kind] || size(i.size);
+  return `${what} · ${ago(i.updated)}` + (byAi(i) ? ` · by ${who(i.created_by)}` : "");
+}
+function esc(t) { const d = document.createElement("div"); d.textContent = t ?? ""; return d.innerHTML; }
+
+async function show() {
+  document.querySelectorAll("nav a[data-v]").forEach((a) => a.classList.toggle("on", a.dataset.v === view));
+  const q = $("q").value.trim();
+  let items = [], crumbs = "";
+  if (q) {
+    const p = new URLSearchParams({ q, limit: 100 });
+    if (view === "starred") p.set("starred", 1);
+    if (view === "ai") p.set("by", "ai");
+    items = (await api("/v1/search?" + p)).items;
+  } else if (view === "files") {
+    const r = await api("/v1/items" + (folder ? "?parent=" + folder : ""));
+    items = r.items;
+    crumbs = `<span data-f="">Shield</span>` + r.path.map((f) => `  ›  <span data-f="${f.id}">${esc(f.name)}</span>`).join("");
+  } else if (view === "starred") items = (await api("/v1/search?starred=1&limit=200")).items;
+  else if (view === "ai") items = (await api("/v1/search?by=ai&limit=200")).items;
+  else if (view === "recent") items = (await api("/v1/search?limit=60")).items.filter((i) => i.kind !== "folder");
+  else if (view === "trash") items = (await api("/v1/items?trash=1")).items;
+  else if (view === "activity") return showActivity();
+
+  $("crumbs").innerHTML = crumbs;
+  $("crumbs").querySelectorAll("span").forEach((s) => s.onclick = () => { folder = s.dataset.f || null; show(); });
+  $("list").innerHTML = items.map((i) => `
+    <div class="row${selected === i.id ? " sel" : ""}" data-id="${i.id}" data-kind="${i.kind}">
+      <div class="ico" data-thumb="${i.mime.startsWith("image/") ? i.id : ""}">${icon(i)}</div>
+      <div style="min-width:0"><div class="name">${esc(i.name)}</div>
+        <div class="meta${byAi(i) ? " ai" : ""}">${i.trashed ? "Deleted " + ago(i.trashed) : meta(i)}</div></div>
+      <div class="star">${i.starred ? "★" : ""}</div>
+    </div>`).join("");
+  $("empty").textContent = items.length ? "" :
+    q ? "Nothing matches." : view === "trash" ? "The Trash is empty." :
+    view === "ai" ? "Nothing from your AIs yet." : "Nothing here yet. Upload, or drop files anywhere.";
+  $("list").querySelectorAll(".row").forEach((r) => r.onclick = () => open(r.dataset.id, r.dataset.kind));
+  $("list").querySelectorAll("[data-thumb]").forEach(thumb);
+}
+
+const thumbs = new Map();
+async function thumb(box) {
+  const id = box.dataset.thumb;
+  if (!id) return;
+  if (!thumbs.has(id)) thumbs.set(id, api(`/v1/items/${id}/content`).then(async (r) => URL.createObjectURL(await r.blob())));
+  box.innerHTML = `<img src="${await thumbs.get(id)}" alt="">`;
+}
+
+async function showActivity() {
+  $("crumbs").innerHTML = "";
+  const acts = (await api("/v1/activity?limit=150")).activity;
+  $("list").innerHTML = acts.map((a) => `
+    <div class="row" data-id="${a.item}"><div class="ico">${a.by === "you" || a.by === "shield" ? "•" : "✦"}</div>
+      <div style="min-width:0"><div class="name">${esc(who(a.by) + " " + a.action + " " + a.detail)}</div>
+      <div class="meta">${ago(a.at)}</div></div><div></div></div>`).join("");
+  $("empty").textContent = acts.length ? "" : "Nothing has happened yet.";
+  $("list").querySelectorAll(".row").forEach((r) => r.onclick = () => open(r.dataset.id));
+}
+
+async function open(id, kind) {
+  if (kind === "folder" && view !== "trash") {
+    folder = id; view = "files"; $("q").value = ""; selected = null; $("detail").style.display = "none";
+    return show();
+  }
+  selected = id;
+  let i;
+  try { i = await api("/v1/items/" + id); } catch { return; }
+  const d = $("detail");
+  d.style.display = "block";
+  let body = "";
+  if (i.kind === "note") body = `<textarea id="noteText">${esc(i.text || "")}</textarea>
+    <button class="primary" id="saveNote" style="margin-top:8px">Save</button>`;
+  else if (i.kind === "link") body = `<p><a href="${esc(i.text)}" target="_blank" rel="noopener" style="color:var(--accent)">${esc(i.text)}</a></p>`;
+  else if (i.mime.startsWith("image/") || i.mime === "application/pdf") body = `<div id="preview">Loading…</div>`;
+  else if (i.text) body = `<pre>${esc(i.text.slice(0, 200000))}</pre>`;
+  else body = `<p class="meta">No preview for this kind of file.</p>`;
+  const hist = (await api(`/v1/items/${id}/history`)).history;
+  d.innerHTML = `
+    <div style="display:flex;justify-content:space-between;gap:10px">
+      <h2>${esc(i.name)}</h2><button id="close">Close</button></div>
+    <div class="meta">${meta(i)}</div>
+    <div style="margin-top:10px">${i.tags.map((t) => `<span class="tag">#${esc(t)}</span>`).join("")}</div>
+    <div class="acts">
+      ${i.trashed ? `<button id="restore">Restore</button><button id="purge" style="color:var(--danger)">Delete for good</button>` : `
+      <button id="rename">Rename</button><button id="move">Move</button><button id="tags">Tags</button>
+      <button id="star">${i.starred ? "Unstar" : "Star"}</button>
+      ${i.kind === "file" ? `<button id="download">Download</button>` : ""}
+      <button id="trash" style="color:var(--danger)">Delete</button>`}
+    </div>
+    ${body}
+    ${i.about ? `<div class="label">WHAT IT IS</div><div class="about">${esc(i.about)}</div>` : ""}
+    <div class="label">HISTORY</div>
+    ${hist.map((h) => `<div class="hist${h.by !== "you" && h.by !== "shield" ? " ai" : ""}">${esc(who(h.by) + " " + h.action + " " + h.detail)} · ${ago(h.at)}</div>`).join("")}`;
+  const on = (bid, fn) => { const b = $(bid); if (b) b.onclick = fn; };
+  const again = async () => { await show(); open(id, i.kind); };
+  on("close", () => { d.style.display = "none"; selected = null; show(); });
+  on("purge", async () => {
+    if (!confirm(`"${i.name}" will be gone for good.`)) return;
+    await api(`/v1/items/${id}?forever=1`, { method: "DELETE" }); d.style.display = "none"; show();
+  });
+  on("restore", async () => { await post(`/v1/items/${id}/restore`, {}); d.style.display = "none"; show(); });
+  on("rename", async () => { const n = prompt("New name", i.name); if (n) { await post("/v1/items/" + id, { name: n }); again(); } });
+  on("move", async () => {
+    const p = prompt("Move to which folder? Type its path, like /College/Notes, or / for the top", "/");
+    if (p) { await post("/v1/items/" + id, p.trim() === "/" ? { parent: null } : { path: p.trim() }); again(); }
+  });
+  on("tags", async () => {
+    const t = prompt("Tags, separated by commas", i.tags.join(", "));
+    if (t !== null) { await post("/v1/items/" + id, { tags: t.split(",").map((x) => x.trim()).filter(Boolean) }); again(); }
+  });
+  on("star", async () => { await post("/v1/items/" + id, { starred: !i.starred }); again(); });
+  on("trash", async () => { await api("/v1/items/" + id, { method: "DELETE" }); d.style.display = "none"; show(); });
+  on("download", async () => {
+    const res = await api(`/v1/items/${id}/content`);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(await res.blob()); a.download = i.name; a.click();
+  });
+  on("saveNote", async () => { await post("/v1/items/" + id, { text: $("noteText").value }); again(); });
+  if ($("preview")) {
+    const url = URL.createObjectURL(await (await api(`/v1/items/${id}/content`)).blob());
+    $("preview").innerHTML = i.mime === "application/pdf" ? `<iframe src="${url}"></iframe>` : `<img src="${url}" alt="">`;
+  }
+}
+
+async function upload(files) {
+  for (const f of files) {
+    const p = new URLSearchParams({ name: f.name, mime: f.type || "" });
+    if (view === "files" && folder) p.set("parent", folder); else if (view === "files") p.set("path", "/");
+    await api("/v1/upload?" + p, { method: "POST", body: f });
+  }
+  show();
+}
+
+$("enter").onclick = enter;
+$("key").onkeydown = (e) => { if (e.key === "Enter") enter(); };
+$("lock").onclick = lock;
+document.querySelectorAll("nav a[data-v]").forEach((a) => a.onclick = () => {
+  view = a.dataset.v; folder = view === "files" ? folder : folder; $("q").value = ""; show();
+});
+let timer;
+$("q").oninput = () => { clearTimeout(timer); timer = setTimeout(show, 250); };
+$("upload").onclick = () => $("files").click();
+$("files").onchange = (e) => upload(e.target.files);
+$("newFolder").onclick = async () => {
+  const n = prompt("Folder name"); if (!n) return;
+  await post("/v1/items", { kind: "folder", name: n, ...(folder ? { parent: folder } : { path: "/" }) }); show();
+};
+$("newNote").onclick = async () => {
+  const n = prompt("Note name", "Untitled note"); if (!n) return;
+  const note = await post("/v1/items", { kind: "note", name: n, text: "", ...(folder ? { parent: folder } : { path: "/" }) });
+  await show(); open(note.id, "note");
+};
+let depth = 0;
+addEventListener("dragenter", (e) => { e.preventDefault(); depth++; $("drop").style.display = "grid"; });
+addEventListener("dragleave", () => { if (--depth <= 0) { depth = 0; $("drop").style.display = "none"; } });
+addEventListener("dragover", (e) => e.preventDefault());
+addEventListener("drop", (e) => { e.preventDefault(); depth = 0; $("drop").style.display = "none"; upload(e.dataTransfer.files); });
+setInterval(() => { if (key && $("app").style.display === "grid" && !$("q").value && view !== "activity") show(); }, 15000);
+
+if (key) { $("key").value = key; enter(); }
+</script>
+</body>
+</html>

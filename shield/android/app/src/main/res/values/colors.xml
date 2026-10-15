@@ -1,0 +1,21 @@
+<resources>
+    <!-- Night steel: the same storm sky as Carnage, cooled to a guard's blue. -->
+    <color name="bg">#FF071318</color>
+    <color name="bg_mid">#FF0B2230</color>
+    <color name="bg_deep">#FF050C14</color>
+
+    <color name="shield">#FF5EC8E5</color>
+    <color name="shield_deep">#FF1E6F8C</color>
+    <color name="ai">#FFE8A33D</color>
+
+    <color name="glass">#14FFFFFF</color>
+    <color name="glass_hi">#22FFFFFF</color>
+    <color name="glass_lo">#08FFFFFF</color>
+    <color name="glass_edge">#30FFFFFF</color>
+    <color name="sheet">#FF0C1C26</color>
+
+    <color name="ink">#FFF1F4F6</color>
+    <color name="dim">#FF93A6B0</color>
+    <color name="danger">#FFE8203A</color>
+    <color name="ic_launcher_background">#FF071318</color>
+</resources>

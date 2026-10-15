@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A copy under its real name, made only when he shares or opens a file. -->
+<paths>
+    <cache-path name="shared" path="shared/"/>
+    <!-- The phone's own files, opened from the Phone tab. -->
+    <external-path name="phone" path="."/>
+</paths>

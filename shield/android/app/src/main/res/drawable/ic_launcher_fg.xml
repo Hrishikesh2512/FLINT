@@ -1,0 +1,16 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- A shield of cold light. -->
+    <path android:pathData="M54,28 L76,36 L76,54 C76,68 66,78 54,82 C42,78 32,68 32,54 L32,36 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="40" android:startY="28"
+                android:endX="68" android:endY="82"
+                android:startColor="#FF8FE3F5" android:endColor="#FF1E6F8C"/>
+        </aapt:attr>
+    </path>
+    <path android:fillColor="#CC071318"
+        android:pathData="M54,38 L67,43 L67,55 C67,63 61,69 54,72 C47,69 41,63 41,55 L41,43 Z"/>
+    <path android:fillColor="#FF5EC8E5" android:pathData="M54,45 L60,48 L60,55 C60,59 57,62 54,63 Z"/>
+</vector>
